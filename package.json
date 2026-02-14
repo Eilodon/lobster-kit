@@ -1,0 +1,57 @@
+{
+  "name": "@clawkit/bnb",
+  "version": "1.0.0",
+  "description": "Complete BNB Chain toolkit for OpenClaw AI agents",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "deploy": "hardhat run scripts/deploy.ts --network opbnb",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": [
+    "openclaw",
+    "bnb-chain",
+    "opbnb",
+    "ai-agent",
+    "defi",
+    "web3",
+    "blockchain",
+    "pancakeswap",
+    "venus"
+  ],
+  "author": "ClawKit Team",
+  "license": "MIT",
+  "dependencies": {
+    "@pancakeswap/sdk": "^5.7.0",
+    "@pancakeswap/smart-router": "^4.7.0",
+    "axios": "^1.6.5",
+    "dotenv": "^16.4.1",
+    "viem": "^2.7.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts": "^5.0.1",
+    "@types/minimatch": "^6.0.0",
+    "@types/node": "^20.11.5",
+    "eslint": "^8.56.0",
+    "hardhat": "^2.19.4",
+    "prettier": "^3.2.4",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawkit/bnb"
+  },
+  "bugs": {
+    "url": "https://github.com/clawkit/bnb/issues"
+  },
+  "homepage": "https://clawkit-bnb.dev",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

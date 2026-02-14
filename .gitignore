@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+.nyc_output/
+
+# Production
+dist/
+build/
+*.log
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Production configs (CRITICAL - keep these private!)
+src/eidolon/_production/
+**/config.production.ts
+**/config.production.json
+weights.trained.json
+params.optimized.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Hardhat
+cache/
+artifacts/
+typechain-types/
+
+# Misc
+.turbo/

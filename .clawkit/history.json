@@ -1,0 +1,16 @@
+[
+  {
+    "decisionId": 1771075579156,
+    "profitLoss": -5,
+    "slippage": 0,
+    "gasUsed": 2,
+    "success": false
+  },
+  {
+    "decisionId": 1771075641881,
+    "profitLoss": -5,
+    "slippage": 0,
+    "gasUsed": 2,
+    "success": false
+  }
+]
