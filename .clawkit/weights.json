@@ -1,22 +1,22 @@
 {
   "weights": {
     "whaleFlow": {
-      "ACCUMULATING": 20,
+      "ACCUMULATING": 20.003898359703044,
       "DUMPING": -25,
       "NEUTRAL": 0
     },
     "gasPrice": {
-      "LOW": 10,
+      "LOW": 10.001949179851522,
       "MEDIUM": 0,
       "HIGH": -15
     },
     "liquidityDepth": {
       "THIN": -10,
-      "DEEP": 5
+      "DEEP": 5.000974589925761
     },
     "sentiment": {
       "EUPHORIC": -5,
-      "FEAR": 10,
+      "FEAR": 10.001949179851522,
       "NEUTRAL": 0
     },
     "priceAction": {
@@ -25,8 +25,8 @@
       "RANGING": 0
     }
   },
-  "learningRate": 0.049501250000000004,
-  "adjustmentCount": 0,
-  "savedAt": "2026-02-14T13:27:22.574Z",
+  "learningRate": 0.049007475031250004,
+  "adjustmentCount": 2,
+  "savedAt": "2026-02-14T14:32:57.804Z",
   "version": "1.0"
 }

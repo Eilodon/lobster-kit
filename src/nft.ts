@@ -20,6 +20,9 @@ export class NFTModule {
   async mintBadge(params: NFTMintParams): Promise<{ hash: string; tokenId: string }> {
     const { name, description = '', tier = 'Bronze', to, metadata = {} } = params;
 
+    // FIX H10: Verify contract is deployed before sending tx
+    assertDeployed('DynamicBadge');
+
     // Generate onchain metadata
     const onchainMetadata = this.generateMetadata(name, description, tier, metadata);
 
@@ -57,6 +60,9 @@ export class NFTModule {
   async mintBatch(badges: NFTMintParams[]): Promise<{ hash: string; tokenIds: string[] }> {
     const recipients: string[] = [];
     const metadataArray: string[] = [];
+
+    // FIX H10: Verify contract is deployed before sending tx
+    assertDeployed('DynamicBadge');
 
     for (const badge of badges) {
       recipients.push(toAddress(badge.to));

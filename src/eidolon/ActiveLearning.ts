@@ -49,19 +49,25 @@ export class ActiveLearning {
   private tradeHistory: TradeOutcome[] = [];
   private adjustmentCount = 0;
 
-  // FIXED: Add persistence paths
-  private readonly STORAGE_DIR = path.join(process.cwd(), '.clawkit');
-  private readonly WEIGHTS_FILE = path.join(this.STORAGE_DIR, 'weights.json');
-  private readonly HISTORY_FILE = path.join(this.STORAGE_DIR, 'history.json');
+  // Fixed: Paths initialized in constructor
+  private readonly STORAGE_DIR: string;
+  private readonly WEIGHTS_FILE: string;
+  private readonly HISTORY_FILE: string;
   private autoSaveEnabled = true;
 
   constructor(
     initialWeights?: typeof REASONING_WEIGHTS,
-    private config = LEARNING_CONFIG
+    private config = LEARNING_CONFIG,
+    storageDir?: string
   ) {
     if (initialWeights) {
       this.weights = { ...initialWeights };
     }
+
+    // Configurable storage directory
+    this.STORAGE_DIR = storageDir || path.join(process.cwd(), '.clawkit');
+    this.WEIGHTS_FILE = path.join(this.STORAGE_DIR, 'weights.json');
+    this.HISTORY_FILE = path.join(this.STORAGE_DIR, 'history.json');
   }
 
   /**

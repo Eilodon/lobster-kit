@@ -141,8 +141,9 @@ export class SecurityModule {
    */
   private async getGoPlusSecurityData(address: string): Promise<any> {
     try {
+      const chainId = this.config.chainId || 204;
       const response = await axios.get(
-        `${this.GOPLUS_API}/token_security/56`,
+        `${this.GOPLUS_API}/token_security/${chainId}`,
         {
           params: { contract_addresses: address },
           timeout: 10000

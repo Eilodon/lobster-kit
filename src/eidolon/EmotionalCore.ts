@@ -1,3 +1,6 @@
+import fs from 'fs/promises';
+import path from 'path';
+
 /**
  * 💫 EMOTIONAL CORE
  * Personality & Risk Management - Agent emotional state system
@@ -48,10 +51,63 @@ export class EmotionalCore {
   private lastTradeTime: number = 0;
   private inCooldown: boolean = false;
 
+  // Persistence
+  private readonly STORAGE_FILE = path.join(process.cwd(), '.clawkit', 'emotional_core.json');
+
   constructor(
     private baseRiskParams: RiskParameters,
     private config = EMOTIONAL_CONFIG
-  ) { }
+  ) {
+    // Attempt to load state synchronously-ish or just start neutral
+    // Best practice: use explicit init()
+  }
+
+  /**
+   * Initialize and load saved state
+   */
+  public async init(): Promise<void> {
+    await this.loadState();
+  }
+
+  /**
+   * Save current state to disk
+   */
+  private async saveState(): Promise<void> {
+    try {
+      await fs.mkdir(path.dirname(this.STORAGE_FILE), { recursive: true });
+      const data = {
+        state: this.state,
+        confidence: this.confidence,
+        consecutiveWins: this.consecutiveWins,
+        consecutiveLosses: this.consecutiveLosses,
+        lastTradeTime: this.lastTradeTime,
+        timestamp: Date.now()
+      };
+      await fs.writeFile(this.STORAGE_FILE, JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.error('Failed to save emotional state:', error);
+    }
+  }
+
+  /**
+   * Load state from disk
+   */
+  private async loadState(): Promise<void> {
+    try {
+      const data = await fs.readFile(this.STORAGE_FILE, 'utf-8');
+      const state = JSON.parse(data);
+      if (state) {
+        this.state = state.state;
+        this.confidence = state.confidence;
+        this.consecutiveWins = state.consecutiveWins;
+        this.consecutiveLosses = state.consecutiveLosses;
+        this.lastTradeTime = state.lastTradeTime;
+        console.log('🧠 Emotional memory restored.');
+      }
+    } catch {
+      // No saved state, start fresh
+    }
+  }
 
   /**
    * Process trading outcome and update emotional state
@@ -77,6 +133,9 @@ export class EmotionalCore {
     console.log(`║ Win Streak:     ${this.consecutiveWins}`.padEnd(61) + '║');
     console.log(`║ Loss Streak:    ${this.consecutiveLosses}`.padEnd(61) + '║');
     console.log('╚════════════════════════════════════════════════════════════╝\n');
+
+    // Auto-save state
+    this.saveState().catch(err => console.error('State save failed', err));
   }
 
   /**

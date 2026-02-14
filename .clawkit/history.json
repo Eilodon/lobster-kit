@@ -12,5 +12,19 @@
     "slippage": 0,
     "gasUsed": 2,
     "success": false
+  },
+  {
+    "decisionId": 1,
+    "success": true,
+    "profitLoss": 10,
+    "slippage": 0,
+    "gasUsed": 0
+  },
+  {
+    "decisionId": 1,
+    "success": true,
+    "profitLoss": 10,
+    "slippage": 0,
+    "gasUsed": 0
   }
 ]
