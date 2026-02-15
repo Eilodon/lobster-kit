@@ -1,0 +1,148 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { DeFiModule } from '../../src/defi';
+import { ClawOracle } from '../../src/eidolon/sensors/ClawOracle';
+import { EmotionalCore } from '../../src/eidolon/EmotionalCore';
+import { parseEther } from 'viem';
+
+// --- MOCKS ---
+const mockPublicClient = {
+    readContract: vi.fn(),
+    call: vi.fn()
+};
+
+const mockWalletClient = {
+    account: { address: '0x1234567890123456789012345678901234567890' },
+    getAddresses: vi.fn().mockResolvedValue(['0x1234567890123456789012345678901234567890'])
+};
+
+const mockConfig = {
+    chainConfig: {
+        contracts: {
+            pancakeQuoter: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997',
+            pancakeRouter: '0x678Aa4bF4E210cf2166753e054d5b7c31cc7fa86'
+        },
+        tokens: {
+            WBNB: { address: '0x4200000000000000000000000000000000000006', decimals: 18, symbol: 'WBNB' },
+            USDT: { address: '0x9e5AAC1Ba1a2e6aEd6b32689DFcF62A509Ca96f3', decimals: 6, symbol: 'USDT' }
+        }
+    }
+};
+
+describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
+
+    beforeEach(() => {
+        vi.resetAllMocks();
+    });
+
+    describe('⚡ HYPER-ROUTING (Parallel Execution)', () => {
+        it('should query ALL fee tiers in parallel and pick the best one', async () => {
+            const defi = new DeFiModule(mockWalletClient as any, mockPublicClient as any, mockConfig as any);
+
+            // Mock responses for different fee tiers
+            mockPublicClient.readContract.mockImplementation(async ({ args }) => {
+                const fee = args[0].fee;
+                if (fee === 2500) return 100n; // 0.25% tie -> base
+                if (fee === 500) return 120n;  // 0.05% tier -> BETTER
+                if (fee === 10000) return 80n; // 1.00% tier -> WORSE
+                if (fee === 100) return 0n;    // 0.01% tier -> NO POOL
+                return 0n;
+            });
+
+            // Make sure Promise.all logic works
+            // In the implementation, we use Promise.all.
+            // We can't verify parallelism strictly here, but we verify 4 calls were made.
+
+            const result = await defi.getRealQuote('WBNB', 'USDT', 1000n, 0);
+
+            // Expect 4 calls (Hyper-Routing)
+            expect(mockPublicClient.readContract).toHaveBeenCalledTimes(4);
+
+            // Expect best result (120n) to be chosen
+            expect(result).toBe(120n);
+        });
+    });
+
+    describe('👁️ OMNISCIENT ORACLE (Liquidity Probing)', () => {
+        it('should detect THIN liquidity when slippage is high', async () => {
+            // Mock ClawKit context
+            const mockKit = {
+                defi: {
+                    getRealQuote: vi.fn()
+                },
+                gas: {
+                    getOptimalExecutionTime: vi.fn().mockResolvedValue({ currentGasPrice: '0.000005' })
+                }
+            };
+
+            const oracle = new ClawOracle(mockKit as any);
+
+            // Mock Probe calls:
+            // 1. getBNBPrice call (returns 1e18 quote) -> $600
+            // 2. Small Probe ($100) -> Returns good price
+            // 3. Large Probe ($10k) -> Returns bad price
+
+            mockKit.defi.getRealQuote
+                .mockResolvedValueOnce(600000000n)  // Price Check: 1 WBNB -> 600 USDT
+                .mockResolvedValueOnce(100000000n)  // Small Probe: 0.166 BNB -> $100 (Perfect)
+                .mockResolvedValueOnce(9000000000n); // Large Probe: 16.6 BNB -> $9000 (Expected $10000) -> 10% Slippage
+
+            const state = await oracle.sense();
+
+            expect(mockKit.defi.getRealQuote).toHaveBeenCalledTimes(3);
+            expect(state.liquidityDepth).toBe('THIN');
+        });
+
+        it('should return DEEP liquidity when price is stable', async () => {
+            const mockKit = {
+                defi: { getRealQuote: vi.fn() },
+                gas: { getOptimalExecutionTime: vi.fn().mockResolvedValue({ currentGasPrice: '0.000005' }) }
+            };
+            const oracle = new ClawOracle(mockKit as any);
+
+            mockKit.defi.getRealQuote
+                .mockResolvedValueOnce(600000000n)   // Price Check: $600
+                .mockResolvedValueOnce(100000000n)   // Small: $100 -> $100
+                .mockResolvedValueOnce(10000000000n); // Large: $10000 -> $10000
+
+            const state = await oracle.sense();
+            expect(state.liquidityDepth).toBe('DEEP');
+        });
+    });
+
+    describe('🧠 CAPITAL-AGNOSTIC BRAIN (ROI Rewards)', () => {
+        it('dopamine should scale with ROI, not absolute value', () => {
+            const brain = new EmotionalCore();
+            const initialState = { ...brain['state'] };
+
+            // Scenario 1: $10 profit on $100 capital (10% ROI)
+            // Expect +20 Dopamine (ROI * 200)
+            brain.stimulate(10, 'PROFIT', 100);
+            const dopamineGain1 = brain['state'].dopamine - initialState.dopamine;
+
+            // Reset
+            brain['state'] = { ...initialState };
+
+            // Scenario 2: $100 profit on $1000 capital (10% ROI)
+            brain.stimulate(100, 'PROFIT', 1000);
+            const dopamineGain2 = brain['state'].dopamine - initialState.dopamine;
+
+            // Impacts should be identical because ROI is identical (10%)
+            expect(dopamineGain1).toBeCloseTo(dopamineGain2, 1);
+
+            // Check value magnitude (10% ROI -> +20 Dopamine)
+            expect(dopamineGain1).toBeCloseTo(20, 0);
+        });
+
+        it('should handle legacy calls (no capital provided) safely', () => {
+            const brain = new EmotionalCore();
+            // Reset dopamine to avoid cap
+            brain['state'].dopamine = 0;
+
+            brain.stimulate(100, 'PROFIT'); // Log scaling: log(101)*2 ~ 9.2
+
+            const gain = brain['state'].dopamine;
+            expect(gain).toBeGreaterThan(8);
+            expect(gain).toBeLessThan(12);
+        });
+    });
+});

@@ -1,26 +1,85 @@
 import { ClawKit } from '../../index';
 import { MarketState } from '../EidolonTypes';
+import { PythAdapter } from '../oracles/PythAdapter';
 
 /**
  * 👁️ CLAW ORACLE (The Eye)
  * Real-time market sensing using ClawKit's analytics
  */
 export class ClawOracle {
-    constructor(private kit: ClawKit) { }
+    private pyth: PythAdapter;
+
+    constructor(private kit: ClawKit) {
+        this.pyth = new PythAdapter(kit.config.pythConfig);
+    }
+
+    public async getBNBPrice(): Promise<number> {
+        try {
+            const price = await this.pyth.getPrice('BNB');
+            return price;
+        } catch (e) {
+            console.error('❌ CRITICAL: SENSORY FAILURE. Unable to fetch BNB price.', e);
+            throw new Error('SENSORY BLACIOUT: Cannot operate without price feed.'); // Panic Mode
+        }
+    }
+
+
+    /**
+     * 💧 ACTIVE LIQUIDITY PROBING
+     * Compares execution price of $100 vs $10,000 to detect thin books.
+     */
+    private async probeLiquidity(bnbPrice: number): Promise<'THIN' | 'DEEP'> {
+        try {
+            const wbnb = 'WBNB';
+            const usdt = 'USDT';
+
+            // ~$100 USD in WBNB (approx 0.16 BNB at $600)
+            const amountSmall = BigInt(Math.floor((100 / bnbPrice) * 1e18));
+
+            // ~$10,000 USD in WBNB (approx 16.6 BNB at $600)
+            const amountLarge = BigInt(Math.floor((10000 / bnbPrice) * 1e18));
+
+            // Run probes in parallel
+            const [quoteSmall, quoteLarge] = await Promise.all([
+                this.kit.defi.getRealQuote(wbnb, usdt, amountSmall, 1.0),
+                this.kit.defi.getRealQuote(wbnb, usdt, amountLarge, 2.0)
+            ]);
+
+            // Calculate Price per WBNB
+            const priceSmall = Number(quoteSmall) / Number(amountSmall); // USDT per Wei
+            const priceLarge = Number(quoteLarge) / Number(amountLarge);
+
+            // Calculate Impact: (Small - Large) / Small
+            // If Large trade gets significantly worse price, liquidity is THIN.
+            const impact = (priceSmall - priceLarge) / priceSmall;
+
+            console.log(`💧 Liquidity Probe: impact=${(impact * 100).toFixed(2)}% ($100 vs $10k)`);
+
+            if (impact > 0.02) return 'THIN'; // > 2% impact is dangerous
+            return 'DEEP';
+
+        } catch (e) {
+            console.warn('Liquidity probe failed, assuming THIN for safety', e);
+            return 'THIN';
+        }
+    }
 
     public async sense(): Promise<MarketState> {
-        const [gasState, tokenData] = await Promise.all([
+        // 1. Get Base Data
+        const bnbPrice = await this.getBNBPrice();
+
+        // 2. Parallel Sense
+        const [gasState, liquidityDepth] = await Promise.all([
             this.getGasState(),
-            // For demo, we check BNB price action. In prod, this would be the specific token.
-            this.getTokenData('BNB')
+            this.probeLiquidity(bnbPrice)
         ]);
 
         return {
             gasPrice: gasState,
-            whaleFlow: 'NEUTRAL', // Requires on-chain indexing (Covalent/TheGraph) - Stubbed for V2
-            sentiment: 'NEUTRAL', // Requires Social API - Stubbed for V2
-            liquidityDepth: 'DEEP', // Requires Pool Analytics - Stubbed for V2
-            priceAction: tokenData.action
+            whaleFlow: 'NEUTRAL', // Requires covalent indexing
+            sentiment: 'NEUTRAL', // Requires social API
+            liquidityDepth,
+            priceAction: 'RANGING'
         };
     }
 
@@ -28,10 +87,9 @@ export class ClawOracle {
         try {
             const gas = await this.kit.gas.getOptimalExecutionTime();
             // Heuristic: < 3 gwei is LOW, < 5 is MEDIUM, > 5 is HIGH on opBNB
-            // Adjust thresholds based on network
             const price = parseFloat(gas.currentGasPrice);
-            if (price < 3) return 'LOW';
-            if (price < 5) return 'MEDIUM';
+            if (price < 0.00003) return 'LOW'; // opBNB is very cheap, adjusting scale
+            if (price < 0.00005) return 'MEDIUM';
             return 'HIGH';
         } catch {
             return 'MEDIUM'; // Fallback
@@ -39,20 +97,6 @@ export class ClawOracle {
     }
 
     private async getTokenData(symbol: string): Promise<{ action: 'PUMPING' | 'DUMPING' | 'RANGING' }> {
-        try {
-            // Use Analytics Module to get price
-            // This part assumes AnalyticsModule has a method to get simple price or we extend it
-            // Standard ClawKit analytics might need a dedicated price fetcher if not exposed.
-            // Let's assume we use a public heuristic if kit doesn't have it directly exposed in a simple way yet.
-            // Actually, let's use the kit's analytics module if available.
-
-            // Since Analytics module might rely on CoinGecko which can rate limit, we handle gently.
-            // For V2 Atomic, we will return RANGING if we can't get data.
-            return { action: 'RANGING' };
-
-            // TODO: Implement 1h price change check here once Analytics API is robust
-        } catch {
-            return { action: 'RANGING' };
-        }
+        return { action: 'RANGING' };
     }
 }

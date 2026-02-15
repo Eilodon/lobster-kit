@@ -166,7 +166,7 @@ export class SecurityModule {
         can_take_back_ownership: data.can_take_back_ownership === '1'
       };
     } catch (error) {
-      console.log('Unable to fetch GoPlus data:', error);
+      console.error('Unable to fetch GoPlus data:', error);
       return null;
     }
   }
@@ -202,7 +202,7 @@ export class SecurityModule {
 
       return false;
     } catch (error) {
-      console.log('Unable to check contract verification');
+      console.error('Unable to check contract verification');
       return false;
     }
   }
@@ -285,7 +285,7 @@ export class SecurityModule {
       }
 
     } catch (error) {
-      console.log('Unable to check trading restrictions');
+      console.error('Unable to check trading restrictions');
     }
 
     return restrictions;
@@ -343,7 +343,7 @@ export class SecurityModule {
         data
       });
 
-      console.log(`✅ Revoked approval for ${spender}`);
+      console.error(`✅ Revoked approval for ${spender}`);
       return { hash };
 
     } catch (error) {
@@ -422,7 +422,7 @@ export class SecurityModule {
         data
       });
 
-      console.log(`✅ Batch revoked ${tokens.length} approvals`);
+      console.error(`✅ Batch revoked ${tokens.length} approvals`);
       return { hash, count: tokens.length };
 
     } catch (error) {

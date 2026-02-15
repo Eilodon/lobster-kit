@@ -199,16 +199,16 @@ export class DeFiModule {
   }
 
   /**
-   * Get real quote from PancakeSwap
-   * FIXED: Try multiple fee tiers to find liquidity
-   */
-  private async getRealQuote(
+  * Get real quote from PancakeSwap
+  * FIXED: Try multiple fee tiers to find liquidity
+  */
+  public async getRealQuote(
     tokenIn: string,
     tokenOut: string,
     amountIn: bigint,
     slippage: number
   ): Promise<bigint> {
-    // FIXED: Try multiple fee tiers (some pools may not have 0.25%)
+    // FIXED: Parallel execution for all fee tiers (Hyper-Routing)
     const feeTiers = [
       { fee: 2500, name: '0.25%' },  // Most common
       { fee: 500, name: '0.05%' },   // Stable pairs
@@ -217,40 +217,48 @@ export class DeFiModule {
     ];
 
     const quoterAddress = this.contracts.pancakeQuoter;
+    const quoterAbi = parseAbi(['function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96) params) view returns (uint256 amountOut)']);
 
-    // Try each fee tier until we find a pool
-    for (const { fee, name } of feeTiers) {
+    // Fire all requests in parallel
+    const quotePromises = feeTiers.map(async (tier) => {
       try {
         const amountOut = await this.publicClient.readContract({
           address: toAddress(quoterAddress),
-          abi: parseAbi(['function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96) params) view returns (uint256 amountOut)']),
+          abi: quoterAbi,
           functionName: 'quoteExactInputSingle',
           args: [{
             tokenIn: toAddress(tokenIn),
             tokenOut: toAddress(tokenOut),
             amountIn: amountIn,
-            fee,
+            fee: tier.fee,
             sqrtPriceLimitX96: 0n
           }]
         });
-
-        // Apply slippage tolerance
-        const slippageBps = BigInt(Math.floor(slippage * 100));
-        const amountOutMin = amountOut - (amountOut * slippageBps / 10000n);
-
-        console.log(`✅ Found route with fee tier ${name}`);
-        return amountOutMin;
+        return { ...tier, amountOut, error: null };
       } catch (error) {
-        // console.log(`❌ No pool for fee tier ${name}, trying next...`);
-        continue;
+        return { ...tier, amountOut: 0n, error };
       }
+    });
+
+    const results = await Promise.all(quotePromises);
+
+    // Filter successful quotes and sort by best output (High to Low)
+    const validQuotes = results
+      .filter(r => r.amountOut > 0n)
+      .sort((a, b) => Number(b.amountOut - a.amountOut)); // bigint sort
+
+    if (validQuotes.length === 0) {
+      throw new Error(
+        'No PancakeSwap V3 pool found for this trading pair on any fee tier. ' +
+        'Cannot provide a quote without a real pool.'
+      );
     }
 
-    // FIX H5: No more fake fallback — throw error if no real quote available
-    throw new Error(
-      'No PancakeSwap V3 pool found for this trading pair on any fee tier. ' +
-      'Cannot provide a quote without a real pool.'
-    );
+    const bestQuote = validQuotes[0];
+    const amountOutMin = bestQuote.amountOut - (bestQuote.amountOut * BigInt(Math.floor(slippage * 100)) / 10000n);
+
+    console.log(`✅ Hyper-Routing Winner: ${bestQuote.name} (Out: ${formatEther(bestQuote.amountOut)})`);
+    return amountOutMin;
   }
 
   /**

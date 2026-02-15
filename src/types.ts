@@ -92,6 +92,15 @@ export interface TransferParams {
 
 // ClawKit config — no plaintext private key (FIX M8 partial)
 // ClawKit config — consolidated definition
+
+export interface PythConfig {
+  endpoint: string;
+  priceFeedIds: {
+    BNB: string;
+    USDT: string;
+  };
+}
+
 export interface ClawKitConfig {
   privateKey?: string; // Optional if WalletClient provided with account
   chainId?: number; // default: 204 (opBNB)
@@ -99,7 +108,9 @@ export interface ClawKitConfig {
   gasMultiplier?: number;
   contracts?: Partial<typeof CLAWKIT_CONTRACTS>;
   chainConfig?: ChainConfig; // Inject chain specific config
+  pythConfig?: PythConfig; // [NEW] Pyth Network Configuration
 }
+
 
 // Strict WalletClient type enforcing Account presence
 export type ClawKitWalletClient = WalletClient<Transport, Chain, Account>;

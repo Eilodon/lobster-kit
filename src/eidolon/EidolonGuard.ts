@@ -1,11 +1,14 @@
-import { PublicClient, WalletClient } from 'viem';
+import { PublicClient, WalletClient, formatEther } from 'viem';
+import { ClawKit } from '../index';
 import { DivineTransparency } from './DivineTransparency';
 import { MarketState, ActionType, DecisionLog } from './EidolonTypes';
 import { ActiveLearning, TradeOutcome } from './ActiveLearning';
 import { EmotionalCore, EmotionalState } from './EmotionalCore';
 import { WasmAdapter, ValueInvariant as WasmValueInvariant, AntiRug as WasmAntiRug } from './WasmAdapter';
+import { ClawOracle } from './sensors/ClawOracle';
 import { GoPlusSecurity } from './oracles/GoPlusSecurity';
 import { MarketStream } from './sensors/MarketStream';
+import { EidolonSimulator, ShadowTransaction } from './simulation/EidolonSimulator';
 
 /**
  * 🛡️ EIDOLON GUARD
@@ -41,6 +44,7 @@ export interface ValidationResult {
 export class EidolonGuard {
     private client: PublicClient;
     private wallet: WalletClient;
+    private kit: ClawKit;
     private config: GuardConfig;
 
     // Components
@@ -49,13 +53,14 @@ export class EidolonGuard {
     private soul: EmotionalCore;
     private valueInvariant: WasmValueInvariant;
     private antiRug: WasmAntiRug;
-    private oracle: GoPlusSecurity;
+    private oracle: ClawOracle; // Replaces GoPlus as primary oracle interface
+    private securityOracle: GoPlusSecurity;
     private marketStream: MarketStream;
+    private simulator: EidolonSimulator;
     private lastMarketState: MarketState | null = null;
 
     constructor(
-        client: PublicClient,
-        wallet: WalletClient,
+        kit: ClawKit,
         config: GuardConfig = {
             maxRiskScore: 60,
             minConfidence: 70,
@@ -67,8 +72,9 @@ export class EidolonGuard {
             }
         }
     ) {
-        this.client = client;
-        this.wallet = wallet;
+        this.kit = kit;
+        this.client = kit.publicClient;
+        this.wallet = kit.walletClient;
         this.config = config;
 
         this.mind = new DivineTransparency();
@@ -79,10 +85,13 @@ export class EidolonGuard {
         this.valueInvariant = wasm.createValueInvariant(5.0, config.riskParameters.maxPositionSize, 15.0);
         this.antiRug = wasm.createAntiRug();
 
-        this.oracle = new GoPlusSecurity();
-        this.marketStream = new MarketStream(client);
+        // Initialize Oracles
+        this.oracle = new ClawOracle(kit);
+        this.securityOracle = new GoPlusSecurity();
+        this.marketStream = new MarketStream(this.client);
+        this.simulator = new EidolonSimulator(kit);
 
-        console.log('🛡️ EIDOLON GUARD INITIALIZED (RUST + GOPLUS + STREAM)');
+        console.log('🛡️ EIDOLON GUARD INITIALIZED (RUST + ORACLE + STREAM + SIMULATOR)');
     }
 
     public async init(): Promise<void> {
@@ -102,13 +111,30 @@ export class EidolonGuard {
             marketState?: MarketState,
             amountUSD?: number,
             tokenSymbol?: string,
-            tokenAddress?: string
+            tokenAddress?: string,
+            txCandidate?: ShadowTransaction
         }
     ): Promise<ValidationResult> {
 
-        // 0. Update Security Snapshot
-        const mockTotalPortfolio = 10000;
-        this.valueInvariant.update_snapshot(mockTotalPortfolio);
+        // 0. Update Security Snapshot with REAL data
+        try {
+            // Get BNB Balance
+            const balanceWei = await this.client.getBalance({
+                address: this.wallet.account!.address
+            });
+
+            // Get Price
+            const bnbPrice = await this.oracle.getBNBPrice();
+
+            // Calculate Portfolio Value (assuming mostly BNB for now)
+            // TODO: In V2, iterate tokens to get full portfolio value
+            const totalPortfolioUSD = parseFloat(formatEther(balanceWei)) * bnbPrice;
+
+            this.valueInvariant.update_snapshot(totalPortfolioUSD);
+        } catch (e) {
+            console.warn('Failed to update portfolio snapshot, using safe fallback', e);
+            this.valueInvariant.update_snapshot(0); // Fail-safe: Assume 0 balance on error
+        }
 
         // 1. HARD INVARIANT CHECK (The Citadel - RUST)
         if (context.amountUSD) {
@@ -136,7 +162,7 @@ export class EidolonGuard {
         // Check 2: Anti-Rug
         if (action === 'BUY' && context.tokenAddress) {
             console.log(`🕵️ Inspecting token: ${context.tokenAddress}`);
-            const tokenData = await this.oracle.checkToken(context.tokenAddress);
+            const tokenData = await this.securityOracle.checkToken(context.tokenAddress);
             let security: import('./WasmAdapter').SecurityScore;
 
             if (tokenData) {
@@ -162,8 +188,8 @@ export class EidolonGuard {
         const decision: DecisionLog = await this.mind.explain(marketState, action);
 
         // 4. Consult the Soul (Thermodynamic)
-        // Tick with estimated volatility (0.1 default for now)
-        const emotionalState = await this.soul.tick(0.1);
+        // Soul now reacts to events in background
+        const emotionalState = this.soul.getCurrentState();
         const riskMultiplier = this.soul.getRiskMultiplier();
 
         // Gate 1: Emotional Safety (Cortisol Check)
@@ -197,8 +223,22 @@ export class EidolonGuard {
             };
         }
 
-        // Gate 4: Context Integrity
-        if (action === 'BUY' || action === 'SELL') {
+        // Gate 4: MULTIVERSE CHECK (Shadow Simulation)
+        if ((action === 'BUY' || action === 'SELL') && context.txCandidate) {
+            console.log('🔮 MULTIVERSE CHECK: Spawning Shadow Clone...');
+            const shadowResult = await this.simulator.simulate(context.txCandidate);
+
+            if (!shadowResult.success) {
+                return {
+                    approved: false,
+                    riskScore: 100,
+                    confidence: 0,
+                    reason: `💀 SHADOW CLONE DIED: Transaction Revert (${shadowResult.revertReason})`
+                };
+            }
+            console.log(`✅ Shadow Clone survived. Cost: ${shadowResult.gasUsed.toString()} gas`);
+        } else if (action === 'BUY' || action === 'SELL') {
+            // Warn if no candidate provided for simulation
             if (context.amountUSD === undefined || context.amountUSD === null) {
                 return {
                     approved: false,
@@ -227,7 +267,8 @@ export class EidolonGuard {
         outcome: TradeOutcome
     ): Promise<void> {
         const type = outcome.profitLoss > 0 ? 'PROFIT' : 'LOSS';
-        this.soul.stimulate(Math.abs(outcome.profitLoss), type);
+        // FIXED: Pass capitalAtRisk for ROI calculation (Brain Upgrade)
+        this.soul.stimulate(Math.abs(outcome.profitLoss), type, outcome.capitalAtRisk);
     }
 
     private async senseMarket(): Promise<MarketState> {
@@ -257,3 +298,4 @@ export class EidolonGuard {
         return Math.min(100, Math.max(0, score));
     }
 }
+

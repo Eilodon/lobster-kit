@@ -3,6 +3,7 @@ import { ThermodynamicEngine, ThermoConfig } from './ai/ThermodynamicEngine';
 import { BreathEngine, BreathPhase } from './ai/BreathEngine';
 import { Vector } from './ai/LinearAlgebra';
 import { GreenfieldAdapter } from './memory/GreenfieldAdapter';
+import { EidolonBus, EidolonEventType } from './events/EidolonBus';
 
 export interface EmotionalState {
   glucose: number;   // Energy (0-100)
@@ -23,6 +24,7 @@ export interface EmotionalState {
 export class EmotionalCore {
   private state: EmotionalState;
   private storage: IStorageProvider;
+  private bus: EidolonBus;
 
   // AI Engines
   private thermoEngine: ThermodynamicEngine;
@@ -35,6 +37,7 @@ export class EmotionalCore {
       bucketName: 'eidolon-memory-core',
       useLocalFallback: !process.env.GREENFIELD_ENDPOINT
     });
+    this.bus = EidolonBus.getInstance();
 
     this.thermoEngine = new ThermodynamicEngine();
     this.breathEngine = new BreathEngine(6.0); // 6 BPM default
@@ -53,15 +56,31 @@ export class EmotionalCore {
     };
 
     this.loadState();
+    this.setupEventListeners();
+  }
+
+  private setupEventListeners() {
+    // Metabolic Tax: Every block costs energy
+    this.bus.subscribe(EidolonEventType.BLOCK_MINED, () => {
+      const now = Date.now();
+      const dt = (now - this.state.lastUpdate) / 1000;
+      this.tick(this.state.volatility, dt);
+    });
+
+    // Trauma: Instant Cortisol Spike
+    this.bus.subscribe(EidolonEventType.TRAUMA, (event: any) => {
+      const severity = event.payload.severity || 10;
+      this.stimulate(severity, 'DANGER');
+    });
   }
 
   /**
-   * Main simulation tick
+   * Main simulation tick (Now driven by Block Events)
    */
-  async tick(marketVolatility: number = 0.1) {
+  async tick(marketVolatility: number = 0.1, dt?: number) {
     const now = Date.now();
-    const dt = (now - this.state.lastUpdate) / 1000; // seconds
-    if (dt <= 0) return this.state;
+    const deltaTime = dt || (now - this.state.lastUpdate) / 1000; // seconds
+    if (deltaTime <= 0) return this.state;
 
     // 1. Update Market Temperature (affects Thermodynamic interaction)
     this.state.volatility = marketVolatility;
@@ -104,12 +123,19 @@ export class EmotionalCore {
     this.state.momentum = clampedVec.get(4);
 
     // 4. Biological Decay / Regeneration
-    this.processBiologicalFunction(dt);
+    this.processBiologicalFunction(deltaTime); // Use computed deltaTime
 
     this.state.lastUpdate = now;
     await this.saveState();
 
     return this.state;
+  }
+
+  /**
+   * Get current emotional state without processing a tick
+   */
+  public getCurrentState(): EmotionalState {
+    return { ...this.state };
   }
 
   // FIX CRITICAL: NaN Guard Helper
@@ -141,16 +167,41 @@ export class EmotionalCore {
 
   /**
    * Stimulate the agent from external value (Example: Trade profit)
+   * FIXED: Uses Relative ROI (Sharpe-like) instead of absolute value
    */
-  stimulate(value: number, type: 'PROFIT' | 'LOSS' | 'DANGER') {
+  stimulate(value: number, type: 'PROFIT' | 'LOSS' | 'DANGER', capitalAtRisk: number = 0) {
+    // 1. Calculate Relative Impact (ROI)
+    // If capital is 0 (legacy/danger), use raw value but capped
+    let impact = value;
+
+    if (capitalAtRisk > 0) {
+      // 10% gain ($10 on $100) = 0.1
+      // We scale this to dopamine units (0-100). 
+      // A 10% gain is HUGE in trading, let's say that's +20 dopamine.
+      const roi = value / capitalAtRisk;
+      impact = roi * 200; // 0.05 (5%) -> +10 Dopamine
+    } else {
+      // Legacy fallback: Logarithmic scaling to prevent "Whale Bias"
+      // $10 -> 2.3, $100 -> 4.6, $1000 -> 6.9
+      if (type !== 'DANGER') {
+        impact = Math.log(value + 1) * 2;
+      }
+    }
+
+    // Cap single-event impact to prevent emotional overdose
+    impact = Math.min(30, impact);
+
     switch (type) {
       case 'PROFIT':
-        this.state.dopamine = Math.min(100, this.state.dopamine + value * 2);
-        this.state.cortisol = Math.max(0, this.state.cortisol - value);
+        this.state.dopamine = Math.min(100, this.state.dopamine + impact);
+        this.state.cortisol = Math.max(0, this.state.cortisol - (impact * 0.5));
+        console.log(`🧠 STIMULUS: ${type} (+$${value.toFixed(2)} on $${capitalAtRisk}) -> +${impact.toFixed(1)} Dopamine`);
         break;
       case 'LOSS':
-        this.state.cortisol = Math.min(100, this.state.cortisol + value * 2);
-        this.state.dopamine = Math.max(0, this.state.dopamine - value);
+        // Losses hurt 2x more (Prospect Theory)
+        this.state.cortisol = Math.min(100, this.state.cortisol + (impact * 2));
+        this.state.dopamine = Math.max(0, this.state.dopamine - impact);
+        console.log(`🧠 STIMULUS: ${type} (-$${value.toFixed(2)} on $${capitalAtRisk}) -> +${(impact * 2).toFixed(1)} Cortisol`);
         break;
       case 'DANGER':
         this.state.arousal = Math.min(1.0, this.state.arousal + 0.3);

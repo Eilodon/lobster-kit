@@ -49,48 +49,115 @@ vi.mock('../../src/eidolon/oracles/GoPlusSecurity', () => {
     };
 });
 
+
+
 // Mock MarketStream
-vi.mock('../../src/eidolon/sensors/MarketStream', () => {
-    return {
-        MarketStream: vi.fn().mockImplementation(() => ({
-            start: vi.fn(),
-            subscribe: vi.fn()
-        }))
-    };
-});
+vi.mock('../../src/eidolon/sensors/MarketStream', () => ({
+    MarketStream: class {
+        start() { }
+        subscribe(cb: any) { }
+    }
+}));
+
+// Mock ClawOracle
+vi.mock('../../src/eidolon/sensors/ClawOracle', () => ({
+    ClawOracle: class {
+        async getBNBPrice() { return 600; }
+        async sense() {
+            return {
+                gasPrice: 'LOW',
+                whaleFlow: 'NEUTRAL',
+                sentiment: 'NEUTRAL',
+                liquidityDepth: 'DEEP',
+                priceAction: 'RANGING'
+            };
+        }
+    }
+}));
+
+
+// Mock DivineTransparency
+vi.mock('../../src/eidolon/DivineTransparency', () => ({
+    DivineTransparency: class {
+        async explain() {
+            return {
+                decisionId: 123,
+                timestamp: Date.now(),
+                action: 'BUY',
+                confidence: 85,
+                reasoning: 'Mock reasoning',
+                marketState: {},
+                causalFactors: [],
+                weightsSnapshot: {}
+            };
+        }
+    }
+}));
+
+
 
 // Mock ActiveLearning
-vi.mock('../../src/eidolon/ActiveLearning', () => {
-    return {
-        ActiveLearning: vi.fn().mockImplementation(() => ({
-            init: vi.fn().mockResolvedValue(undefined),
-            learnFromOutcome: vi.fn()
-        }))
-    };
-});
+vi.mock('../../src/eidolon/ActiveLearning', () => ({
+    ActiveLearning: class {
+        async init() { }
+        async learnFromOutcome() { }
+        getWeights() { return {}; }
+    }
+}));
+
+
 
 // Mock EmotionalCore
-vi.mock('../../src/eidolon/EmotionalCore', () => {
-    return {
-        EmotionalCore: vi.fn().mockImplementation(() => ({
-            init: vi.fn().mockResolvedValue(undefined),
-            getProfile: vi.fn().mockReturnValue({
+vi.mock('../../src/eidolon/EmotionalCore', () => ({
+    EmotionalCore: class {
+        async init() { }
+        getProfile() {
+            return {
                 state: 'NEUTRAL',
                 biometrics: { glucose: 50, cortisol: 0, dopamine: 50 },
                 confidence: 80,
                 aggression: 50
-            }),
-            getRiskParameters: vi.fn().mockReturnValue({
+            };
+        }
+        getRiskParameters() {
+            return {
                 maxPositionSize: 1000,
                 maxDrawdown: 10,
                 minConfidence: 70,
                 cooldownPeriod: 0
-            }),
-            shouldTrade: vi.fn().mockReturnValue(true),
-            processOutcome: vi.fn()
-        }))
-    };
-});
+            };
+        }
+        shouldTrade() { return true; }
+        processOutcome() { }
+        stimulate() { }
+        getRiskMultiplier() { return 1.0; }
+        async tick() { return { cortisol: 0, arousal: 0, valence: 0, momentum: 0 }; }
+        getCurrentState() {
+            return {
+                cortisol: 0,
+                arousal: 0,
+                valence: 0,
+                momentum: 0,
+                glucose: 50,
+                dopamine: 50
+            };
+        }
+    }
+}));
+
+// Mock EidolonSimulator
+vi.mock('../../src/eidolon/simulation/EidolonSimulator', () => ({
+    EidolonSimulator: class {
+        async simulate(tx: any) {
+            // Default: successful simulation
+            return {
+                success: true,
+                gasUsed: 100000n,
+                logs: []
+            };
+        }
+    }
+}));
 
 describe('EidolonGuard', () => {
     let guard: EidolonGuard;
@@ -99,7 +166,7 @@ describe('EidolonGuard', () => {
     const mockPublicClient = {
         chain: { id: 204 },
         readContract: vi.fn(),
-        getBalance: vi.fn(),
+        getBalance: vi.fn().mockResolvedValue(1000000000000000000n), // 1 BNB
         watchBlockNumber: vi.fn()
     } as unknown as PublicClient;
 
@@ -108,6 +175,18 @@ describe('EidolonGuard', () => {
         getAddresses: vi.fn().mockResolvedValue(['0x123'])
     } as unknown as WalletClient;
 
+    const mockKit = {
+        publicClient: mockPublicClient,
+        walletClient: mockWalletClient,
+        defi: {
+            getRealQuote: vi.fn().mockResolvedValue(600000000n) // 600 USD (6 decimals)
+        },
+        gas: {
+            getOptimalExecutionTime: vi.fn().mockResolvedValue({ currentGasPrice: '0.000005' })
+        }
+    } as unknown as any; // Using any to avoid importing full ClawKit type complexity in test, or cast to ClawKit if imported
+
+
     beforeEach(() => {
         vi.resetAllMocks();
     });
@@ -115,14 +194,14 @@ describe('EidolonGuard', () => {
     describe('Initialization', () => {
         it('should initialize without error using defaults', () => {
             expect(() => {
-                new EidolonGuard(mockPublicClient, mockWalletClient);
+                new EidolonGuard(mockKit);
             }).not.toThrow();
         });
     });
 
     describe('Validation Logic', () => {
         it('should approve low risk actions', async () => {
-            const guard = new EidolonGuard(mockPublicClient, mockWalletClient, {
+            const guard = new EidolonGuard(mockKit, {
                 maxRiskScore: 80,
                 minConfidence: 50,
                 riskParameters: {
@@ -150,7 +229,7 @@ describe('EidolonGuard', () => {
         });
 
         it('should block high risk actions', async () => {
-            const guard = new EidolonGuard(mockPublicClient, mockWalletClient, {
+            const guard = new EidolonGuard(mockKit, {
                 maxRiskScore: 30, // Strict
                 minConfidence: -100, // Bypass confidence check to test Risk Score logic
                 riskParameters: {

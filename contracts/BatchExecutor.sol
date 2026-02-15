@@ -39,7 +39,15 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
     event SingleExecuted(address indexed executor, address target, bool success);
     event ExecutorAuthorized(address indexed executor);
     event ExecutorRevoked(address indexed executor);
-    event RefundFailed(address indexed recipient, uint256 amount); // New Event
+    event RefundAvailable(address indexed recipient, uint256 amount); // Pull Pattern
+    event RefundWithdrawn(address indexed recipient, uint256 amount); // Pull Pattern
+    
+    // ═══════════════════════════════════════════════════════
+    //  STATE VARIABLES
+    // ═══════════════════════════════════════════════════════
+
+    // User => Pending ETH Refund
+    mapping(address => uint256) public pendingRefunds;
 
     constructor() Ownable(msg.sender) {}
 
@@ -136,19 +144,35 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
     //  INTERNAL
     // ═══════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════
+    //  REFUND MECHANISM (FIX: PULL OVER PUSH)
+    // ═══════════════════════════════════════════════════════
+
     /**
-     * @dev Refund excess ETH. Logs error if refund fails instead of reverting.
+     * @dev Accumulate excess ETH as pending refund for the caller.
+     * Trustless: User must withdraw. No risk of bricking via failed transfer.
      */
     function _refundExcess() internal {
         uint256 remaining = address(this).balance;
         if (remaining > 0) {
-            // FIX CRITICAL: Do not require success.
-            (bool success, ) = payable(msg.sender).call{value: remaining}("");
-            if (!success) {
-                emit RefundFailed(msg.sender, remaining);
-                // Funds remain in contract and can be rescued via emergencyWithdraw
-            }
+            pendingRefunds[msg.sender] += remaining;
+            emit RefundAvailable(msg.sender, remaining);
         }
+    }
+
+    /**
+     * @dev User withdraws their pending refund.
+     */
+    function withdrawRefund() external nonReentrant {
+        uint256 amount = pendingRefunds[msg.sender];
+        require(amount > 0, "No pending refund");
+
+        pendingRefunds[msg.sender] = 0;
+        
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Transfer failed"); // Revert is safe here - user's own tx
+        
+        emit RefundWithdrawn(msg.sender, amount);
     }
 
     // ═══════════════════════════════════════════════════════

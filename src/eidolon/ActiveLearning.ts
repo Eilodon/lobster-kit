@@ -17,6 +17,7 @@ import { GreenfieldAdapter } from './memory/GreenfieldAdapter';
 export interface TradeOutcome {
   decisionId: number; // timestamp from DecisionLog
   profitLoss: number; // Actual P&L in USD
+  capitalAtRisk: number; // Added for ROI calculation
   slippage: number;   // Actual vs expected slippage
   gasUsed: number;    // Actual gas cost
   success: boolean;   // Transaction succeeded

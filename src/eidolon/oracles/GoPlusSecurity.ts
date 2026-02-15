@@ -27,7 +27,7 @@ export interface TokenSecurityData {
 }
 
 export class GoPlusSecurity {
-    private readonly API_URL = 'https://api.gopluslabs.io/api/v1/token_security/56'; // 56 = BSC
+    private readonly API_URL = 'https://api.gopluslabs.io/api/v1/token_security/204'; // 204 = opBNB
 
     /**
      * Fetch security data for a token address

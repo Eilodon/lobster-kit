@@ -10,7 +10,8 @@
     "test": "vitest",
     "deploy": "hardhat run scripts/deploy.ts --network opbnb",
     "lint": "eslint src/**/*.ts",
-    "format": "prettier --write src/**/*.ts"
+    "format": "prettier --write src/**/*.ts",
+    "mcp": "npx tsx src/mcp-server.ts"
   },
   "keywords": [
     "openclaw",
@@ -27,6 +28,7 @@
   "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.990.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@pancakeswap/sdk": "^5.7.0",
     "@pancakeswap/smart-router": "^4.7.0",
     "@types/react": "^19.2.14",
@@ -35,7 +37,8 @@
     "dotenv": "^16.4.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "viem": "^2.7.0"
+    "viem": "^2.7.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
@@ -45,6 +48,7 @@
     "eslint": "^8.56.0",
     "hardhat": "^2.19.4",
     "prettier": "^3.2.4",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3",
     "vitest": "^1.2.0"
   },

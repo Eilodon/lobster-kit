@@ -1,5 +1,6 @@
 import { PublicClient, WatchBlocksParameters, Block } from 'viem';
 import { MarketState } from '../EidolonTypes';
+import { EidolonBus, EidolonEventType } from '../events/EidolonBus';
 
 /**
  * 📡 MARKET STREAM SENSOR
@@ -15,6 +16,7 @@ export class MarketStream {
     private client: PublicClient;
     private unwatch: (() => void) | null = null;
     private callbacks: MarketUpdateCallback[] = [];
+    private bus: EidolonBus;
 
     // State buffer
     private lastGasPrices: bigint[] = [];
@@ -22,6 +24,7 @@ export class MarketStream {
 
     constructor(client: PublicClient) {
         this.client = client;
+        this.bus = EidolonBus.getInstance();
     }
 
     /**
@@ -57,20 +60,33 @@ export class MarketStream {
     }
 
     private processBlock(block: Block) {
-        // 1. Extract Metrics
+        // 1. Emit Heartbeat Event
+        this.bus.emitEvent({
+            type: EidolonEventType.BLOCK_MINED,
+            timestamp: Date.now(),
+            payload: {
+                blockNumber: block.number,
+                hash: block.hash,
+                timestamp: block.timestamp
+            }
+        });
+
+        // 2. Extract Metrics
         const gasUsed = block.gasUsed;
         const gasLimit = block.gasLimit;
         const baseFee = block.baseFeePerGas || 0n;
         const txCount = block.transactions.length;
 
-        // 2. Update Buffers (Rolling Window of ~10 blocks)
+        // 3. Update Buffers (Rolling Window of ~10 blocks)
         if (baseFee > 0n) this.lastGasPrices.push(baseFee);
+        else this.lastGasPrices.push(1000000000n); // Default 1 gwei if no baseFee (L2)
+
         this.lastTxCounts.push(txCount);
 
         if (this.lastGasPrices.length > 10) this.lastGasPrices.shift();
         if (this.lastTxCounts.length > 10) this.lastTxCounts.shift();
 
-        // 3. Derive Market State
+        // 4. Derive Market State
         const newState: MarketState = {
             gasPrice: this.deriveGasState(),
             whaleFlow: 'NEUTRAL', // Need DEX indexer for real flow
@@ -79,7 +95,7 @@ export class MarketStream {
             priceAction: 'RANGING' // Placeholder
         };
 
-        // 4. Notify Listeners
+        // 5. Notify Listeners
         this.notify(newState);
     }
 
@@ -89,6 +105,7 @@ export class MarketStream {
         const current = this.lastGasPrices[this.lastGasPrices.length - 1];
         const avg = this.lastGasPrices.reduce((a, b) => a + b, 0n) / BigInt(this.lastGasPrices.length);
 
+        // Fixed heuristic for opBNB (very cheap gas)
         if (current > avg * 120n / 100n) return 'HIGH'; // +20% surge
         if (current < avg * 80n / 100n) return 'LOW';   // -20% drop
         return 'MEDIUM';
@@ -99,8 +116,8 @@ export class MarketStream {
 
         const avgTx = this.lastTxCounts.reduce((a, b) => a + b, 0) / this.lastTxCounts.length;
 
-        if (txCount > avgTx * 2) return 'EUPHORIC'; // Double leverage activity
-        if (txCount < avgTx * 0.5) return 'FEAR';   // Dead chain
+        if (txCount > avgTx * 1.5) return 'EUPHORIC'; // +50% activity
+        if (txCount < avgTx * 0.5) return 'FEAR';   // -50% activity
         return 'NEUTRAL';
     }
 

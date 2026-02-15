@@ -1,4 +1,4 @@
-import { WalletClient, PublicClient, createPublicClient, http } from 'viem';
+import { WalletClient, PublicClient, createPublicClient, http, isAddress } from 'viem';
 import { opBNB } from 'viem/chains';
 import { DeFiModule } from './defi';
 import { NFTModule } from './nft';
@@ -6,6 +6,7 @@ import { SecurityModule } from './security';
 import { WalletModule } from './wallet';
 import { GasModule } from './gas';
 import { AnalyticsModule } from './analytics';
+import { EidolonSwarm } from './eidolon/swarm/EidolonSwarm';
 
 import { ClawKitConfig, ClawKitWalletClient } from './types';
 
@@ -16,12 +17,15 @@ export class ClawKit {
   public readonly wallet: WalletModule;
   public readonly gas: GasModule;
   public readonly analytics: AnalyticsModule;
+  public readonly swarm: EidolonSwarm;
 
-  private readonly walletClient: ClawKitWalletClient;
-  private readonly publicClient: PublicClient;
-  private readonly config: ClawKitConfig;
+  public readonly walletClient: ClawKitWalletClient;
+  public readonly publicClient: PublicClient;
+  public readonly config: ClawKitConfig;
 
   constructor(walletClient: ClawKitWalletClient, config: ClawKitConfig) {
+    this.validateConfig(config); // 🛡️ Zero-Trust Boot
+
     this.walletClient = walletClient;
     this.config = config;
 
@@ -38,6 +42,35 @@ export class ClawKit {
     this.wallet = new WalletModule(walletClient, this.publicClient, config);
     this.gas = new GasModule(walletClient, this.publicClient, config);
     this.analytics = new AnalyticsModule(walletClient, this.publicClient, config);
+
+    // Initialize Hive Mind
+    this.swarm = new EidolonSwarm();
+  }
+
+  /**
+   * 🛡️ ATOMIC CONFIG VALIDATION
+   * Prevents runtime failures by ensuring rigorous config integrity at boot.
+   */
+  private validateConfig(config: ClawKitConfig) {
+    if (!config.chainConfig) {
+      console.warn("⚠️ ChainConfig missing - Defaulting to opBNB (Legacy Mode)");
+      return; // Allow legacy mode for now, but warn loudly
+    }
+
+    // validate contracts
+    for (const [key, addr] of Object.entries(config.chainConfig.contracts)) {
+      if (typeof addr === 'string' && addr && !isAddress(addr)) {
+        throw new Error(`💥 ATOMIC CRASH: Invalid contract address for '${key}': ${addr}`);
+      }
+    }
+
+    // validate tokens
+    for (const [symbol, info] of Object.entries(config.chainConfig.tokens)) {
+      if (!isAddress(info.address)) {
+        throw new Error(`💥 ATOMIC CRASH: Invalid token address for '${symbol}': ${info.address}`);
+      }
+    }
+    console.error("🛡️ ATOMIC CONFIG: Integrity Verified.");
   }
 
   /**

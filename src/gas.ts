@@ -97,9 +97,9 @@ export class GasModule {
       return this.priceCache.value;
     }
 
-    // Fallback instead of crashing
-    console.warn('⚠️ All APIs failed. Using fallback BNB price ($600). Gas estimates may be inaccurate.');
-    return 600;
+    // CRITICAL: NO FALLBACK
+    console.error('❌ All APIs failed to fetch BNB price. Aborting gas estimation in USD.');
+    throw new Error('SENSORY BLACKOUT: Cannot estimate gas in USD without price feed.');
   }
 
   /**
