@@ -1,32 +1,51 @@
-import { WalletClient, PublicClient, parseEther, formatEther, encodeFunctionData, parseAbi } from 'viem';
-import { ClawKitConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, PANCAKE_ROUTER, toAddress, ClawKitWalletClient } from './types';
+import { WalletClient, PublicClient, parseEther, formatEther, encodeFunctionData, parseAbi, SimulateContractParameters } from 'viem';
+import { ClawKitConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, ClawKitWalletClient, OPBNB_CONFIG, toAddress } from './types';
 import axios from 'axios';
 
 export class DeFiModule {
-  // FIX M6: These are BSC mainnet addresses, NOT opBNB
-  // TODO: Replace with opBNB equivalents when available
-  // PancakeSwap MasterChef V3 may not be deployed on opBNB
-  // PancakeSwap MasterChef V3 may not be deployed on opBNB
-  private readonly PANCAKE_MASTERCHEF_V3 = ''; // Was BSC: 0x556B9306...  
-  private readonly VENUS_COMPTROLLER = '0xD6e3E2A1d8d95caE8D0D6D3bCD34E3Cbf2dB8bf2'; // opBNB Comptroller
-
-  // vToken mapping for opBNB (verified addresses need to be populated)
-  // For now, using placeholders or previously researched addresses if available.
-  // Warning: verifying these addresses is crucial for mainnet.
-  private readonly VENUS_MARKETS: Record<string, string> = {
-    'BNB': '0xA07c5b74C9B40447a954e1466938b865b6BBea36', // vBNB (Placeholder/BSC address - needs opBNB update)
-    'WBNB': '0xA07c5b74C9B40447a954e1466938b865b6BBea36', // vBNB
-    'USDT': '0xfD5840Cd36d94D7229439859C0112a4185BC0255', // vUSDT
-    'USDC': '0xecA88125a5ADbe82614ffC12D0DB554E2e2867C8', // vUSDC
-    'BTC': '0x882C173bC7Ff3b7786CA16dfeD3DFFfb9Ee7847B', // vBTC
-    'ETH': '0x16b9a82891338f9bA80E2D6970FddA79D1eb0daE', // vETH
-  };
 
   constructor(
     private walletClient: ClawKitWalletClient,
     private publicClient: PublicClient,
     private config: ClawKitConfig
-  ) { }
+  ) {
+    if (!this.config.chainConfig) {
+      console.warn("⚠️ No chain config provided, defaulting to opBNB");
+      this.config.chainConfig = OPBNB_CONFIG;
+    }
+  }
+
+  private get contracts() {
+    return this.config.chainConfig!.contracts;
+  }
+
+  private get tokens() {
+    return this.config.chainConfig!.tokens;
+  }
+
+  /**
+   * 🛡️ SIMULATION GUARD
+   * Pre-validates transaction to prevent failures and gas waste.
+   */
+  private async simulateTransaction(
+    to: string,
+    data: string,
+    value: bigint = 0n,
+    account: string
+  ): Promise<void> {
+    try {
+      // FIX F4: Simulate before sending
+      await this.publicClient.call({
+        account: toAddress(account),
+        to: toAddress(to),
+        data: data as `0x${string}`,
+        value,
+      });
+    } catch (error: any) {
+      console.error('❌ Simulation Failed:', error.shortMessage || error.message);
+      throw new Error(`Simulation failed: ${error.shortMessage || error.message}`);
+    }
+  }
 
   /**
    * Swap tokens using PancakeSwap with approval check
@@ -49,23 +68,26 @@ export class DeFiModule {
     // Build transaction
     const deadlineTimestamp = Math.floor(Date.now() / 1000) + deadline * 60;
     const userAddress = await this.getAddress();
+    const router = this.contracts.pancakeRouter;
 
     try {
       // For BNB -> Token swap (no approval needed)
-      if (fromToken === TOKENS.BNB.address || fromToken === TOKENS.WBNB.address) {
+      if (fromToken === this.tokens.BNB.address || fromToken === this.tokens.WBNB.address) {
         const data = encodeFunctionData({
           abi: PANCAKE_SWAP_ROUTER_ABI,
           functionName: 'swapExactETHForTokens',
           args: [
             amountOutMin,
-            [TOKENS.WBNB.address, toToken] as `0x${string}`[],
-            userAddress as `0x${string}`,
+            [this.tokens.WBNB.address as `0x${string}`, toAddress(toToken)],
+            toAddress(userAddress),
             BigInt(deadlineTimestamp)
           ]
         });
 
+        await this.simulateTransaction(router, data, amountIn, userAddress);
+
         const hash = await this.walletClient.sendTransaction({
-          to: PANCAKE_ROUTER,
+          to: toAddress(router),
           data,
           value: amountIn
         });
@@ -77,18 +99,18 @@ export class DeFiModule {
       }
 
       // For Token -> Token or Token -> BNB (requires approval)
-      await this.ensureApproval(fromToken, PANCAKE_ROUTER, amountIn);
+      await this.ensureApproval(fromToken, router, amountIn);
 
       // Determine swap function based on destination
       let functionName: string;
       let path: `0x${string}`[];
 
-      if (toToken === TOKENS.WBNB.address || toToken === TOKENS.BNB.address) {
+      if (toToken === this.tokens.WBNB.address || toToken === this.tokens.BNB.address) {
         functionName = 'swapExactTokensForETH';
-        path = [fromToken as `0x${string}`, TOKENS.WBNB.address as `0x${string}`];
+        path = [toAddress(fromToken), this.tokens.WBNB.address as `0x${string}`];
       } else {
         functionName = 'swapExactTokensForTokens';
-        path = [fromToken as `0x${string}`, TOKENS.WBNB.address as `0x${string}`, toToken as `0x${string}`];
+        path = [toAddress(fromToken), this.tokens.WBNB.address as `0x${string}`, toAddress(toToken)];
       }
 
       const data = encodeFunctionData({
@@ -98,13 +120,15 @@ export class DeFiModule {
           amountIn,
           amountOutMin,
           path,
-          userAddress as `0x${string}`,
+          toAddress(userAddress),
           BigInt(deadlineTimestamp)
         ]
       });
 
+      await this.simulateTransaction(router, data, 0n, userAddress);
+
       const hash = await this.walletClient.sendTransaction({
-        to: PANCAKE_ROUTER,
+        to: toAddress(router),
         data
       });
 
@@ -115,16 +139,18 @@ export class DeFiModule {
 
     } catch (error: any) {
       console.error('Swap error:', error);
+      this.handleSwapError(error);
+      throw error;
+    }
+  }
 
-      if (error.message?.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
-        throw new Error('Slippage tolerance exceeded. Try increasing slippage or reducing amount.');
-      } else if (error.message?.includes('INSUFFICIENT_INPUT_AMOUNT')) {
-        throw new Error('Insufficient balance for swap.');
-      } else if (error.message?.includes('EXPIRED')) {
-        throw new Error('Transaction deadline expired. Try again.');
-      }
-
-      throw new Error(`Swap failed: ${error.message || 'Unknown error'}`);
+  private handleSwapError(error: any) {
+    if (error.message?.includes('INSUFFICIENT_OUTPUT_AMOUNT')) {
+      throw new Error('Slippage tolerance exceeded. Try increasing slippage or reducing amount.');
+    } else if (error.message?.includes('INSUFFICIENT_INPUT_AMOUNT')) {
+      throw new Error('Insufficient balance for swap.');
+    } else if (error.message?.includes('EXPIRED')) {
+      throw new Error('Transaction deadline expired. Try again.');
     }
   }
 
@@ -140,10 +166,10 @@ export class DeFiModule {
 
     // Check current allowance
     const allowance = await this.publicClient.readContract({
-      address: tokenAddress as `0x${string}`,
+      address: toAddress(tokenAddress),
       abi: parseAbi(['function allowance(address owner, address spender) view returns (uint256)']),
       functionName: 'allowance',
-      args: [owner as `0x${string}`, spender as `0x${string}`]
+      args: [toAddress(owner), toAddress(spender)]
     });
 
     // If allowance is sufficient, no need to approve
@@ -156,11 +182,14 @@ export class DeFiModule {
     const data = encodeFunctionData({
       abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
       functionName: 'approve',
-      args: [spender as `0x${string}`, amount]
+      args: [toAddress(spender), amount]
     });
 
+    // Simulate approval (rarely fails, but good practice)
+    await this.simulateTransaction(tokenAddress, data, 0n, owner);
+
     const hash = await this.walletClient.sendTransaction({
-      to: tokenAddress as `0x${string}`,
+      to: toAddress(tokenAddress),
       data
     });
 
@@ -187,13 +216,13 @@ export class DeFiModule {
       { fee: 100, name: '0.01%' }    // Stablecoin pairs
     ];
 
-    const quoterAddress = '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997'; // V3 Quoter
+    const quoterAddress = this.contracts.pancakeQuoter;
 
     // Try each fee tier until we find a pool
     for (const { fee, name } of feeTiers) {
       try {
         const amountOut = await this.publicClient.readContract({
-          address: quoterAddress as `0x${string}`,
+          address: toAddress(quoterAddress),
           abi: parseAbi(['function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96) params) view returns (uint256 amountOut)']),
           functionName: 'quoteExactInputSingle',
           args: [{
@@ -212,7 +241,7 @@ export class DeFiModule {
         console.log(`✅ Found route with fee tier ${name}`);
         return amountOutMin;
       } catch (error) {
-        console.log(`❌ No pool for fee tier ${name}, trying next...`);
+        // console.log(`❌ No pool for fee tier ${name}, trying next...`);
         continue;
       }
     }
@@ -242,9 +271,11 @@ export class DeFiModule {
 
       const amountToStake = parseEther(amount);
       const lpTokenAddress = poolInfo.lpAddress;
+      const masterChef = this.contracts.pancakeMasterChef;
+      const userAddress = await this.getAddress();
 
       // Ensure approval for MasterChef
-      await this.ensureApproval(lpTokenAddress, this.PANCAKE_MASTERCHEF_V3, amountToStake);
+      await this.ensureApproval(lpTokenAddress, masterChef, amountToStake);
 
       // Deposit into pool
       const data = encodeFunctionData({
@@ -253,8 +284,10 @@ export class DeFiModule {
         args: [BigInt(poolInfo.pid), amountToStake]
       });
 
+      await this.simulateTransaction(masterChef, data, 0n, userAddress);
+
       const hash = await this.walletClient.sendTransaction({
-        to: this.PANCAKE_MASTERCHEF_V3 as `0x${string}`,
+        to: toAddress(masterChef),
         data
       });
 
@@ -306,6 +339,7 @@ export class DeFiModule {
   async harvestAll(): Promise<{ totalRewards: string; transactions: string[] }> {
     const userAddress = await this.getAddress();
     const transactions: string[] = [];
+    const masterChef = this.contracts.pancakeMasterChef;
 
     try {
       // Get user's staked pools from PancakeSwap
@@ -322,8 +356,10 @@ export class DeFiModule {
             args: [BigInt(pool.pid), 0n] // Withdraw 0 = harvest only
           });
 
+          await this.simulateTransaction(masterChef, data, 0n, userAddress);
+
           const hash = await this.walletClient.sendTransaction({
-            to: this.PANCAKE_MASTERCHEF_V3 as `0x${string}`,
+            to: toAddress(masterChef),
             data
           });
 
@@ -451,7 +487,8 @@ export class DeFiModule {
 
     // Resolve from known tokens
     const symbol = symbolOrAddress.toUpperCase() as TokenSymbol;
-    const tokenInfo = TOKENS[symbol];
+    // Look in config tokens first, then default to types.TOKENS for safety
+    const tokenInfo = this.tokens[symbol] || TOKENS[symbol];
     return tokenInfo ? tokenInfo.address : symbolOrAddress;
   }
 
@@ -459,29 +496,49 @@ export class DeFiModule {
     const [address] = await this.walletClient.getAddresses();
     return address;
   }
+
+  private checkVenusSupport() {
+    if (!this.contracts.venusComptroller || !this.contracts.venusMarkets) {
+      throw new Error(`Venus Protocol is not supported or configured on this chain (${this.config.chainConfig?.name})`);
+    }
+  }
+
+  private resolveVToken(asset: string): string {
+    this.checkVenusSupport();
+    const markets = this.contracts.venusMarkets!;
+    const vToken = markets[asset.toUpperCase()];
+    if (!vToken) {
+      throw new Error(`No Venus market found for ${asset}`);
+    }
+    return vToken;
+  }
+
   /**
    * Supply assets to Venus Protocol
    * @example
    * await kit.defi.lend({ asset: 'BNB', amount: '0.1' })
    */
   async lend(params: LendParams): Promise<{ hash: string }> {
+    this.checkVenusSupport();
     const { asset, amount } = params;
     const vTokenAddress = this.resolveVToken(asset);
     const amountBigInt = parseEther(amount);
+    const userAddress = await this.getAddress();
 
     try {
       console.log(`Supplying ${amount} ${asset} to Venus...`);
 
       if (asset === 'BNB' || asset === 'WBNB') {
-        // Mint vBNB (payable function)
         const data = encodeFunctionData({
           abi: parseAbi(['function mint() payable']),
           functionName: 'mint',
           args: []
         });
 
+        await this.simulateTransaction(vTokenAddress, data, amountBigInt, userAddress);
+
         const hash = await this.walletClient.sendTransaction({
-          to: vTokenAddress as `0x${string}`,
+          to: toAddress(vTokenAddress),
           data,
           value: amountBigInt
         });
@@ -489,8 +546,6 @@ export class DeFiModule {
         console.log(`✅ Supplied BNB. Hash: ${hash}`);
         return { hash };
       } else {
-        // Mint vToken (ERC20)
-        // First ensure approval
         const tokenAddress = this.resolveTokenAddress(asset);
         await this.ensureApproval(tokenAddress, vTokenAddress, amountBigInt);
 
@@ -500,8 +555,10 @@ export class DeFiModule {
           args: [amountBigInt]
         });
 
+        await this.simulateTransaction(vTokenAddress, data, 0n, userAddress);
+
         const hash = await this.walletClient.sendTransaction({
-          to: vTokenAddress as `0x${string}`,
+          to: toAddress(vTokenAddress),
           data
         });
 
@@ -520,16 +577,14 @@ export class DeFiModule {
    * await kit.defi.borrow({ asset: 'USDT', amount: '50' })
    */
   async borrow(params: BorrowParams): Promise<{ hash: string }> {
+    this.checkVenusSupport();
     const { asset, amount } = params;
     const vTokenAddress = this.resolveVToken(asset);
     const amountBigInt = parseEther(amount); // Note: verify decimals for USDT/USDC
 
     try {
-      // Check formatting for decimals if needed (USDT is 6 decimals)
-      // For simplicity assuming 18 here, but should be dynamic based on token
-      // TODO: Handle token decimals dynamically
-
       console.log(`Borrowing ${amount} ${asset} from Venus...`);
+      const userAddress = await this.getAddress();
 
       const data = encodeFunctionData({
         abi: parseAbi(['function borrow(uint256 borrowAmount) returns (uint256)']),
@@ -537,8 +592,10 @@ export class DeFiModule {
         args: [amountBigInt]
       });
 
+      await this.simulateTransaction(vTokenAddress, data, 0n, userAddress);
+
       const hash = await this.walletClient.sendTransaction({
-        to: vTokenAddress as `0x${string}`,
+        to: toAddress(vTokenAddress),
         data
       });
 
@@ -556,9 +613,11 @@ export class DeFiModule {
    * await kit.defi.repay({ asset: 'USDT', amount: '50' })
    */
   async repay(params: RepayParams): Promise<{ hash: string }> {
+    this.checkVenusSupport();
     const { asset, amount } = params;
     const vTokenAddress = this.resolveVToken(asset);
     const amountBigInt = parseEther(amount);
+    const userAddress = await this.getAddress();
 
     try {
       console.log(`Repaying ${amount} ${asset} to Venus...`);
@@ -570,8 +629,10 @@ export class DeFiModule {
           args: []
         });
 
+        await this.simulateTransaction(vTokenAddress, data, amountBigInt, userAddress);
+
         const hash = await this.walletClient.sendTransaction({
-          to: vTokenAddress as `0x${string}`,
+          to: toAddress(vTokenAddress),
           data,
           value: amountBigInt
         });
@@ -588,8 +649,10 @@ export class DeFiModule {
           args: [amountBigInt]
         });
 
+        await this.simulateTransaction(vTokenAddress, data, 0n, userAddress);
+
         const hash = await this.walletClient.sendTransaction({
-          to: vTokenAddress as `0x${string}`,
+          to: toAddress(vTokenAddress),
           data
         });
 
@@ -606,7 +669,9 @@ export class DeFiModule {
    * Enter markets to enable collateral
    */
   async enterMarkets(assets: string[]): Promise<{ hash: string }> {
+    this.checkVenusSupport();
     const vTokens = assets.map(a => this.resolveVToken(a));
+    const userAddress = await this.getAddress();
 
     try {
       console.log(`Entering markets for ${assets.join(', ')}...`);
@@ -616,8 +681,12 @@ export class DeFiModule {
         args: [vTokens as `0x${string}`[]]
       });
 
+      const comptroller = this.contracts.venusComptroller!;
+
+      await this.simulateTransaction(comptroller, data, 0n, userAddress);
+
       const hash = await this.walletClient.sendTransaction({
-        to: this.VENUS_COMPTROLLER as `0x${string}`,
+        to: toAddress(comptroller),
         data
       });
 
@@ -627,14 +696,6 @@ export class DeFiModule {
       console.error('Enter markets error:', error);
       throw new Error(`Enter markets failed: ${error.message}`);
     }
-  }
-
-  private resolveVToken(asset: string): string {
-    const vToken = this.VENUS_MARKETS[asset.toUpperCase()];
-    if (!vToken) {
-      throw new Error(`No Venus market found for ${asset}`);
-    }
-    return vToken;
   }
 }
 

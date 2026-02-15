@@ -1,18 +1,30 @@
 /**
- * 🦞 EXAMPLE: VibeMinter with Eidolon Consciousness
+ * 🛡️ EXAMPLE: VibeMinter with Eidolon Guard
  * 
- * This example shows how to integrate Eidolon Sentinel with ClawKit
- * to create a self-aware, learning NFT minting agent
+ * This example shows the "Divine Hand" architecture:
+ * 1. BRAIN (Simulated Loop): Decides what to do
+ * 2. GUARD (Eidolon): Validates the decision for risk/safety
+ * 3. HAND (ClawKit): Executes the validated action
  */
 
 import { ClawKit } from '../../src';
-import { EidolonAgent, MarketState, ActionType, TradeOutcome } from '../../src/eidolon';
+import { EidolonGuard, MarketState, ActionType, TradeOutcome, ClawOracle } from '../../src/eidolon';
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { opBNB } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 
 // Setup
-const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
+import * as dotenv from 'dotenv';
+dotenv.config();
+
+import { generatePrivateKey } from 'viem/accounts';
+
+const privateKey = process.env.PRIVATE_KEY as `0x${string}` || generatePrivateKey();
+if (!process.env.PRIVATE_KEY) {
+  console.warn('⚠️ No PRIVATE_KEY found in .env, using random generated key for demo.');
+}
+
+const account = privateKeyToAccount(privateKey);
 
 const publicClient = createPublicClient({
   chain: opBNB,
@@ -29,209 +41,99 @@ const kit = new ClawKit(walletClient, {
   privateKey: process.env.PRIVATE_KEY!
 });
 
-// Custom market sensing using ClawKit analytics
-// Custom market sensing using Deterministic Scenario Generator (for Demos)
-let tick = 0;
-// Scenario: Calm -> Accumulation -> Pump -> Euphoria -> Dump -> Panic
-const SCENARIO_SEQUENCE: MarketState[] = [
-  { gasPrice: 'LOW', whaleFlow: 'NEUTRAL', sentiment: 'NEUTRAL', liquidityDepth: 'DEEP', priceAction: 'RANGING' },
-  { gasPrice: 'LOW', whaleFlow: 'ACCUMULATING', sentiment: 'NEUTRAL', liquidityDepth: 'DEEP', priceAction: 'RANGING' },
-  { gasPrice: 'MEDIUM', whaleFlow: 'ACCUMULATING', sentiment: 'NEUTRAL', liquidityDepth: 'DEEP', priceAction: 'PUMPING' },
-  { gasPrice: 'HIGH', whaleFlow: 'NEUTRAL', sentiment: 'EUPHORIC', liquidityDepth: 'DEEP', priceAction: 'PUMPING' },
-  { gasPrice: 'HIGH', whaleFlow: 'DUMPING', sentiment: 'FEAR', liquidityDepth: 'THIN', priceAction: 'DUMPING' },
-  { gasPrice: 'LOW', whaleFlow: 'NEUTRAL', sentiment: 'FEAR', liquidityDepth: 'DEEP', priceAction: 'RANGING' },
-];
+// --- 1. THE BRAIN (Simulated Logic) ---
+// In a real app, this would be OpenClaw or an LLM
+
+/**
+ * BRAIN LOGIC
+ * Determines Action based on Market State
+ */
+async function brainDecideAction(state: MarketState): Promise<{ action: ActionType, confidence: number }> {
+  // Simple heuristic brain
+  if (state.priceAction === 'PUMPING') return { action: 'BUY', confidence: 85 };
+  if (state.priceAction === 'DUMPING') return { action: 'SELL', confidence: 75 };
+  return { action: 'HOLD', confidence: 50 };
+}
+
+// --- 2. THE EYE (Real Oracle) ---
+const oracle = new ClawOracle(kit);
 
 async function senseMarket(): Promise<MarketState> {
-  // Get real market data from ClawKit (for gas validation)
-  const gasEstimate = await kit.gas.getOptimalExecutionTime();
-  const gasPriceGwei = parseFloat(gasEstimate.currentGasPrice);
-
-  // Pick scenario based on tick
-  const scenarioIndex = tick % SCENARIO_SEQUENCE.length;
-  const scenario = SCENARIO_SEQUENCE[scenarioIndex];
-
-  console.log(`\n🎭 DEMO SCENARIO [${scenarioIndex + 1}/${SCENARIO_SEQUENCE.length}]:`);
-  console.log(`   Whales: ${scenario.whaleFlow} | Sentiment: ${scenario.sentiment} | Price: ${scenario.priceAction}`);
-
-  // Override gas price with real data if it's extreme, otherwise use scenario
-  const gasPrice = gasPriceGwei > 10 ? 'HIGH' : scenario.gasPrice;
-
-  tick++;
+  console.log('👁️  Sensing REAL market data via ClawOracle...');
+  const state = await oracle.sense();
+  // Override some static fields for demo if oracle returns stubs
   return {
-    ...scenario,
-    gasPrice
+    ...state,
+    whaleFlow: 'NEUTRAL', // Stubbed in V2
+    sentiment: 'NEUTRAL'  // Stubbed in V2
   };
 }
 
-// Custom execution using ClawKit NFT module
+// --- 2. THE HAND (Execution) ---
 async function executeAction(action: ActionType, confidence: number): Promise<TradeOutcome> {
-  const timestamp = Date.now();
+  // Simulate execution
+  console.log(`__HAND: Executing ${action}...`);
+  return {
+    decisionId: Date.now(),
+    profitLoss: action === 'BUY' ? 10 : -5, // Fake result
+    slippage: 0.1,
+    gasUsed: 0.0001,
+    success: true
+  };
+}
 
-  try {
-    if (action === 'BUY') {
-      // In this context, "buying" means minting a vibe badge
-      console.log(`\n🎨 Minting Vibe Badge with ${confidence}% confidence...`);
 
-      const tier = confidence > 90 ? 'Diamond' :
-        confidence > 75 ? 'Gold' :
-          confidence > 60 ? 'Silver' : 'Bronze';
+// --- MAIN LOOP ---
+async function main() {
+  console.log('🛡️ Starting Eidolon-Guarded Agent\n');
 
-      const userAddress = await walletClient.getAddresses().then(a => a[0]);
+  // Initialize Guard
+  const guard = new EidolonGuard(publicClient, walletClient, {
+    maxRiskScore: 50, // Strict risk
+    minConfidence: 70,
+    riskParameters: {
+      maxPositionSize: 10,
+      maxDrawdown: 10,
+      minConfidence: 70,
+      cooldownPeriod: 5000
+    },
+    marketStateSensor: senseMarket // Inject sensor
+  });
 
-      const result = await kit.nft.mintBadge({
-        name: `Good Vibes ${tier}`,
-        description: `Minted by Eidolon Agent with ${confidence}% confidence`,
-        tier,
-        to: userAddress,
-        metadata: {
-          Confidence: confidence.toString(),
-          'Minted At': new Date().toISOString(),
-          'Agent State': 'CONSCIOUS'
-        }
-      });
+  await guard.init();
 
-      console.log(`✅ Badge minted! Token ID: ${result.tokenId}`);
-      console.log(`   Transaction: ${result.hash}`);
+  // Run 3 simulation ticks
+  for (let i = 0; i < 3; i++) {
+    console.log(`\n--- TICK ${i + 1} ---`);
 
-      // Estimate profit (gas saved by optimal timing)
-      const profitEstimate = confidence > 80 ? 5 : confidence > 60 ? 2 : -1;
+    // 1. Brain: Sense and Decide
+    const marketState = await senseMarket();
+    console.log(`BRAIN: Sensed ${marketState.whaleFlow} / ${marketState.priceAction}`);
 
-      return {
-        decisionId: timestamp,
-        profitLoss: profitEstimate,
-        slippage: 0,
-        gasUsed: 3,
-        success: true
-      };
+    const decision = await brainDecideAction(marketState);
+    console.log(`BRAIN: Proposed ${decision.action} with ${decision.confidence}% confidence`);
 
-    } else if (action === 'HOLD') {
-      console.log('⏸️  Holding. Waiting for better conditions...');
+    // 2. Guard: Validate
+    const validation = await guard.validateAction(decision.action, { marketState });
 
-      return {
-        decisionId: timestamp,
-        profitLoss: 0,
-        slippage: 0,
-        gasUsed: 0,
-        success: true
-      };
+    if (validation.approved) {
+      console.log(`🛡️ GUARD: APPROVED (Risk: ${validation.riskScore})`);
+      console.log(`   Reason: ${validation.reason}`);
+
+      // 3. Hand: Execute
+      const outcome = await executeAction(decision.action, decision.confidence);
+
+      // 4. Feedback
+      await guard.learn(decision.action, outcome);
+      console.log(`🛡️ GUARD: Learned from outcome`);
 
     } else {
-      // SELL or EMERGENCY_EXIT not applicable for NFT minting
-      return {
-        decisionId: timestamp,
-        profitLoss: 0,
-        slippage: 0,
-        gasUsed: 0,
-        success: true
-      };
+      console.log(`🛡️ GUARD: DENIED (Risk: ${validation.riskScore})`);
+      console.log(`   Reason: ${validation.reason}`);
     }
 
-  } catch (error) {
-    console.error('❌ Execution failed:', error);
-
-    return {
-      decisionId: timestamp,
-      profitLoss: -5, // Gas wasted
-      slippage: 0,
-      gasUsed: 2,
-      success: false
-    };
+    await new Promise(r => setTimeout(r, 1000));
   }
 }
 
-// Main execution
-async function main() {
-  console.log('🦞 Starting Eidolon-Powered VibeMinter Agent\n');
-
-  // Create Eidolon Agent with custom configuration
-  const agent = new EidolonAgent(
-    publicClient,
-    walletClient,
-    {
-      minConfidenceToTrade: 70,
-      basePositionSize: 5,
-      maxDrawdown: 10,
-      riskParameters: {
-        maxPositionSize: 10,
-        maxDrawdown: 15,
-        minConfidence: 70,
-        cooldownPeriod: 60000
-      },
-
-      // Inject custom market sensing
-      marketStateSensor: senseMarket,
-
-      // Inject custom execution
-      executeAction: executeAction,
-
-      // Inject demo price oracle for Heartbeat
-      priceOracle: async () => {
-        // Simple sine wave volatility simulation for demo
-        const time = Date.now();
-        const basePrice = 600;
-        const volatility = Math.sin(time / 5000) * 15; // ±15 volatility
-        return basePrice + volatility;
-      }
-    }
-  );
-
-  // Start the agent
-  await agent.start();
-
-  // Let it run for a while
-  console.log('\n⏱️  Agent running... Press Ctrl+C to stop\n');
-
-  // Graceful shutdown
-  process.on('SIGINT', () => {
-    console.log('\n\n🛑 Shutting down gracefully...');
-    agent.stop();
-    process.exit(0);
-  });
-}
-
-// Error handling
-main().catch((error) => {
-  console.error('💥 Fatal error:', error);
-  process.exit(1);
-});
-
-/**
- * Example output:
- * 
- * 🦞 Starting Eidolon-Powered VibeMinter Agent
- * 
- * 🦞 EIDOLON AGENT INITIALIZED
- *    Consciousness Modules:
- *    🔮 Divine Transparency: ONLINE
- *    🧠 Active Learning: ONLINE
- *    💫 Emotional Core: ONLINE
- * 
- * 🫀 EIDOLON SENTINEL HEART: STARTED
- *    Mode: ZEN | Interval: 3000ms
- * 
- * 🧘 Market calm. Entering Zen Mode.
- * 
- * ╔════════════════════════════════════════════════════════════╗
- * ║   🔮 DIVINE TRANSPARENCY - DECISION ANALYSIS               ║
- * ╠════════════════════════════════════════════════════════════╣
- * ║ ACTION:      BUY                                           ║
- * ║ CONFIDENCE:  87%                                           ║
- * ╠════════════════════════════════════════════════════════════╣
- * ║ REASONING:                                                 ║
- * ║ EXECUTING BUY (87% confident). ✓ Smart money is buying    ║
- * ║ aggressively | ✓ Network cost optimal for trading         ║
- * ╚════════════════════════════════════════════════════════════╝
- * 
- * 🎨 Minting Vibe Badge with 87% confidence...
- * ✅ Badge minted! Token ID: 42
- *    Transaction: 0x1234...5678
- * 
- * ╔════════════════════════════════════════════════════════════╗
- * ║   🧠 ACTIVE LEARNING - PROCESSING OUTCOME                  ║
- * ╠════════════════════════════════════════════════════════════╣
- * ║ ✅ Outcome: PROFIT | P&L: $5.00                            ║
- * ║    Reward Signal: 0.0995                                   ║
- * ║    🔄 Updating neural pathways...                          ║
- * ╚════════════════════════════════════════════════════════════╝
- */
+main().catch(console.error);

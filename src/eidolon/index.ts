@@ -1,57 +1,30 @@
 /**
- * 🦞 EIDOLON SENTINEL FRAMEWORK
+ * ⚡ EIDOLON AGENT FRAMEWORK
+ * "The ghost in the machine"
  * 
- * A consciousness-inspired architecture for autonomous blockchain agents
+ * A unified consciousness architecture for AI agents.
  * 
- * Public modules with basic implementations
- * Production-optimized parameters available in ClawKit Pro
- * 
- * @see https://github.com/clawkit/bnb for full documentation
+ * Components:
+ * - Brain: Active Inference & Meta-Learning (ActiveLearning.ts)
+ * - Heart: Biological Rhythm & Safety (SentinelHeart.ts)
+ * - Soul: Homeostatic Regulation (EmotionalCore.ts)
+ * - Mind: Explainable AI & Transparency (DivineTransparency.ts)
  */
 
-// Core modules
-export { SentinelHeart, HEART_CONFIG, type HeartMode, type HeartMetrics } from './SentinelHeart';
-export { 
-  DivineTransparency, 
-  REASONING_WEIGHTS,
-  type MarketState, 
-  type ActionType,
-  type DecisionLog,
-  type CausalFactor
-} from './DivineTransparency';
-export {
-  ActiveLearning,
-  LEARNING_CONFIG,
-  type TradeOutcome,
-  type LearningMetrics
-} from './ActiveLearning';
+// Core Identity
+export { EidolonGuard } from './EidolonGuard';
+export * from './EidolonTypes';
+
+// Consciousness Modules
+export { ActiveLearning } from './ActiveLearning';
+export { DivineTransparency } from './DivineTransparency';
+
+// Emotional Core (Thermodynamic)
 export {
   EmotionalCore,
-  EMOTIONAL_CONFIG,
-  type EmotionalState,
-  type EmotionalProfile,
-  type RiskParameters
+  type EmotionalState
 } from './EmotionalCore';
 
-// Master orchestrator
-export {
-  EidolonAgent,
-  type EidolonConfig
-} from './EidolonAgent';
-
-/**
- * Quick start example:
- * 
- * ```typescript
- * import { EidolonAgent } from '@clawkit/bnb/eidolon';
- * import { createPublicClient, createWalletClient } from 'viem';
- * 
- * const agent = new EidolonAgent(publicClient, walletClient, {
- *   minConfidenceToTrade: 70,
- *   basePositionSize: 5,
- *   maxDrawdown: 10
- * });
- * 
- * await agent.start();
- * ```
- */
+// Persistence
+export { GreenfieldAdapter } from './memory/GreenfieldAdapter';
+export { IStorageProvider } from './memory/IStorageProvider'; // Export interface

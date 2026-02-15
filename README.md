@@ -25,11 +25,11 @@ Production-ready toolkit for all on-chain interactions:
 *   **💸 DeFi Module**: Integrated with **PancakeSwap V3** (Swap) and **Venus Protocol** (Lend/Borrow/Repay).
 *   **📊 Analytics Module**: Real-time APY fetching from PancakeSwap/Venus APIs and portfolio health monitoring.
 *   **🛡️ Security Module**: Built-in integration with **GoPlus Security API** to detect honeypots, high taxes, and malicious contracts before interaction.
-*   **⛽ Gas Module**: AI-powered gas price estimation for optimal transaction costs.
-*   **🖼️ NFT Module**: Simplified minting and metadata management.
+*   **⛽ Gas Module**: Smart gas price estimation and optimal execution timing to minimize transaction costs.
+*   **🖼️ NFT Module**: Specialized for **Dynamic Badges** with on-chain metadata and SVG generation.
 
 ### 🛡️ 3. SafeGuard Architecture
-*   **Auto-Revoke**: Agents actively monitor token approvals and automatically revoke allowances for high-risk or compromised contracts.
+*   **Proactive Revocation**: Built-in tools (`ApprovalRevoker`) to batch revoke allowances for high-risk contracts.
 *   **Atomic Transactions**: All operations are built to be atomic and failure-resistant.
 
 ---
@@ -37,9 +37,11 @@ Production-ready toolkit for all on-chain interactions:
 ## 📦 Installation
 
 ```bash
+# Install from local source (recommended for now)
+npm install ./path/to/clawkit-bnb
+
+# Or if published
 npm install @clawkit/bnb
-# or
-yarn add @clawkit/bnb
 ```
 
 ## 🚀 Quick Start
@@ -65,26 +67,47 @@ const tx = await kit.defi.swap({
 console.log('Swap TX:', tx.hash);
 ```
 
-### 2. Advanced Usage (Eidolon Agent)
+### 2. Advanced Usage (Eidolon Guard)
+
+The **EidolonGuard** acts as a conscious security layer that validates every action before execution.
 
 ```typescript
-import { EidolonAgent } from '@clawkit/bnb/eidolon';
+import { EidolonGuard } from '@clawkit/bnb/eidolon';
 
-// Create a conscious agent
-const agent = new EidolonAgent(publicClient, walletClient, {
-  minConfidenceToTrade: 75,
-  riskAversion: 'MEDIUM'
+// Initialize the Guard (The Conscious Layer)
+const guard = new EidolonGuard(publicClient, walletClient, {
+  maxRiskScore: 60,
+  minConfidence: 75,
+  riskParameters: {
+      maxPositionSize: 1000,
+      maxDrawdown: 10,
+      minConfidence: 75,
+      cooldownPeriod: 60000
+  }
 });
 
-// Start the agent loop
-await agent.start();
+// Wake up the agent's memory and sensors
+await guard.init();
 
-// The agent will now:
-// 1. Sensitively monitor the market (Heart)
-// 2. Analyze data and form a decision (Mind)
-// 3. Check its emotional state (Soul)
-// 4. Execute only if confidence is high (Action)
-// 5. Learn from the result (Brain)
+// ... inside your trading loop ...
+
+// 1. Propose an action
+const action = 'BUY';
+const context = { 
+    tokenAddress: '0x...', 
+    amountUSD: 100 
+};
+
+// 2. Ask the Guard for permission
+const validation = await guard.validateAction(action, context);
+
+if (validation.approved) {
+    console.log("✅ Action Approved by Eidolon:", validation.reason);
+    // Execute trade...
+} else {
+    console.log("🛑 Action Blocked:", validation.reason);
+    console.log("Risk Score:", validation.riskScore);
+}
 ```
 
 ## 📂 Documentation

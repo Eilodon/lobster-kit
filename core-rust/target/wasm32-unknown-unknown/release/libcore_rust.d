@@ -1,0 +1,1 @@
+/media/ybao/DATA/b1/clawkit-bnb/core-rust/target/wasm32-unknown-unknown/release/libcore_rust.rlib: /media/ybao/DATA/b1/clawkit-bnb/core-rust/src/lib.rs /media/ybao/DATA/b1/clawkit-bnb/core-rust/src/security.rs

@@ -39,6 +39,19 @@ contract ApprovalRevoker is Ownable, ReentrancyGuard {
     }
     mapping(address => mapping(address => BlanketPermission)) public blanketPermissions;
 
+    // ═══════════════════════════════════════════════════════
+    //  RATE LIMITING (FIX CRITICAL)
+    // ═══════════════════════════════════════════════════════
+    
+    mapping(address => uint256) public lastFlagTimestamp;
+    uint256 public constant RATE_LIMIT = 1 minutes;
+
+    modifier rateLimited() {
+        require(block.timestamp >= lastFlagTimestamp[msg.sender] + RATE_LIMIT, "Rate limit exceeded");
+        _;
+        lastFlagTimestamp[msg.sender] = block.timestamp;
+    }
+
     // Events
     event AgentAuthorized(address indexed user, address indexed agent);
     event AgentRevoked(address indexed user, address indexed agent);
@@ -106,7 +119,7 @@ contract ApprovalRevoker is Ownable, ReentrancyGuard {
         address user,
         address token,
         address spender
-    ) external {
+    ) external rateLimited {
         require(_isAgentAuthorized(user, msg.sender), "Not authorized");
         require(token != address(0) && spender != address(0), "Invalid addresses");
 
@@ -121,7 +134,7 @@ contract ApprovalRevoker is Ownable, ReentrancyGuard {
         address user,
         address[] calldata tokens,
         address[] calldata spenders
-    ) external {
+    ) external rateLimited {
         require(_isAgentAuthorized(user, msg.sender), "Not authorized");
         require(tokens.length == spenders.length, "Length mismatch");
         require(tokens.length > 0 && tokens.length <= 50, "Batch: 1-50");

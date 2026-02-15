@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
  * FIX F3: Added minter role — only authorized minters can mint.
  * FIX H1: Uses ERC721Enumerable for O(1) tokenOfOwnerByIndex.
  * FIX H2: Stores badge type separately for O(1) type lookup.
+ * FIX CRITICAL: Implemented _update to track badge type balances on transfer.
  */
 contract DynamicBadge is ERC721Enumerable, Ownable {
     using Strings for uint256;
@@ -27,13 +28,14 @@ contract DynamicBadge is ERC721Enumerable, Ownable {
     // Token ID => Badge Type (FIX H2 — O(1) lookup instead of string scan)
     mapping(uint256 => string) private _badgeTypes;
 
-    // Owner => Badge Type => bool (FIX H2 — O(1) hasBadgeType check)
-    mapping(address => mapping(string => bool)) private _ownerHasBadgeType;
+    // Owner => Badge Type => Count (FIX CRITICAL — Track counts to handle transfers)
+    mapping(address => mapping(string => uint256)) private _ownerBadgeCounts;
 
     // Events
     event BadgeMinted(address indexed to, uint256 indexed tokenId, string badgeType);
     event MinterAuthorized(address indexed minter);
     event MinterRevoked(address indexed minter);
+    event BadgeTransferred(address indexed from, address indexed to, uint256 indexed tokenId, string badgeType);
 
     modifier onlyMinter() {
         require(
@@ -80,10 +82,12 @@ contract DynamicBadge is ERC721Enumerable, Ownable {
         require(bytes(badgeType).length > 0, "Empty badge type");
 
         uint256 tokenId = _nextTokenId++;
-        _safeMint(to, tokenId);
-        _tokenMetadata[tokenId] = metadata;
+        
+        // FIX CRITICAL: Set type BEFORE mint so _update can read it
         _badgeTypes[tokenId] = badgeType;
-        _ownerHasBadgeType[to][badgeType] = true;
+        _tokenMetadata[tokenId] = metadata;
+
+        _safeMint(to, tokenId);
 
         emit BadgeMinted(to, tokenId, badgeType);
         return tokenId;
@@ -111,6 +115,33 @@ contract DynamicBadge is ERC721Enumerable, Ownable {
     }
 
     // ═══════════════════════════════════════════════════════
+    //  CORE LOGIC OVERRIDES (FIX CRITICAL)
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * @dev Hook that is called before any token transfer. 
+     * Includes minting and burning.
+     * Updates _ownerBadgeCounts.
+     */
+    function _update(address to, uint256 tokenId, address auth) internal virtual override returns (address) {
+        address from = super._update(to, tokenId, auth);
+
+        string memory badgeType = _badgeTypes[tokenId];
+        
+        // If badgeType is set (should be for all valid tokens), update counts
+        if (bytes(badgeType).length > 0) {
+            if (from != address(0)) {
+                _ownerBadgeCounts[from][badgeType] -= 1;
+            }
+            if (to != address(0)) {
+                _ownerBadgeCounts[to][badgeType] += 1;
+            }
+        }
+
+        return from;
+    }
+
+    // ═══════════════════════════════════════════════════════
     //  QUERIES (FIX H1/H2 — O(1) via ERC721Enumerable + mappings)
     // ═══════════════════════════════════════════════════════
 
@@ -118,7 +149,14 @@ contract DynamicBadge is ERC721Enumerable, Ownable {
      * @dev Check if owner has a specific badge type — O(1)
      */
     function hasBadgeType(address owner_, string memory badgeType) external view returns (bool) {
-        return _ownerHasBadgeType[owner_][badgeType];
+        return _ownerBadgeCounts[owner_][badgeType] > 0;
+    }
+    
+    /**
+     * @dev Get count of specific badge type owned by address
+     */
+    function getBadgeTypeCount(address owner_, string memory badgeType) external view returns (uint256) {
+        return _ownerBadgeCounts[owner_][badgeType];
     }
 
     /**
@@ -147,7 +185,7 @@ contract DynamicBadge is ERC721Enumerable, Ownable {
     // ═══════════════════════════════════════════════════════
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        require(tokenId < _nextTokenId, "Token does not exist");
+        _requireOwned(tokenId);
         return _tokenMetadata[tokenId];
     }
 
@@ -155,7 +193,7 @@ contract DynamicBadge is ERC721Enumerable, Ownable {
      * @dev Update metadata for a token (owner or minter only)
      */
     function updateMetadata(uint256 tokenId, string memory newMetadata) external onlyMinter {
-        require(tokenId < _nextTokenId, "Token does not exist");
+        _requireOwned(tokenId);
         require(bytes(newMetadata).length > 0, "Empty metadata");
         _tokenMetadata[tokenId] = newMetadata;
     }

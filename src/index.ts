@@ -75,5 +75,8 @@ export * from './analytics';
 // Export types
 export * from './types';
 
+export * from './eidolon';
+export * from './connectors';
+
 // Default export
 export default ClawKit;

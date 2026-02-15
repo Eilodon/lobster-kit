@@ -1,8 +1,8 @@
 {
   "state": "NEUTRAL",
-  "confidence": 75,
-  "consecutiveWins": 1,
+  "confidence": 80,
+  "consecutiveWins": 2,
   "consecutiveLosses": 0,
-  "lastTradeTime": 1771079577800,
-  "timestamp": 1771079577805
+  "lastTradeTime": 1771086718759,
+  "timestamp": 1771086718760
 }

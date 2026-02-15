@@ -1,364 +1,209 @@
-import fs from 'fs/promises';
-import path from 'path';
+import { IStorageProvider } from './memory/IStorageProvider';
+import { ThermodynamicEngine, ThermoConfig } from './ai/ThermodynamicEngine';
+import { BreathEngine, BreathPhase } from './ai/BreathEngine';
+import { Vector } from './ai/LinearAlgebra';
+import { GreenfieldAdapter } from './memory/GreenfieldAdapter';
 
-/**
- * 💫 EMOTIONAL CORE
- * Personality & Risk Management - Agent emotional state system
- * 
- * Simulates emotional responses to trading outcomes
- * Adjusts risk-taking behavior based on psychological state
- * 
- * Architecture: Basic public implementation
- * Full version: Advanced state machine with momentum tracking (ClawKit Pro)
- */
+export interface EmotionalState {
+  glucose: number;   // Energy (0-100)
+  dopamine: number;  // Reward/Motivation (0-100)
+  cortisol: number;  // Stress (0-100)
 
-export type EmotionalState = 'CONFIDENT' | 'CAUTIOUS' | 'FEARFUL' | 'GREEDY' | 'NEUTRAL' | 'PANIC';
+  // Thermodynamic State
+  arousal: number;   // Intensity (0-1)
+  valence: number;   // Positivity (0-1)
+  attention: number; // Focus (0-1)
+  rhythm: number;    // Cyclic stability (0-1)
+  momentum: number;  // Action drive (0-1)
 
-export interface EmotionalProfile {
-  state: EmotionalState;
-  confidence: number;      // 0-100
-  aggression: number;      // 0-100 (affects position sizing)
-  fearLevel: number;       // 0-100
-  greedLevel: number;      // 0-100
-  consecutiveWins: number;
-  consecutiveLosses: number;
+  volatility: number; // Market temperature
+  lastUpdate: number;
 }
-
-export interface RiskParameters {
-  maxPositionSize: number;  // % of portfolio
-  maxDrawdown: number;      // % before circuit breaker
-  minConfidence: number;    // Minimum confidence to trade
-  cooldownPeriod: number;   // ms to wait after losses
-}
-
-// ⚠️ BASIC CONFIGURATION - Simplified emotional model
-// Production version uses multi-dimensional state space with momentum
-export const EMOTIONAL_CONFIG = {
-  CONFIDENCE_BOOST_PER_WIN: 5,
-  CONFIDENCE_DROP_PER_LOSS: 10,
-  FEAR_THRESHOLD: 3,           // Consecutive losses to trigger fear
-  GREED_THRESHOLD: 3,          // Consecutive wins to trigger greed
-  COOLDOWN_BASE: 60000,        // 1 minute base cooldown
-  MAX_POSITION_SCALE: 2.0,     // Max 2x position when confident
-  MIN_POSITION_SCALE: 0.5,     // Min 0.5x position when fearful
-};
 
 export class EmotionalCore {
-  private state: EmotionalState = 'NEUTRAL';
-  private confidence: number = 70; // Start with moderate confidence
-  private consecutiveWins: number = 0;
-  private consecutiveLosses: number = 0;
-  private lastTradeTime: number = 0;
-  private inCooldown: boolean = false;
+  private state: EmotionalState;
+  private storage: IStorageProvider;
 
-  // Persistence
-  private readonly STORAGE_FILE = path.join(process.cwd(), '.clawkit', 'emotional_core.json');
+  // AI Engines
+  private thermoEngine: ThermodynamicEngine;
+  private breathEngine: BreathEngine;
 
-  constructor(
-    private baseRiskParams: RiskParameters,
-    private config = EMOTIONAL_CONFIG
-  ) {
-    // Attempt to load state synchronously-ish or just start neutral
-    // Best practice: use explicit init()
+  private readonly STORAGE_KEY = 'emotional_core_thermo.json';
+
+  constructor(storage?: IStorageProvider) {
+    this.storage = storage || new GreenfieldAdapter({
+      bucketName: 'eidolon-memory-core',
+      useLocalFallback: !process.env.GREENFIELD_ENDPOINT
+    });
+
+    this.thermoEngine = new ThermodynamicEngine();
+    this.breathEngine = new BreathEngine(6.0); // 6 BPM default
+
+    this.state = {
+      glucose: 100,
+      dopamine: 50,
+      cortisol: 0,
+      arousal: 0.5,
+      valence: 0.5,
+      attention: 0.5,
+      rhythm: 0.5,
+      momentum: 0.0,
+      volatility: 0.1,
+      lastUpdate: Date.now()
+    };
+
+    this.loadState();
   }
 
   /**
-   * Initialize and load saved state
+   * Main simulation tick
    */
-  public async init(): Promise<void> {
-    await this.loadState();
+  async tick(marketVolatility: number = 0.1) {
+    const now = Date.now();
+    const dt = (now - this.state.lastUpdate) / 1000; // seconds
+    if (dt <= 0) return this.state;
+
+    // 1. Update Market Temperature (affects Thermodynamic interaction)
+    this.state.volatility = marketVolatility;
+    this.thermoEngine.setTemperature(0.5 + marketVolatility * 5.0); // 0.5 - 5.5 range
+
+    // 2. Breath Engine (Rhythm)
+    // Adjust BPM based on Arousal: High arousal = fast breath
+    const targetBPM = 6.0 + (this.state.arousal * 20.0);
+    this.breathEngine.setBPM(targetBPM);
+    const breath = this.breathEngine.tick(dt * 1000); // ms
+
+    // 3. Thermodynamic Evolution
+    const currentStateVec = new Vector([
+      this.state.arousal,
+      this.state.valence,
+      this.state.attention,
+      this.state.rhythm,
+      this.state.momentum
+    ]);
+
+    // Target state depends on biological drives
+    const targetVec = new Vector([
+      this.state.cortisol > 50 ? 0.8 : 0.3, // Arousal target
+      this.state.dopamine > 50 ? 0.8 : 0.2, // Valence target
+      this.state.glucose > 30 ? 0.9 : 0.4,  // Attention target
+      0.5,                                  // Rhythm target (balanced)
+      this.state.dopamine > 60 ? 0.8 : 0.1  // Momentum target (action)
+    ]);
+
+    const nextStateVec = this.thermoEngine.step(currentStateVec, targetVec);
+
+    // Update State
+    this.state.arousal = nextStateVec.get(0);
+    this.state.valence = nextStateVec.get(1);
+    this.state.attention = nextStateVec.get(2);
+    this.state.rhythm = nextStateVec.get(3);
+    this.state.momentum = nextStateVec.get(4);
+
+    // 4. Biological Decay / Regeneration
+    this.processBiologicalFunction(dt);
+
+    this.state.lastUpdate = now;
+    await this.saveState();
+
+    return this.state;
   }
 
-  /**
-   * Save current state to disk
-   */
-  private async saveState(): Promise<void> {
-    try {
-      await fs.mkdir(path.dirname(this.STORAGE_FILE), { recursive: true });
-      const data = {
-        state: this.state,
-        confidence: this.confidence,
-        consecutiveWins: this.consecutiveWins,
-        consecutiveLosses: this.consecutiveLosses,
-        lastTradeTime: this.lastTradeTime,
-        timestamp: Date.now()
-      };
-      await fs.writeFile(this.STORAGE_FILE, JSON.stringify(data, null, 2));
-    } catch (error) {
-      console.error('Failed to save emotional state:', error);
+  private processBiologicalFunction(dt: number) {
+    // Glucose burn (Energy)
+    const burnRate = 0.5 * (1 + this.state.arousal); // Faster burn at high arousal
+    this.state.glucose = Math.max(0, this.state.glucose - burnRate * dt);
+
+    // Dopamine decay (Motivation)
+    this.state.dopamine = Math.max(0, this.state.dopamine - 1.0 * dt);
+
+    // Cortisol accumulation (Stress) - driven by volatility and low glucose
+    const stressFactor = this.state.volatility * 10.0 + (this.state.glucose < 20 ? 5.0 : 0);
+    this.state.cortisol = Math.min(100, this.state.cortisol + stressFactor * dt);
+
+    // Cortisol decay (Rest)
+    if (this.state.arousal < 0.3) {
+      this.state.cortisol = Math.max(0, this.state.cortisol - 2.0 * dt);
     }
   }
 
   /**
-   * Load state from disk
+   * Stimulate the agent from external value (Example: Trade profit)
    */
-  private async loadState(): Promise<void> {
+  stimulate(value: number, type: 'PROFIT' | 'LOSS' | 'DANGER') {
+    switch (type) {
+      case 'PROFIT':
+        this.state.dopamine = Math.min(100, this.state.dopamine + value * 2);
+        this.state.cortisol = Math.max(0, this.state.cortisol - value);
+        break;
+      case 'LOSS':
+        this.state.cortisol = Math.min(100, this.state.cortisol + value * 2);
+        this.state.dopamine = Math.max(0, this.state.dopamine - value);
+        break;
+      case 'DANGER':
+        this.state.arousal = Math.min(1.0, this.state.arousal + 0.3);
+        this.state.cortisol = Math.min(100, this.state.cortisol + 20);
+        break;
+    }
+    this.tick(this.state.volatility); // Force update
+  }
+
+  feed(amount: number = 30) {
+    this.state.glucose = Math.min(100, this.state.glucose + amount);
+    this.state.dopamine = Math.min(100, this.state.dopamine + 5);
+    this.tick(this.state.volatility);
+  }
+
+  getRiskMultiplier(): number {
+    // High Focus + High Momentum + Positive Valence = Aggressive
+    // High Cortisol + Caution = Defensive
+    const baseRisk = 1.0;
+
+    if (this.state.cortisol > 80) return 0.1; // Panic mode
+
+    const flowState = this.state.attention * this.state.momentum;
+    const mood = this.state.valence; // 0-1
+
+    if (flowState > 0.6 && mood > 0.6) {
+      return baseRisk * 1.5; // Flow state aggression
+    }
+
+    return baseRisk * 0.8; // Default conservative
+  }
+
+  /**
+   * Legacy adapter for RiskParameters
+   */
+  getRiskParameters(baseParams: any): any {
+    const multiplier = this.getRiskMultiplier();
+    return {
+      ...baseParams,
+      maxPositionSize: baseParams.maxPositionSize * multiplier,
+      minConfidence: this.state.cortisol > 50 ? 80 : baseParams.minConfidence
+    };
+  }
+
+  // Adapter for logs
+  printBiometrics() {
+    console.log(`State: A:${this.state.arousal.toFixed(2)} V:${this.state.valence.toFixed(2)} | G:${this.state.glucose.toFixed(1)} D:${this.state.dopamine.toFixed(1)} C:${this.state.cortisol.toFixed(1)}`);
+  }
+
+  async loadState() {
     try {
-      const data = await fs.readFile(this.STORAGE_FILE, 'utf-8');
-      const state = JSON.parse(data);
-      if (state) {
-        this.state = state.state;
-        this.confidence = state.confidence;
-        this.consecutiveWins = state.consecutiveWins;
-        this.consecutiveLosses = state.consecutiveLosses;
-        this.lastTradeTime = state.lastTradeTime;
-        console.log('🧠 Emotional memory restored.');
+      const data = await this.storage.load<{ state: EmotionalState }>(this.STORAGE_KEY);
+      if (data && data.state) {
+        this.state = { ...this.state, ...data.state };
       }
-    } catch {
-      // No saved state, start fresh
+    } catch (e) {
+      console.warn("Failed to load emotional state", e);
     }
   }
 
-  /**
-   * Process trading outcome and update emotional state
-   */
-  public processOutcome(profitLoss: number, timestamp: number = Date.now()): void {
-    this.lastTradeTime = timestamp;
-
-    console.log('\n╔════════════════════════════════════════════════════════════╗');
-    console.log('║   💫 EMOTIONAL CORE - STATE UPDATE                        ║');
-    console.log('╠════════════════════════════════════════════════════════════╣');
-
-    if (profitLoss > 0) {
-      this.handleWin(profitLoss);
-    } else if (profitLoss < 0) {
-      this.handleLoss(profitLoss);
+  async saveState() {
+    try {
+      await this.storage.save(this.STORAGE_KEY, { state: this.state });
+    } catch (e) {
+      console.warn("Failed to save emotional state", e);
     }
-
-    // Update emotional state
-    this.updateState();
-
-    console.log(`║ Current State:  ${this.state.padEnd(42)}║`);
-    console.log(`║ Confidence:     ${this.confidence}%`.padEnd(61) + '║');
-    console.log(`║ Win Streak:     ${this.consecutiveWins}`.padEnd(61) + '║');
-    console.log(`║ Loss Streak:    ${this.consecutiveLosses}`.padEnd(61) + '║');
-    console.log('╚════════════════════════════════════════════════════════════╝\n');
-
-    // Auto-save state
-    this.saveState().catch(err => console.error('State save failed', err));
-  }
-
-  /**
-   * Handle winning trade
-   */
-  private handleWin(profit: number): void {
-    this.consecutiveWins++;
-    this.consecutiveLosses = 0;
-
-    // Boost confidence
-    this.confidence = Math.min(100, this.confidence + this.config.CONFIDENCE_BOOST_PER_WIN);
-
-    console.log(`║ ✅ WIN: +$${profit.toFixed(2)}`.padEnd(61) + '║');
-  }
-
-  /**
-   * Handle losing trade
-   */
-  private handleLoss(loss: number): void {
-    this.consecutiveLosses++;
-    this.consecutiveWins = 0;
-
-    // Drop confidence
-    this.confidence = Math.max(0, this.confidence - this.config.CONFIDENCE_DROP_PER_LOSS);
-
-    console.log(`║ ❌ LOSS: $${loss.toFixed(2)}`.padEnd(61) + '║');
-
-    // Trigger cooldown after losses
-    if (this.consecutiveLosses >= 2) {
-      this.inCooldown = true;
-      const cooldownMs = this.config.COOLDOWN_BASE * this.consecutiveLosses;
-      setTimeout(() => {
-        this.inCooldown = false;
-        console.log('🕐 Cooldown period ended. Ready to trade again.');
-      }, cooldownMs);
-
-      console.log(`║ ⏸️  COOLDOWN: ${(cooldownMs / 1000).toFixed(0)}s`.padEnd(61) + '║');
-    }
-  }
-
-  /**
-   * Update emotional state based on streak
-   */
-  private updateState(): void {
-    const prevState = this.state;
-
-    if (this.consecutiveLosses >= this.config.FEAR_THRESHOLD) {
-      this.state = 'FEARFUL';
-    } else if (this.consecutiveWins >= this.config.GREED_THRESHOLD) {
-      this.state = 'GREEDY';
-    } else if (this.confidence > 80) {
-      this.state = 'CONFIDENT';
-    } else if (this.confidence < 40) {
-      this.state = 'CAUTIOUS';
-    } else {
-      this.state = 'NEUTRAL';
-    }
-
-    if (prevState !== this.state) {
-      console.log(`║ 🔄 STATE CHANGE: ${prevState} → ${this.state}`.padEnd(61) + '║');
-    }
-  }
-
-  /**
-   * Get current emotional profile
-   */
-  public getProfile(): EmotionalProfile {
-    return {
-      state: this.state,
-      confidence: this.confidence,
-      aggression: this.calculateAggression(),
-      fearLevel: this.calculateFearLevel(),
-      greedLevel: this.calculateGreedLevel(),
-      consecutiveWins: this.consecutiveWins,
-      consecutiveLosses: this.consecutiveLosses
-    };
-  }
-
-  /**
-   * Get adjusted risk parameters based on emotional state
-   */
-  public getRiskParameters(): RiskParameters {
-    const profile = this.getProfile();
-    const positionScaling = this.getPositionScaling();
-
-    return {
-      maxPositionSize: this.baseRiskParams.maxPositionSize * positionScaling,
-      maxDrawdown: this.baseRiskParams.maxDrawdown,
-      minConfidence: this.state === 'FEARFUL' ? 80 : this.baseRiskParams.minConfidence,
-      cooldownPeriod: this.baseRiskParams.cooldownPeriod * this.consecutiveLosses
-    };
-  }
-
-  /**
-   * Calculate position size scaling based on emotional state
-   */
-  private getPositionScaling(): number {
-    switch (this.state) {
-      case 'FEARFUL':
-        return this.config.MIN_POSITION_SCALE; // 0.5x - scared money
-      case 'CAUTIOUS':
-        return 0.75; // 0.75x - conservative
-      case 'NEUTRAL':
-        return 1.0; // 1x - normal
-      case 'CONFIDENT':
-        return 1.5; // 1.5x - slightly aggressive
-      case 'GREEDY':
-        return this.config.MAX_POSITION_SCALE; // 2x - but capped to prevent recklessness
-      case 'PANIC':
-        return 0; // 0x - complete withdrawal
-      default:
-        return 1.0;
-    }
-  }
-
-  /**
-   * Check if agent should trade now
-   */
-  public shouldTrade(minimumConfidence: number = 50): boolean {
-    if (this.state === 'PANIC') {
-      console.log('🛑 Trading HALTED: PANIC PROTOCOL ACTIVE');
-      return false;
-    }
-
-    if (this.inCooldown) {
-      console.log('⏸️  Trading suspended: In cooldown period');
-      return false;
-    }
-
-    if (this.confidence < minimumConfidence) {
-      console.log(`⏸️  Trading suspended: Confidence too low (${this.confidence}% < ${minimumConfidence}%)`);
-      return false;
-    }
-
-    if (this.state === 'FEARFUL') {
-      console.log('⏸️  Trading suspended: Emotional state is FEARFUL');
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * 🚨 PANIC PROTOCOL
-   * Triggered by external severe market conditions (e.g., Flash Crash)
-   */
-  public triggerPanic(reason: string): void {
-    if (this.state !== 'PANIC') {
-      this.state = 'PANIC';
-      this.confidence = 0;
-      console.log(`\n🚨 PANIC PROTOCOL ENGAGED: ${reason}`);
-      console.log('   All trading halted. Risk parameters minimized.');
-    }
-  }
-
-  /**
-   * Recover from Panic
-   */
-  public recoverFromPanic(): void {
-    if (this.state === 'PANIC') {
-      this.state = 'CAUTIOUS';
-      this.confidence = 30;
-      console.log('\n🧘 Recovering from Panic. State set to CAUTIOUS.');
-    }
-  }
-
-  /**
-   * Calculate aggression level (affects position sizing)
-   */
-  private calculateAggression(): number {
-    const baseAggression = 50;
-    const winBonus = this.consecutiveWins * 10;
-    const lossPenalty = this.consecutiveLosses * 15;
-
-    return Math.max(0, Math.min(100, baseAggression + winBonus - lossPenalty));
-  }
-
-  /**
-   * Calculate fear level
-   */
-  private calculateFearLevel(): number {
-    return Math.min(100, this.consecutiveLosses * 25);
-  }
-
-  /**
-   * Calculate greed level
-   */
-  private calculateGreedLevel(): number {
-    return Math.min(100, this.consecutiveWins * 20);
-  }
-
-  /**
-   * Reset emotional state (for testing or recovery)
-   */
-  public reset(): void {
-    this.state = 'NEUTRAL';
-    this.confidence = 70;
-    this.consecutiveWins = 0;
-    this.consecutiveLosses = 0;
-    this.inCooldown = false;
-    console.log('🔄 Emotional state reset to NEUTRAL');
-  }
-
-  /**
-   * Print emotional summary
-   */
-  public printSummary(): void {
-    const profile = this.getProfile();
-    const risk = this.getRiskParameters();
-
-    console.log('\n╔════════════════════════════════════════════════════════════╗');
-    console.log('║   💫 EMOTIONAL PROFILE                                     ║');
-    console.log('╠════════════════════════════════════════════════════════════╣');
-    console.log(`║ State:          ${profile.state.padEnd(42)}║`);
-    console.log(`║ Confidence:     ${profile.confidence}%`.padEnd(61) + '║');
-    console.log(`║ Aggression:     ${profile.aggression.toFixed(0)}%`.padEnd(61) + '║');
-    console.log(`║ Fear Level:     ${profile.fearLevel.toFixed(0)}%`.padEnd(61) + '║');
-    console.log(`║ Greed Level:    ${profile.greedLevel.toFixed(0)}%`.padEnd(61) + '║');
-    console.log('╠════════════════════════════════════════════════════════════╣');
-    console.log('║   RISK PARAMETERS                                          ║');
-    console.log('╠════════════════════════════════════════════════════════════╣');
-    console.log(`║ Max Position:   ${risk.maxPositionSize.toFixed(1)}%`.padEnd(61) + '║');
-    console.log(`║ Min Confidence: ${risk.minConfidence}%`.padEnd(61) + '║');
-    console.log('╚════════════════════════════════════════════════════════════╝\n');
   }
 }

@@ -1,6 +1,6 @@
-import { DecisionLog, REASONING_WEIGHTS } from './DivineTransparency';
-import fs from 'fs/promises';
-import path from 'path';
+import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS } from './EidolonTypes';
+import { IStorageProvider } from './memory/IStorageProvider';
+import { GreenfieldAdapter } from './memory/GreenfieldAdapter';
 
 /**
  * 🧠 ACTIVE LEARNING MODULE
@@ -49,25 +49,26 @@ export class ActiveLearning {
   private tradeHistory: TradeOutcome[] = [];
   private adjustmentCount = 0;
 
-  // Fixed: Paths initialized in constructor
-  private readonly STORAGE_DIR: string;
-  private readonly WEIGHTS_FILE: string;
-  private readonly HISTORY_FILE: string;
+  // Persistence
+  private storage: IStorageProvider;
+  private readonly WEIGHTS_KEY = 'active_learning_weights.json';
+  private readonly HISTORY_KEY = 'active_learning_history.json';
   private autoSaveEnabled = true;
 
   constructor(
     initialWeights?: typeof REASONING_WEIGHTS,
     private config = LEARNING_CONFIG,
-    storageDir?: string
+    storage?: IStorageProvider
   ) {
     if (initialWeights) {
       this.weights = { ...initialWeights };
     }
 
-    // Configurable storage directory
-    this.STORAGE_DIR = storageDir || path.join(process.cwd(), '.clawkit');
-    this.WEIGHTS_FILE = path.join(this.STORAGE_DIR, 'weights.json');
-    this.HISTORY_FILE = path.join(this.STORAGE_DIR, 'history.json');
+    // Default to Greenfield (with local fallback)
+    this.storage = storage || new GreenfieldAdapter({
+      bucketName: 'eidolon-memory-brain',
+      useLocalFallback: !process.env.GREENFIELD_ENDPOINT
+    });
   }
 
   /**
@@ -334,9 +335,6 @@ export class ActiveLearning {
    */
   public async saveToDisk(): Promise<void> {
     try {
-      // Create storage directory if it doesn't exist
-      await fs.mkdir(this.STORAGE_DIR, { recursive: true });
-
       // Save weights
       const weightsData = {
         weights: this.weights,
@@ -346,21 +344,13 @@ export class ActiveLearning {
         version: '1.0'
       };
 
-      await fs.writeFile(
-        this.WEIGHTS_FILE,
-        JSON.stringify(weightsData, null, 2),
-        'utf-8'
-      );
+      await this.storage.save(this.WEIGHTS_KEY, weightsData);
 
       // Save history (last 1000 trades to limit file size)
       const recentHistory = this.tradeHistory.slice(-1000);
-      await fs.writeFile(
-        this.HISTORY_FILE,
-        JSON.stringify(recentHistory, null, 2),
-        'utf-8'
-      );
+      await this.storage.save(this.HISTORY_KEY, recentHistory);
 
-      console.log('💾 Weights and history saved to disk (.clawkit/)');
+      console.log('💾 Weights and history saved to decentralized memory');
     } catch (error: any) {
       console.error('❌ Failed to save weights:', error.message);
       throw error;
@@ -374,22 +364,23 @@ export class ActiveLearning {
   public async loadFromDisk(): Promise<void> {
     try {
       // Load weights
-      const weightsData = await fs.readFile(this.WEIGHTS_FILE, 'utf-8');
-      const saved = JSON.parse(weightsData);
+      const saved = await this.storage.load<any>(this.WEIGHTS_KEY);
 
-      this.weights = saved.weights;
-      this.learningRate = saved.learningRate;
-      this.adjustmentCount = saved.adjustmentCount;
+      if (saved) {
+        this.weights = saved.weights;
+        this.learningRate = saved.learningRate;
+        this.adjustmentCount = saved.adjustmentCount;
 
-      console.log(`🧠 Loaded learned weights from ${saved.savedAt}`);
-      console.log(`   Adjustments made: ${saved.adjustmentCount}`);
+        console.log(`🧠 Loaded learned weights from ${saved.savedAt}`);
+        console.log(`   Adjustments made: ${saved.adjustmentCount}`);
+      }
 
       // Load history
-      try {
-        const historyData = await fs.readFile(this.HISTORY_FILE, 'utf-8');
-        this.tradeHistory = JSON.parse(historyData);
+      const history = await this.storage.load<any>(this.HISTORY_KEY);
+      if (history) {
+        this.tradeHistory = history;
         console.log(`📊 Loaded ${this.tradeHistory.length} historical trades`);
-      } catch {
+      } else {
         console.log('📊 No trade history found (starting fresh)');
       }
     } catch (error: any) {

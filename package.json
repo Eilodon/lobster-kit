@@ -26,10 +26,15 @@
   "author": "ClawKit Team",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.990.0",
     "@pancakeswap/sdk": "^5.7.0",
     "@pancakeswap/smart-router": "^4.7.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "axios": "^1.6.5",
     "dotenv": "^16.4.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "viem": "^2.7.0"
   },
   "devDependencies": {

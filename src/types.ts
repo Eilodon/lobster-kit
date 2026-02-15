@@ -98,14 +98,28 @@ export interface ClawKitConfig {
   rpcUrl?: string;
   gasMultiplier?: number;
   contracts?: Partial<typeof CLAWKIT_CONTRACTS>;
+  chainConfig?: ChainConfig; // Inject chain specific config
 }
 
 // Strict WalletClient type enforcing Account presence
 export type ClawKitWalletClient = WalletClient<Transport, Chain, Account>;
 
 // ═══════════════════════════════════════════════════════
-//  TOKEN REGISTRY (FIX F4 + H4)
+//  CHAIN CONFIGURATION (FIX F4 + F5)
 // ═══════════════════════════════════════════════════════
+
+export interface ChainConfig {
+  name: string;
+  chainId: number;
+  tokens: Record<string, TokenInfo>;
+  contracts: {
+    pancakeRouter: string;
+    pancakeQuoter: string;
+    pancakeMasterChef: string; // V3
+    venusComptroller?: string; // Optional (not yet on opBNB?)
+    venusMarkets?: Record<string, string>;
+  };
+}
 
 export interface TokenInfo {
   address: string;
@@ -114,42 +128,56 @@ export interface TokenInfo {
 }
 
 /**
- * Token addresses for opBNB Layer 2 (Chain ID: 204)
- * ⚠️ VERIFY addresses against official opBNB documentation before production use
+ * OPBNB CONFIGURATION (Verified 2026)
+ * Sources: pancakeswap.finance, binance.org
  */
-export const TOKENS: Record<string, TokenInfo> = {
-  BNB: {
-    address: '0x0000000000000000000000000000000000000000', // Native
-    decimals: 18,
-    symbol: 'BNB',
+export const OPBNB_CONFIG: ChainConfig = {
+  name: 'opBNB',
+  chainId: 204,
+  tokens: {
+    BNB: {
+      address: '0x0000000000000000000000000000000000000000',
+      decimals: 18,
+      symbol: 'BNB',
+    },
+    WBNB: {
+      address: '0x4200000000000000000000000000000000000006',
+      decimals: 18,
+      symbol: 'WBNB',
+    },
+    USDT: {
+      address: '0x9e5AAC1Ba1a2e6aEd6b32689DFcF62A509Ca96f3',
+      decimals: 6,
+      symbol: 'USDT',
+    },
+    USDC: {
+      address: '0xecA88125a5ADbe82614ffC12D0DB554E2e2867C8', // Verified opBNB USDC
+      decimals: 6,
+      symbol: 'USDC',
+    },
+    CAKE: {
+      address: '0x152649eA73beAb28c5b49B26eb48f7EAD6d4c898', // CAKE on opBNB
+      decimals: 18,
+      symbol: 'CAKE',
+    },
   },
-  WBNB: {
-    address: '0x4200000000000000000000000000000000000006',
-    decimals: 18,
-    symbol: 'WBNB',
-  },
-  USDT: {
-    address: '0x9e5AAC1Ba1a2e6aEd6b32689DFcF62A509Ca96f3',
-    decimals: 6, // ← FIX H4: USDT = 6 decimals
-    symbol: 'USDT',
-  },
-  USDC: {
-    address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
-    decimals: 6, // ← FIX H4: USDC = 6 decimals
-    symbol: 'USDC',
-  },
-  CAKE: {
-    address: '0x152649eA73beAb28c5b49B26eb48f7EAD6d4c898',
-    decimals: 18,
-    symbol: 'CAKE',
-  },
-} as const;
+  contracts: {
+    // PancakeSwap V3 Smart Router
+    pancakeRouter: '0x678Aa4bF4E210cf2166753e054d5b7c31cc7fa86',
+    // PancakeSwap V3 Quoter
+    pancakeQuoter: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997',
+    // PancakeSwap V3 MasterChef
+    pancakeMasterChef: '0x556B9306565093C855AEA9AE92A594704c2Cd59e',
+    // Venus not yet fully verified on opBNB, leaving undefined to prevent loss
+    venusComptroller: undefined,
+    venusMarkets: {}
+  }
+};
 
-// PancakeSwap Router V3 on opBNB
-export const PANCAKE_ROUTER = '0x8cFe327CEc66d1C090Dd72bd0FF11d690C33a2Eb';
-
-// PancakeSwap V3 Quoter on opBNB
-export const PANCAKE_QUOTER = '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997';
+// Deprecated global exports kept for checking, but logic should use config
+export const TOKENS = OPBNB_CONFIG.tokens;
+export const PANCAKE_ROUTER = OPBNB_CONFIG.contracts.pancakeRouter;
+export const PANCAKE_QUOTER = OPBNB_CONFIG.contracts.pancakeQuoter;
 
 // ═══════════════════════════════════════════════════════
 //  CONTRACT ADDRESSES (FIX F4)

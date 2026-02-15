@@ -1,75 +1,33 @@
+import { IOracle, MarketContext } from './ai/IOracle';
+import {
+  MarketState,
+  ActionType,
+  DecisionLog,
+  CausalFactor,
+  ReasoningWeights,
+  DEFAULT_WEIGHTS
+} from './EidolonTypes';
+
 /**
  * 🔮 DIVINE TRANSPARENCY
  * Causal Reasoning Engine - Explains WHY the agent makes decisions
  * 
- * Architecture: Public logic framework with simplified weights
- * Production weights: Tuned through reinforcement learning (ClawKit Pro)
+ * Architecture: Neuro-Symbolic Hybrid
+ * 1. Analyzes market state (Symbolic)
+ * 2. Consults LLM Oracle for Contextual Weights (Neural)
+ * 3. Synthesizes explanation
  */
-
-// Market observation variables (Sensory Inputs)
-export interface MarketState {
-  gasPrice: 'LOW' | 'MEDIUM' | 'HIGH';
-  whaleFlow: 'ACCUMULATING' | 'DUMPING' | 'NEUTRAL';
-  sentiment: 'EUPHORIC' | 'FEAR' | 'NEUTRAL';
-  liquidityDepth: 'THIN' | 'DEEP';
-  priceAction: 'PUMPING' | 'DUMPING' | 'RANGING';
-}
-
-export type ActionType = 'BUY' | 'SELL' | 'HOLD' | 'EMERGENCY_EXIT';
-
-// Decision log structure
-export interface DecisionLog {
-  timestamp: number;
-  action: ActionType;
-  confidence: number; // 0-100%
-  reasoning: string;
-  causalFactors: CausalFactor[];
-  marketState: MarketState;
-}
-
-export interface CausalFactor {
-  name: string;
-  impact: number; // -100 to +100
-  description: string;
-}
-
-// ⚠️ PLACEHOLDER WEIGHTS - Not optimized
-// Production weights are learned through Active Learning module
-export const REASONING_WEIGHTS = {
-  whaleFlow: {
-    ACCUMULATING: 20,
-    DUMPING: -25,
-    NEUTRAL: 0
-  },
-  gasPrice: {
-    LOW: 10,
-    MEDIUM: 0,
-    HIGH: -15
-  },
-  liquidityDepth: {
-    THIN: -10,
-    DEEP: 5
-  },
-  sentiment: {
-    EUPHORIC: -5,  // Contrarian indicator
-    FEAR: 10,      // Buy the fear
-    NEUTRAL: 0
-  },
-  priceAction: {
-    PUMPING: 15,
-    DUMPING: -20,
-    RANGING: 0
-  }
-};
 
 export class DivineTransparency {
   private readonly MAX_HISTORY_SIZE = 1000;
   private decisionHistory: DecisionLog[] = [];
-  private weights = REASONING_WEIGHTS;
+  private weights: ReasoningWeights = DEFAULT_WEIGHTS;
+  private oracle?: IOracle;
 
-  constructor(customWeights?: typeof REASONING_WEIGHTS) {
-    if (customWeights) {
-      this.weights = customWeights;
+  constructor(oracle?: IOracle) {
+    this.oracle = oracle;
+    if (this.oracle) {
+      console.log(`🔮 Connected to ${this.oracle.getName()}`);
     }
   }
 
