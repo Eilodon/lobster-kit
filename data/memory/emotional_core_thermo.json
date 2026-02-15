@@ -1,0 +1,14 @@
+{
+  "state": {
+    "glucose": 0,
+    "dopamine": 0,
+    "cortisol": 100,
+    "arousal": 0.5,
+    "valence": 0.5,
+    "attention": 0.5,
+    "rhythm": 0.5,
+    "momentum": 0.5,
+    "volatility": null,
+    "lastUpdate": 1771120548503
+  }
+}

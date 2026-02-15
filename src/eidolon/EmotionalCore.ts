@@ -93,12 +93,15 @@ export class EmotionalCore {
 
     const nextStateVec = this.thermoEngine.step(currentStateVec, targetVec);
 
+    // FIX CRITICAL: NaN/Divergence Guard
+    const clampedVec = this.clampVector(nextStateVec);
+
     // Update State
-    this.state.arousal = nextStateVec.get(0);
-    this.state.valence = nextStateVec.get(1);
-    this.state.attention = nextStateVec.get(2);
-    this.state.rhythm = nextStateVec.get(3);
-    this.state.momentum = nextStateVec.get(4);
+    this.state.arousal = clampedVec.get(0);
+    this.state.valence = clampedVec.get(1);
+    this.state.attention = clampedVec.get(2);
+    this.state.rhythm = clampedVec.get(3);
+    this.state.momentum = clampedVec.get(4);
 
     // 4. Biological Decay / Regeneration
     this.processBiologicalFunction(dt);
@@ -107,6 +110,15 @@ export class EmotionalCore {
     await this.saveState();
 
     return this.state;
+  }
+
+  // FIX CRITICAL: NaN Guard Helper
+  private clampVector(vec: Vector): Vector {
+    const data = vec.data.map(v => {
+      if (isNaN(v) || !isFinite(v)) return 0.5; // Fail safe to neutral
+      return Math.max(0, Math.min(1, v));
+    });
+    return new Vector(data);
   }
 
   private processBiologicalFunction(dt: number) {

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 /**
  * @title BatchExecutor
@@ -10,9 +11,12 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  *
  * FIX F2: Added authorizedExecutors mapping — only owner or authorized
  *         addresses can call batch functions. No more open proxy.
- * FIX H3: Replaced transfer() with call{value:}() for AA wallet compat.
+ * FIX H3: Replaced transfer() with call{value:}().
+ * FIX CRITICAL: Refund failure no longer reverts transaction (Anti-Brick).
  */
 contract BatchExecutor is Ownable, ReentrancyGuard {
+    using Address for address payable;
+
     // ═══════════════════════════════════════════════════════
     //  ACCESS CONTROL (FIX F2)
     // ═══════════════════════════════════════════════════════
@@ -35,6 +39,7 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
     event SingleExecuted(address indexed executor, address target, bool success);
     event ExecutorAuthorized(address indexed executor);
     event ExecutorRevoked(address indexed executor);
+    event RefundFailed(address indexed recipient, uint256 amount); // New Event
 
     constructor() Ownable(msg.sender) {}
 
@@ -57,9 +62,6 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
     //  BATCH EXECUTION (strict — revert all on failure)
     // ═══════════════════════════════════════════════════════
 
-    /**
-     * @dev Execute batch — reverts entirely if ANY call fails
-     */
     function executeBatch(
         address[] calldata targets,
         uint256[] calldata values,
@@ -77,12 +79,7 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
             results[i] = result;
         }
 
-        // FIX H3: Refund excess ETH using call instead of transfer
-        uint256 remaining = address(this).balance;
-        if (remaining > 0) {
-            (bool refundSuccess, ) = payable(msg.sender).call{value: remaining}("");
-            require(refundSuccess, "Refund failed");
-        }
+        _refundExcess();
 
         bool[] memory allSuccess = new bool[](targets.length);
         for (uint256 i = 0; i < targets.length; i++) {
@@ -95,9 +92,6 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
     //  BATCH EXECUTION (tolerant — continue on failure)
     // ═══════════════════════════════════════════════════════
 
-    /**
-     * @dev Execute batch tolerant — continues even if individual calls fail
-     */
     function executeBatchTolerant(
         address[] calldata targets,
         uint256[] calldata values,
@@ -117,12 +111,7 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
             (success[i], results[i]) = targets[i].call{value: values[i]}(datas[i]);
         }
 
-        // FIX H3: Refund excess ETH using call instead of transfer
-        uint256 remaining = address(this).balance;
-        if (remaining > 0) {
-            (bool refundSuccess, ) = payable(msg.sender).call{value: remaining}("");
-            require(refundSuccess, "Refund failed");
-        }
+        _refundExcess();
 
         emit BatchExecuted(msg.sender, targets.length, success);
     }
@@ -131,9 +120,6 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
     //  SINGLE EXECUTION
     // ═══════════════════════════════════════════════════════
 
-    /**
-     * @dev Execute single call
-     */
     function executeSingle(
         address target,
         uint256 value,
@@ -143,11 +129,25 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
         (success, result) = target.call{value: value}(data);
         emit SingleExecuted(msg.sender, target, success);
 
-        // FIX H3: Refund excess ETH using call instead of transfer
+        _refundExcess();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  INTERNAL
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * @dev Refund excess ETH. Logs error if refund fails instead of reverting.
+     */
+    function _refundExcess() internal {
         uint256 remaining = address(this).balance;
         if (remaining > 0) {
-            (bool refundSuccess, ) = payable(msg.sender).call{value: remaining}("");
-            require(refundSuccess, "Refund failed");
+            // FIX CRITICAL: Do not require success.
+            (bool success, ) = payable(msg.sender).call{value: remaining}("");
+            if (!success) {
+                emit RefundFailed(msg.sender, remaining);
+                // Funds remain in contract and can be rescued via emergencyWithdraw
+            }
         }
     }
 
@@ -155,19 +155,12 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
     //  EMERGENCY
     // ═══════════════════════════════════════════════════════
 
-    /**
-     * @dev Emergency withdraw stuck funds
-     */
     function emergencyWithdraw() external onlyOwner {
         uint256 balance = address(this).balance;
         require(balance > 0, "No balance");
         (bool success, ) = payable(owner()).call{value: balance}("");
         require(success, "Withdraw failed");
     }
-
-    // ═══════════════════════════════════════════════════════
-    //  HELPERS
-    // ═══════════════════════════════════════════════════════
 
     function _toString(uint256 value) internal pure returns (string memory) {
         if (value == 0) return "0";

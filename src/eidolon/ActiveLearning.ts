@@ -97,6 +97,11 @@ export class ActiveLearning {
     console.log('╠════════════════════════════════════════════════════════════╣');
 
     this.tradeHistory.push(outcome);
+    // FIX CRITICAL: Memory Leak Prevention
+    if (this.tradeHistory.length > 2000) {
+      this.tradeHistory = this.tradeHistory.slice(-1000);
+    }
+
 
     // Calculate reward signal
     const reward = this.calculateReward(outcome);

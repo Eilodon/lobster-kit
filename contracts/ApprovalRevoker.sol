@@ -195,8 +195,21 @@ contract ApprovalRevoker is Ownable, ReentrancyGuard {
     /**
      * @dev Clear flagged approvals after user has executed them
      */
-    function clearFlaggedApprovals() external {
-        delete _flaggedApprovals[msg.sender];
+    /**
+     * @dev Clear flagged approvals with limit to prevent gas exhaustion (DOS Fix)
+     */
+    function clearFlaggedApprovals(uint256 limit) external {
+        ApprovalTarget[] storage flagged = _flaggedApprovals[msg.sender];
+        uint256 total = flagged.length;
+        
+        if (limit == 0 || limit >= total) {
+            delete _flaggedApprovals[msg.sender];
+        } else {
+            // Remove from the end to be cheaper
+            for (uint256 i = 0; i < limit; i++) {
+                flagged.pop();
+            }
+        }
     }
 
     /**
