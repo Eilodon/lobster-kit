@@ -20,7 +20,19 @@ export class SecurityModule {
     private walletClient: ClawKitWalletClient,
     private publicClient: PublicClient,
     private config: ClawKitConfig
-  ) { }
+  ) {
+    this.validateConfig();
+  }
+
+  /**
+   * 🛡️ IMMUNE SYSTEM: Validate Configuration on Boot
+   * "Bio-Check": Refuse to start if environment is hostile (missing critical config)
+   */
+  private validateConfig() {
+    if (!this.config.rpcUrl) throw new Error("CRITICAL: Missing RPC URL. Agent cannot see.");
+    if (!this.config.chainConfig) throw new Error("CRITICAL: Missing Chain Config. Agent is lost.");
+    // In a real biological system, we would check checksums here
+  }
 
   /**
    * Scan a contract for security risks using REAL APIs
@@ -33,9 +45,10 @@ export class SecurityModule {
 
     try {
       // 1. Check if it's a honeypot using GoPlus API
+      // FAIL SAFE: If this check fails (network error), we assume it IS a honeypot
       const isHoneypot = await this.checkHoneypotGoPlus(address);
       if (isHoneypot) {
-        risks.push('🚨 HONEYPOT DETECTED - Cannot sell tokens');
+        risks.push('🚨 HONEYPOT DETECTED / VERIFICATION FAILED - Cannot sell tokens');
         riskScore += 100;
       }
 
@@ -91,19 +104,20 @@ export class SecurityModule {
     } catch (error) {
       console.error('Error scanning contract:', error);
 
-      // Return cautious result on error
+      // FAIL SAFE: Return MAX RISK on critical failure
       return {
         address,
-        isHoneypot: false,
-        riskScore: 50,
-        risks: ['⚠️ Unable to complete full security scan. Proceed with caution.'],
-        recommendations: ['Wait for security scan to complete before interacting']
+        isHoneypot: true, // Assume worst case
+        riskScore: 100,
+        risks: ['🚨 CRITICAL SYSTEM FAILURE: Security scan could not complete. ASSUMING HOSTILE.'],
+        recommendations: ['DO NOT INTERACT. Agent is blind.']
       };
     }
   }
 
   /**
    * Check if token is a honeypot using GoPlus Security API (REAL)
+   * FAIL SAFE MODE: Returns TRUE (Unsafe) if API fails
    */
   private async checkHoneypotGoPlus(address: string): Promise<boolean> {
     try {
@@ -112,7 +126,7 @@ export class SecurityModule {
         `${this.GOPLUS_API}/token_security/${chainId}`,
         {
           params: { contract_addresses: address },
-          timeout: 10000
+          timeout: 5000 // Reduced timeout to fail faster
         }
       );
 
@@ -130,9 +144,10 @@ export class SecurityModule {
 
       return false;
     } catch (error) {
-      console.error('GoPlus API error:', error);
-      // If API fails, be cautious but don't block
-      return false;
+      console.error('GoPlus API error (FAIL SAFE TRIGGERED):', error);
+      // FAIL SAFE: If API fails, we MUST assume it is a honeypot to protect the agent
+      // "It is better to miss a trade than to lose the stack"
+      return true;
     }
   }
 

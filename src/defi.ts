@@ -2,6 +2,48 @@ import { WalletClient, PublicClient, parseEther, formatEther, encodeFunctionData
 import { ClawKitConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, ClawKitWalletClient, OPBNB_CONFIG, toAddress } from './types';
 import axios from 'axios';
 
+const PANCAKE_SWAP_ROUTER_ABI = [
+  {
+    name: 'swapExactETHForTokens',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'amountOutMin', type: 'uint256' },
+      { name: 'path', type: 'address[]' },
+      { name: 'to', type: 'address' },
+      { name: 'deadline', type: 'uint256' }
+    ],
+    outputs: [{ name: 'amounts', type: 'uint256[]' }]
+  },
+  {
+    name: 'swapExactTokensForTokens',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'amountIn', type: 'uint256' },
+      { name: 'amountOutMin', type: 'uint256' },
+      { name: 'path', type: 'address[]' },
+      { name: 'to', type: 'address' },
+      { name: 'deadline', type: 'uint256' }
+    ],
+    outputs: [{ name: 'amounts', type: 'uint256[]' }]
+  },
+  {
+    name: 'swapExactTokensForETH',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'amountIn', type: 'uint256' },
+      { name: 'amountOutMin', type: 'uint256' },
+      { name: 'path', type: 'address[]' },
+      { name: 'to', type: 'address' },
+      { name: 'deadline', type: 'uint256' }
+    ],
+    outputs: [{ name: 'amounts', type: 'uint256[]' }]
+  }
+] as const;
+
+
 export class DeFiModule {
 
   constructor(
@@ -47,6 +89,85 @@ export class DeFiModule {
     }
   }
 
+
+
+  /**
+   * 🛡️ HUNTER EYES: Liquidity Probing
+   * Poke the pool with a small amount to verify it's not a trap (Honeypot/High Tax/Revert)
+   */
+  private async probeLiquidity(
+    tokenIn: string,
+    tokenOut: string,
+    router: string,
+    userAddress: string
+  ): Promise<void> {
+    console.log(`🛡️ Probing liquidity for ${tokenIn} -> ${tokenOut}...`);
+    // Simulate a $10 equivalent swap (approx 0.02 BNB or equivalent)
+    // For simplicity, we use a small fixed amount based on token type
+    // In production, this should be dynamic based on price
+    const probeAmount = 1000000000000000n; // 0.001 (generic small amount)
+
+    try {
+      // Create a static call check
+      // We don't need to actually approve for a view/static call simulation if we use `eth_call` overrides,
+      // but viem's simulateContract might check allowance.
+      // However, `publicClient.call` is a raw call.
+      // We will try to simulate a quote or a small swap.
+      // Actually, standard practice is to simulate the REAL transaction logic but with small amount?
+      // No, we want to see if the pool reacts normally.
+      // Let's rely on the main `simulateTransaction` doing the heavy lifting for the FULL amount.
+      // But `probeLiquidity` specifically checks for "Tax" or "Honeypot" mechanics by checking output difference.
+
+      // Skipping implementation of complex probe for now to avoid breaking changes without Price Oracle.
+      // Instead, we reinforce the Main Simulation.
+      console.log("   Liquidity Probe bypassed (Relaying on Atomic Simulation)");
+    } catch (e) {
+      console.warn("   Probe warning:", e);
+    }
+  }
+
+  /**
+   * ⚡ FLASH ACCOUNTING: Thermodynamic Check
+   * Ensure we are not burning move energy (Gas) than the food is worth.
+   */
+  private async checkThermodynamics(
+    to: string,
+    data: string,
+    value: bigint,
+    amountIn: bigint
+  ): Promise<void> {
+    try {
+      const userAddress = await this.getAddress();
+      const gasEstimate = await this.publicClient.estimateGas({
+        account: toAddress(userAddress),
+        to: toAddress(to),
+        data: data as `0x${string}`,
+        value
+      });
+
+      const gasPrice = await this.publicClient.getGasPrice();
+      const gasCost = gasEstimate * gasPrice;
+
+      // Logic: If Gas Cost > 10% of Trade Value, ABORT.
+      // "Don't spend 100 calories to hunt a mouse worth 50 calories."
+      const threshold = amountIn / 10n; // 10%
+
+      // Note: This logic assumes amountIn is the "Value". For tokens, this is hard without Oracle.
+      // But for BNB swaps, it's easy.
+      // We will apply this strictly for BNB operations for now.
+      if (value > 0n) {
+        if (gasCost > threshold) {
+          throw new Error(`Thermodynamic Fail: Gas cost (${formatEther(gasCost)}) > 10% of Trade Value (${formatEther(value)})`);
+        }
+        console.log(`⚡ Thermodynamics OK: Gas cost is ${(Number(gasCost) * 100 / Number(value)).toFixed(2)}% of trade.`);
+      }
+
+    } catch (error) {
+      if (String(error).includes('Thermodynamic')) throw error;
+      console.warn("Could not verify thermodynamics (Oracle needed for Token value)", error);
+    }
+  }
+
   /**
    * Swap tokens using PancakeSwap with approval check
    * @example
@@ -71,9 +192,13 @@ export class DeFiModule {
     const router = this.contracts.pancakeRouter;
 
     try {
+      // 🛡️ Pre-computation: Prepare Data
+      let data: `0x${string}`;
+      let value = 0n;
+
       // For BNB -> Token swap (no approval needed)
       if (fromToken === this.tokens.BNB.address || fromToken === this.tokens.WBNB.address) {
-        const data = encodeFunctionData({
+        data = encodeFunctionData({
           abi: PANCAKE_SWAP_ROUTER_ABI,
           functionName: 'swapExactETHForTokens',
           args: [
@@ -83,53 +208,75 @@ export class DeFiModule {
             BigInt(deadlineTimestamp)
           ]
         });
-
-        await this.simulateTransaction(router, data, amountIn, userAddress);
-
-        const hash = await this.walletClient.sendTransaction({
-          to: toAddress(router),
-          data,
-          value: amountIn
-        });
-
-        return {
-          hash,
-          amountOut: formatEther(amountOutMin)
-        };
-      }
-
-      // For Token -> Token or Token -> BNB (requires approval)
-      await this.ensureApproval(fromToken, router, amountIn);
-
-      // Determine swap function based on destination
-      let functionName: string;
-      let path: `0x${string}`[];
-
-      if (toToken === this.tokens.WBNB.address || toToken === this.tokens.BNB.address) {
-        functionName = 'swapExactTokensForETH';
-        path = [toAddress(fromToken), this.tokens.WBNB.address as `0x${string}`];
+        value = amountIn;
       } else {
-        functionName = 'swapExactTokensForTokens';
-        path = [toAddress(fromToken), this.tokens.WBNB.address as `0x${string}`, toAddress(toToken)];
+        // For Token -> Token or Token -> BNB (requires approval)
+        await this.ensureApproval(fromToken, router, amountIn);
+
+        // Determine swap function
+        let functionName: string;
+        let path: `0x${string}`[];
+
+        if (toToken === this.tokens.WBNB.address || toToken === this.tokens.BNB.address) {
+          functionName = 'swapExactTokensForETH';
+          path = [toAddress(fromToken), this.tokens.WBNB.address as `0x${string}`];
+        } else {
+          functionName = 'swapExactTokensForTokens';
+          path = [toAddress(fromToken), this.tokens.WBNB.address as `0x${string}`, toAddress(toToken)];
+        }
+
+        data = encodeFunctionData({
+          abi: PANCAKE_SWAP_ROUTER_ABI,
+          functionName: functionName as any,
+          args: [
+            amountIn,
+            amountOutMin,
+            path,
+            toAddress(userAddress),
+            BigInt(deadlineTimestamp)
+          ]
+        });
       }
 
-      const data = encodeFunctionData({
-        abi: PANCAKE_SWAP_ROUTER_ABI,
-        functionName: functionName as any,
-        args: [
-          amountIn,
-          amountOutMin,
-          path,
-          toAddress(userAddress),
-          BigInt(deadlineTimestamp)
-        ]
-      });
+      // ⚡ CHECK 1: FLASH ACCOUNTING (Thermodynamics)
+      try {
+        await this.checkThermodynamics(router, data, value, amountIn);
+      } catch (err: any) {
+        console.error('⚡ CRITICAL FAILURE (DEBUG PROBE):', err.message);
+        console.error(`DEBUG: fromToken=${fromToken}`);
+        console.error(`DEBUG: BNB=${this.tokens.BNB?.address}`);
+        console.error(`DEBUG: Condition=${fromToken !== this.tokens.BNB.address && fromToken !== this.tokens.WBNB.address}`);
 
-      await this.simulateTransaction(router, data, 0n, userAddress);
 
+        // REVOKE APPROVAL if needed
+        if (fromToken !== this.tokens.BNB.address && fromToken !== this.tokens.WBNB.address) {
+          console.log('🔄 Revoking approval due to thermodynamic failure...');
+          // 0 approval to reset
+          await this.ensureApproval(fromToken, router, 0n);
+        }
+        throw err;
+      }
+
+      // 🛡️ CHECK 2: SIMULATION (The Hunter's Eye)
+
+      try {
+        await this.simulateTransaction(router, data, value, userAddress);
+      } catch (err: any) {
+        console.error('🛡️ Simulation Failed:', err.message);
+        // REVOKE APPROVAL if needed
+        if (fromToken !== this.tokens.BNB.address && fromToken !== this.tokens.WBNB.address) {
+          console.log('🔄 Revoking approval due to simulation failure...');
+          await this.ensureApproval(fromToken, router, 0n);
+        }
+        throw err;
+      }
+
+
+      // 🚀 EXECUTION (The Strike)
       const hash = await this.walletClient.sendTransaction({
         to: toAddress(router),
-        data
+        data,
+        value
       });
 
       return {
@@ -708,43 +855,4 @@ export class DeFiModule {
 }
 
 // Simplified PancakeSwap Router ABI
-const PANCAKE_SWAP_ROUTER_ABI = [
-  {
-    name: 'swapExactETHForTokens',
-    type: 'function',
-    stateMutability: 'payable',
-    inputs: [
-      { name: 'amountOutMin', type: 'uint256' },
-      { name: 'path', type: 'address[]' },
-      { name: 'to', type: 'address' },
-      { name: 'deadline', type: 'uint256' }
-    ],
-    outputs: [{ name: 'amounts', type: 'uint256[]' }]
-  },
-  {
-    name: 'swapExactTokensForTokens',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'amountIn', type: 'uint256' },
-      { name: 'amountOutMin', type: 'uint256' },
-      { name: 'path', type: 'address[]' },
-      { name: 'to', type: 'address' },
-      { name: 'deadline', type: 'uint256' }
-    ],
-    outputs: [{ name: 'amounts', type: 'uint256[]' }]
-  },
-  {
-    name: 'swapExactTokensForETH',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'amountIn', type: 'uint256' },
-      { name: 'amountOutMin', type: 'uint256' },
-      { name: 'path', type: 'address[]' },
-      { name: 'to', type: 'address' },
-      { name: 'deadline', type: 'uint256' }
-    ],
-    outputs: [{ name: 'amounts', type: 'uint256[]' }]
-  }
-] as const;
+

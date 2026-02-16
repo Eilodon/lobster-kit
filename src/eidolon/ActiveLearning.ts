@@ -98,10 +98,13 @@ export class ActiveLearning {
     console.log('╠════════════════════════════════════════════════════════════╣');
 
     this.tradeHistory.push(outcome);
-    // FIX CRITICAL: Memory Leak Prevention
+
+    // 🧠 NEURAL LINK: Auto-Archival
+    // Instead of deleting history (Memory Loss), we archive it to long-term storage.
     if (this.tradeHistory.length > 2000) {
-      this.tradeHistory = this.tradeHistory.slice(-1000);
+      await this.archiveHistory();
     }
+
 
 
     // Calculate reward signal
@@ -173,64 +176,43 @@ export class ActiveLearning {
 
       // Apply updates to specific weight categories
       if (factor.name === 'Whale Activity') {
-        this.adjustWhaleWeights(decision.marketState.whaleFlow, weightUpdate);
+        this.adjustWeight('whaleFlow', decision.marketState.whaleFlow, weightUpdate);
       } else if (factor.name === 'Network Cost') {
-        this.adjustGasWeights(decision.marketState.gasPrice, weightUpdate);
+        this.adjustWeight('gasPrice', decision.marketState.gasPrice, weightUpdate);
       } else if (factor.name === 'Liquidity Risk' || factor.name === 'Liquidity Depth') {
-        this.adjustLiquidityWeights(decision.marketState.liquidityDepth, weightUpdate);
+        this.adjustWeight('liquidityDepth', decision.marketState.liquidityDepth, weightUpdate);
       } else if (factor.name === 'Market Sentiment') {
-        this.adjustSentimentWeights(decision.marketState.sentiment, weightUpdate);
+        this.adjustWeight('sentiment', decision.marketState.sentiment, weightUpdate);
       } else if (factor.name === 'Price Momentum') {
-        this.adjustPriceWeights(decision.marketState.priceAction, weightUpdate);
+        this.adjustWeight('priceAction', decision.marketState.priceAction, weightUpdate);
       }
     });
 
     this.adjustmentCount++;
   }
 
-  private adjustWhaleWeights(flow: string, delta: number): void {
-    if (flow in this.weights.whaleFlow) {
-      const key = flow as keyof typeof this.weights.whaleFlow;
-      const oldValue = this.weights.whaleFlow[key];
-      this.weights.whaleFlow[key] += delta;
-      console.log(`       Whale[${flow}]: ${oldValue.toFixed(2)} → ${this.weights.whaleFlow[key].toFixed(2)}`);
+  /**
+   * 🧠 NEURAL LINK: Robust Weight Adjustment
+   * Normalizes keys to prevent learning failures due to casing issues.
+   */
+  private adjustWeight(category: keyof typeof this.weights, key: string, delta: number): void {
+    const categoryWeights = this.weights[category];
+    // Try exact match first
+    if (key in categoryWeights) {
+      (categoryWeights as any)[key] += delta;
+      console.log(`       ${category}[${key}]: ${(categoryWeights as any)[key].toFixed(2)} (Δ ${delta.toFixed(4)})`);
+      return;
     }
-  }
 
-  private adjustGasWeights(gas: string, delta: number): void {
-    if (gas in this.weights.gasPrice) {
-      const key = gas as keyof typeof this.weights.gasPrice;
-      const oldValue = this.weights.gasPrice[key];
-      this.weights.gasPrice[key] += delta;
-      console.log(`       Gas[${gas}]: ${oldValue.toFixed(2)} → ${this.weights.gasPrice[key].toFixed(2)}`);
+    // Try normalized match (Upper Case)
+    const upperKey = key.toUpperCase();
+    if (upperKey in categoryWeights) {
+      (categoryWeights as any)[upperKey] += delta;
+      console.log(`       ${category}[${upperKey}]: ${(categoryWeights as any)[upperKey].toFixed(2)} (Δ ${delta.toFixed(4)})`);
+      return;
     }
-  }
 
-  private adjustLiquidityWeights(depth: string, delta: number): void {
-    if (depth in this.weights.liquidityDepth) {
-      const key = depth as keyof typeof this.weights.liquidityDepth;
-      const oldValue = this.weights.liquidityDepth[key];
-      this.weights.liquidityDepth[key] += delta;
-      console.log(`       Liquidity[${depth}]: ${oldValue.toFixed(2)} → ${this.weights.liquidityDepth[key].toFixed(2)}`);
-    }
-  }
-
-  private adjustSentimentWeights(sentiment: string, delta: number): void {
-    if (sentiment in this.weights.sentiment) {
-      const key = sentiment as keyof typeof this.weights.sentiment;
-      const oldValue = this.weights.sentiment[key];
-      this.weights.sentiment[key] += delta;
-      console.log(`       Sentiment[${sentiment}]: ${oldValue.toFixed(2)} → ${this.weights.sentiment[key].toFixed(2)}`);
-    }
-  }
-
-  private adjustPriceWeights(action: string, delta: number): void {
-    if (action in this.weights.priceAction) {
-      const key = action as keyof typeof this.weights.priceAction;
-      const oldValue = this.weights.priceAction[key];
-      this.weights.priceAction[key] += delta;
-      console.log(`       Price[${action}]: ${oldValue.toFixed(2)} → ${this.weights.priceAction[key].toFixed(2)}`);
-    }
+    console.warn(`       ⚠️ Neural Link Warning: Key '${key}' not found in category '${category}'. Learning skipped for this factor.`);
   }
 
   /**
@@ -408,5 +390,41 @@ export class ActiveLearning {
    */
   public async manualSave(): Promise<void> {
     await this.saveToDisk();
+  }
+  /**
+   * 🧠 NEURAL LINK: Archival Mechanism
+   * Moves older memories to long-term storage (Archive) instead of deleting them.
+   */
+  private async archiveHistory(): Promise<void> {
+    try {
+      const archiveCount = 1000;
+      // Safety check
+      if (this.tradeHistory.length <= archiveCount) return;
+
+      const toArchive = this.tradeHistory.slice(0, archiveCount);
+      const remaining = this.tradeHistory.slice(archiveCount);
+
+      // Generate archive filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const archiveKey = `archive_history_${timestamp}.json`;
+
+      // Save to storage (New file)
+      await this.storage.save(archiveKey, toArchive);
+
+      console.log(`💾 Archived ${toArchive.length} memories to ${archiveKey}`);
+
+      // Update in-memory history
+      this.tradeHistory = remaining;
+
+      // Save the updated (smaller) history to the main file to reflect the change
+      if (this.autoSaveEnabled) {
+        await this.saveToDisk();
+      }
+
+    } catch (error: any) {
+      console.error('❌ Failed to archive history:', error.message);
+      // Fallback: Slice anyway to prevent memory overflow if storage fails repeatedly
+      this.tradeHistory = this.tradeHistory.slice(-1000);
+    }
   }
 }

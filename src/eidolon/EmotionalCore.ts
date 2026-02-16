@@ -126,7 +126,9 @@ export class EmotionalCore {
     this.processBiologicalFunction(deltaTime); // Use computed deltaTime
 
     this.state.lastUpdate = now;
-    await this.saveState();
+
+    // 🧠 BLIND SPOT FIX: Debounced Save (Max 1 write per 10s) to prevent I/O epilepsy
+    this.debouncedSave();
 
     return this.state;
   }
@@ -262,11 +264,34 @@ export class EmotionalCore {
     }
   }
 
+  private saveTimeout: any = null;
+
+  async debouncedSave() {
+    if (this.saveTimeout) return;
+
+    this.saveTimeout = setTimeout(async () => {
+      await this.saveState();
+      this.saveTimeout = null;
+    }, 10000); // 10 seconds debounce
+  }
+
   async saveState() {
     try {
       await this.storage.save(this.STORAGE_KEY, { state: this.state });
     } catch (e) {
       console.warn("Failed to save emotional state", e);
     }
+  }
+
+  /**
+   * 🛑 KILL SWITCH: Stop all internal loops and listeners
+   */
+  public dispose() {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+    // Unsubscribe from bus (Needs method in Bus)
+    // this.bus.unsubscribeAll(this); 
   }
 }
