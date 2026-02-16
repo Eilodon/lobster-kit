@@ -9,6 +9,7 @@ import { ClawOracle } from './sensors/ClawOracle';
 import { GoPlusSecurity } from './oracles/GoPlusSecurity';
 import { MarketStream } from './sensors/MarketStream';
 import { EidolonSimulator, ShadowTransaction } from './simulation/EidolonSimulator';
+import RiskParams from '../config/RiskConfig.json';
 
 /**
  * 🛡️ EIDOLON GUARD
@@ -65,10 +66,10 @@ export class EidolonGuard {
             maxRiskScore: 60,
             minConfidence: 70,
             riskParameters: {
-                maxPositionSize: 1000,
-                maxDrawdown: 10,
-                minConfidence: 70,
-                cooldownPeriod: 60000
+                maxPositionSize: RiskParams.base.maxPositionSize,
+                maxDrawdown: RiskParams.base.maxDrawdown,
+                minConfidence: RiskParams.base.minConfidence,
+                cooldownPeriod: RiskParams.base.cooldownPeriod
             }
         }
     ) {
@@ -105,6 +106,33 @@ export class EidolonGuard {
         console.log('   🧠 Memory Loaded & Senses Active');
     }
 
+
+    /**
+     * 🔄 STATE UPDATE LOOP (Background)
+     * pure side-effect: Updates internal state snapshots
+     */
+    public async updateSnapshot(): Promise<void> {
+        try {
+            // Get BNB Balance
+            const balanceWei = await this.client.getBalance({
+                address: this.wallet.account!.address
+            });
+            // Get Price
+            const bnbPrice = await this.oracle.getBNBPrice();
+
+            // Calculate Portfolio Value
+            const totalPortfolioUSD = parseFloat(formatEther(balanceWei)) * bnbPrice;
+
+            this.valueInvariant.update_snapshot(totalPortfolioUSD);
+
+            // Also update market state if needed
+            // this.lastMarketState = await this.senseMarket(); 
+        } catch (e) {
+            console.warn('Failed to update portfolio snapshot, using safe fallback', e);
+            this.valueInvariant.update_snapshot(0);
+        }
+    }
+
     public async validateAction(
         action: ActionType,
         context: {
@@ -116,25 +144,9 @@ export class EidolonGuard {
         }
     ): Promise<ValidationResult> {
 
-        // 0. Update Security Snapshot with REAL data
-        try {
-            // Get BNB Balance
-            const balanceWei = await this.client.getBalance({
-                address: this.wallet.account!.address
-            });
+        // 🧠 FIXED: Removed side-effect from validation path.
+        // updateSnapshot() must be called externally or via loop.
 
-            // Get Price
-            const bnbPrice = await this.oracle.getBNBPrice();
-
-            // Calculate Portfolio Value (assuming mostly BNB for now)
-            // TODO: In V2, iterate tokens to get full portfolio value
-            const totalPortfolioUSD = parseFloat(formatEther(balanceWei)) * bnbPrice;
-
-            this.valueInvariant.update_snapshot(totalPortfolioUSD);
-        } catch (e) {
-            console.warn('Failed to update portfolio snapshot, using safe fallback', e);
-            this.valueInvariant.update_snapshot(0); // Fail-safe: Assume 0 balance on error
-        }
 
         // 1. HARD INVARIANT CHECK (The Citadel - RUST)
         if (context.amountUSD) {

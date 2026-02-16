@@ -129,6 +129,7 @@ export interface ChainConfig {
     pancakeMasterChef: string; // V3
     venusComptroller?: string; // Optional (not yet on opBNB?)
     venusMarkets?: Record<string, string>;
+    batchExecutor?: string; // [NEW] For optimized txs
   };
 }
 

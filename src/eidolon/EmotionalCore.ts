@@ -1,9 +1,9 @@
-import { IStorageProvider } from './memory/IStorageProvider';
 import { ThermodynamicEngine, ThermoConfig } from './ai/ThermodynamicEngine';
 import { BreathEngine, BreathPhase } from './ai/BreathEngine';
 import { Vector } from './ai/LinearAlgebra';
-import { GreenfieldAdapter } from './memory/GreenfieldAdapter';
+import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
 import { EidolonBus, EidolonEventType } from './events/EidolonBus';
+import BioParams from '../config/BioParameters.json';
 
 export interface EmotionalState {
   glucose: number;   // Energy (0-100)
@@ -23,24 +23,21 @@ export interface EmotionalState {
 
 export class EmotionalCore {
   private state: EmotionalState;
-  private storage: IStorageProvider;
+  private storage: AppendOnlyAdapter;
   private bus: EidolonBus;
 
   // AI Engines
   private thermoEngine: ThermodynamicEngine;
   private breathEngine: BreathEngine;
 
-  private readonly STORAGE_KEY = 'emotional_core_thermo.json';
+  private readonly STORAGE_KEY = 'emotional_core.log'; // Changed to .log
 
-  constructor(storage?: IStorageProvider) {
-    this.storage = storage || new GreenfieldAdapter({
-      bucketName: 'eidolon-memory-core',
-      useLocalFallback: !process.env.GREENFIELD_ENDPOINT
-    });
+  constructor(storage?: AppendOnlyAdapter) {
+    this.storage = storage || new AppendOnlyAdapter();
     this.bus = EidolonBus.getInstance();
 
     this.thermoEngine = new ThermodynamicEngine();
-    this.breathEngine = new BreathEngine(6.0); // 6 BPM default
+    this.breathEngine = new BreathEngine(BioParams.breathing.baseBPM);
 
     this.state = {
       glucose: 100,
@@ -88,9 +85,9 @@ export class EmotionalCore {
 
     // 2. Breath Engine (Rhythm)
     // Adjust BPM based on Arousal: High arousal = fast breath
-    const targetBPM = 6.0 + (this.state.arousal * 20.0);
+    const targetBPM = BioParams.breathing.baseBPM + (this.state.arousal * (BioParams.breathing.maxBPM - BioParams.breathing.baseBPM));
     this.breathEngine.setBPM(targetBPM);
-    const breath = this.breathEngine.tick(dt * 1000); // ms
+    const breath = this.breathEngine.tick(deltaTime * 1000); // ms
 
     // 3. Thermodynamic Evolution
     const currentStateVec = new Vector([
@@ -128,7 +125,8 @@ export class EmotionalCore {
     this.state.lastUpdate = now;
 
     // 🧠 BLIND SPOT FIX: Debounced Save (Max 1 write per 10s) to prevent I/O epilepsy
-    this.debouncedSave();
+    // 🧠 FIXED: Use Append Log instead of Debounced Save
+    this.appendState();
 
     return this.state;
   }
@@ -151,19 +149,19 @@ export class EmotionalCore {
 
   private processBiologicalFunction(dt: number) {
     // Glucose burn (Energy)
-    const burnRate = 0.5 * (1 + this.state.arousal); // Faster burn at high arousal
-    this.state.glucose = Math.max(0, this.state.glucose - burnRate * dt);
+    const burnRate = BioParams.metabolism.glucoseBurnRate * (1 + this.state.arousal); // Faster burn at high arousal
+    this.state.glucose = Math.max(BioParams.limits.minHormoneLevel, this.state.glucose - burnRate * dt);
 
     // Dopamine decay (Motivation)
-    this.state.dopamine = Math.max(0, this.state.dopamine - 1.0 * dt);
+    this.state.dopamine = Math.max(BioParams.limits.minHormoneLevel, this.state.dopamine - BioParams.metabolism.dopamineDecayRate * dt);
 
     // Cortisol accumulation (Stress) - driven by volatility and low glucose
-    const stressFactor = this.state.volatility * 10.0 + (this.state.glucose < 20 ? 5.0 : 0);
-    this.state.cortisol = Math.min(100, this.state.cortisol + stressFactor * dt);
+    const stressFactor = this.state.volatility * BioParams.metabolism.cortisolSpikeFactor + (this.state.glucose < BioParams.thresholds.starvationGlucose ? 5.0 : 0);
+    this.state.cortisol = Math.min(BioParams.limits.maxHormoneLevel, this.state.cortisol + stressFactor * dt);
 
     // Cortisol decay (Rest)
     if (this.state.arousal < 0.3) {
-      this.state.cortisol = Math.max(0, this.state.cortisol - 2.0 * dt);
+      this.state.cortisol = Math.max(BioParams.limits.minHormoneLevel, this.state.cortisol - BioParams.metabolism.cortisolDecayRate * dt);
     }
   }
 
@@ -214,8 +212,8 @@ export class EmotionalCore {
   }
 
   feed(amount: number = 30) {
-    this.state.glucose = Math.min(100, this.state.glucose + amount);
-    this.state.dopamine = Math.min(100, this.state.dopamine + 5);
+    this.state.glucose = Math.min(BioParams.limits.maxHormoneLevel, this.state.glucose + amount);
+    this.state.dopamine = Math.min(BioParams.limits.maxHormoneLevel, this.state.dopamine + 5);
     this.tick(this.state.volatility);
   }
 
@@ -224,12 +222,12 @@ export class EmotionalCore {
     // High Cortisol + Caution = Defensive
     const baseRisk = 1.0;
 
-    if (this.state.cortisol > 80) return 0.1; // Panic mode
+    if (this.state.cortisol > BioParams.thresholds.panicCortisol) return 0.1; // Panic mode
 
     const flowState = this.state.attention * this.state.momentum;
     const mood = this.state.valence; // 0-1
 
-    if (flowState > 0.6 && mood > 0.6) {
+    if (flowState > BioParams.thresholds.flowStateAttention && mood > BioParams.thresholds.flowStateValence) {
       return baseRisk * 1.5; // Flow state aggression
     }
 
@@ -255,31 +253,31 @@ export class EmotionalCore {
 
   async loadState() {
     try {
-      const data = await this.storage.load<{ state: EmotionalState }>(this.STORAGE_KEY);
-      if (data && data.state) {
-        this.state = { ...this.state, ...data.state };
+      const logs = await this.storage.readLog(this.STORAGE_KEY);
+      if (logs.length > 0) {
+        // Replay all logs to get final state
+        // OR just take the last valid state if it's a full snapshot
+        // Here we assume each log is a full state snapshot for simplicity in Phase 1
+        const lastEntry = logs[logs.length - 1];
+        if (lastEntry && lastEntry.state) {
+          this.state = { ...this.state, ...lastEntry.state };
+          console.log('🧠 Emotional State restored from AppendLog');
+        }
       }
     } catch (e) {
       console.warn("Failed to load emotional state", e);
     }
   }
 
-  private saveTimeout: any = null;
-
-  async debouncedSave() {
-    if (this.saveTimeout) return;
-
-    this.saveTimeout = setTimeout(async () => {
-      await this.saveState();
-      this.saveTimeout = null;
-    }, 10000); // 10 seconds debounce
-  }
-
-  async saveState() {
+  async appendState() {
     try {
-      await this.storage.save(this.STORAGE_KEY, { state: this.state });
+      // Only append if state changed significantly? 
+      // For now, append every tick is too much.
+      // Let's append only on significant events or throttle it.
+      // Actually, the tick() is called on block mined (3 sec). Appending every 3s is fine for local disk.
+      await this.storage.append(this.STORAGE_KEY, { state: this.state });
     } catch (e) {
-      console.warn("Failed to save emotional state", e);
+      console.warn("Failed to append emotional state", e);
     }
   }
 
@@ -287,10 +285,7 @@ export class EmotionalCore {
    * 🛑 KILL SWITCH: Stop all internal loops and listeners
    */
   public dispose() {
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout);
-      this.saveTimeout = null;
-    }
+    // No timeout to clear anymore
     // Unsubscribe from bus (Needs method in Bus)
     // this.bus.unsubscribeAll(this); 
   }

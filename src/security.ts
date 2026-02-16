@@ -1,6 +1,7 @@
 import { WalletClient, PublicClient, parseAbi, encodeFunctionData } from 'viem';
 import { ClawKitConfig, APPROVAL_REVOKER, PANCAKE_ROUTER, CLAWKIT_CONTRACTS, ClawKitWalletClient, toAddress } from './types';
 import axios from 'axios';
+import { withRetry } from './utils/Resilience';
 
 interface SecurityScanResult {
   address: string;
@@ -122,13 +123,13 @@ export class SecurityModule {
   private async checkHoneypotGoPlus(address: string): Promise<boolean> {
     try {
       const chainId = this.config.chainId || 204; // FIX C4: opBNB = 204, not BSC 56
-      const response = await axios.get(
+      const response = await withRetry(() => axios.get(
         `${this.GOPLUS_API}/token_security/${chainId}`,
         {
           params: { contract_addresses: address },
           timeout: 5000 // Reduced timeout to fail faster
         }
-      );
+      ), { maxAttempts: 2, baseDelay: 500 });
 
       if (response.data?.result?.[address.toLowerCase()]) {
         const data = response.data.result[address.toLowerCase()];
@@ -157,13 +158,13 @@ export class SecurityModule {
   private async getGoPlusSecurityData(address: string): Promise<any> {
     try {
       const chainId = this.config.chainId || 204;
-      const response = await axios.get(
+      const response = await withRetry(() => axios.get(
         `${this.GOPLUS_API}/token_security/${chainId}`,
         {
           params: { contract_addresses: address },
           timeout: 10000
         }
-      );
+      ));
 
       const data = response.data?.result?.[address.toLowerCase()];
       if (!data) return null;
@@ -201,14 +202,14 @@ export class SecurityModule {
 
       const explorerApi = EXPLORER_APIS[this.config.chainId || 204] || 'https://api-opbnb.bscscan.com/api';
 
-      const response = await axios.get(explorerApi, {
+      const response = await withRetry(() => axios.get(explorerApi, {
         params: {
           module: 'contract',
           action: 'getsourcecode',
           address: address
         },
         timeout: 5000
-      });
+      }));
 
       if (response.data.status === '1' && response.data.result?.[0]) {
         const sourceCode = response.data.result[0].SourceCode;

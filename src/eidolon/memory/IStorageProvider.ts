@@ -30,4 +30,17 @@ export interface IStorageProvider {
      * List available keys
      */
     list(): Promise<string[]>;
+
+    /**
+     * Append data to a log file (Write-Ahead Log)
+     * @param key Filename or object key
+     * @param data JSON serializable data to append
+     */
+    append(key: string, data: any): Promise<void>;
+
+    /**
+     * Read all entries from a log file
+     * @param key Filename or object key
+     */
+    readLog(key: string): Promise<any[]>;
 }

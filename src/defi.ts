@@ -1,6 +1,7 @@
 import { WalletClient, PublicClient, parseEther, formatEther, encodeFunctionData, parseAbi, SimulateContractParameters } from 'viem';
 import { ClawKitConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, ClawKitWalletClient, OPBNB_CONFIG, toAddress } from './types';
 import axios from 'axios';
+import { withRetry } from './utils/Resilience';
 
 const PANCAKE_SWAP_ROUTER_ABI = [
   {
@@ -460,9 +461,9 @@ export class DeFiModule {
    */
   private async getPancakePoolInfo(poolSymbol: string): Promise<any> {
     try {
-      const response = await axios.get('https://farms-api.pancakeswap.com/farms', {
+      const response = await withRetry(() => axios.get('https://farms-api.pancakeswap.com/farms', {
         timeout: 5000
-      });
+      }));
 
       if (response.data && Array.isArray(response.data)) {
         const pool = response.data.find((p: any) =>
@@ -488,8 +489,7 @@ export class DeFiModule {
 
   /**
    * Harvest rewards from all pools
-   * @example
-   * await kit.defi.harvestAll()
+   * ⚡ OPTIMIZED: Uses BatchExecutor if available for 1-tx harvest
    */
   async harvestAll(): Promise<{ totalRewards: string; transactions: string[] }> {
     const userAddress = await this.getAddress();
@@ -497,34 +497,75 @@ export class DeFiModule {
     const masterChef = this.contracts.pancakeMasterChef;
 
     try {
-      // Get user's staked pools from PancakeSwap
+      // Get user's staked pools (mock for now, normally would retry-fetch)
       const userPools = await this.getUserStakedPools(userAddress);
 
+      if (userPools.length === 0) {
+        return { totalRewards: '0', transactions: [] };
+      }
+
       let totalRewards = 0n;
+      const batchData: { target: string; callData: string; value: bigint }[] = [];
 
+      // 1. Prepare all harvest calls
       for (const pool of userPools) {
-        try {
-          // Harvest from each pool
-          const data = encodeFunctionData({
-            abi: parseAbi(['function withdraw(uint256 pid, uint256 amount)']),
-            functionName: 'withdraw',
-            args: [BigInt(pool.pid), 0n] // Withdraw 0 = harvest only
-          });
+        const data = encodeFunctionData({
+          abi: parseAbi(['function withdraw(uint256 pid, uint256 amount)']),
+          functionName: 'withdraw',
+          args: [BigInt(pool.pid), 0n]
+        });
+        batchData.push({
+          target: masterChef,
+          callData: data,
+          value: 0n
+        });
+        totalRewards += pool.pendingRewards;
+      }
 
-          await this.simulateTransaction(masterChef, data, 0n, userAddress);
+      // 2. Check for BatchExecutor
+      // We read from config directly to ensure latest address
+      const batchExecutor = this.config.chainConfig?.contracts?.batchExecutor ||
+        this.config.contracts?.BatchExecutor;
 
+      if (batchExecutor && batchExecutor !== '0x0000000000000000000000000000000000000000') {
+        console.log(`⚡ Optimizing: Batching ${batchData.length} harvests via Executor: ${batchExecutor}`);
+
+        const batchAbi = parseAbi([
+          'function batchExecute(address[] targets, bytes[] datas, uint256[] values) payable'
+        ]);
+
+        const targets = batchData.map(b => b.target as `0x${string}`);
+        const datas = batchData.map(b => b.callData as `0x${string}`);
+        const values = batchData.map(b => b.value);
+
+        const data = encodeFunctionData({
+          abi: batchAbi,
+          functionName: 'batchExecute',
+          args: [targets, datas, values]
+        });
+
+        await this.simulateTransaction(batchExecutor, data, 0n, userAddress);
+
+        const hash = await this.walletClient.sendTransaction({
+          to: toAddress(batchExecutor),
+          data
+        });
+
+        transactions.push(hash);
+        console.log(`✅ Batch Harvest Complete! Hash: ${hash}`);
+
+      } else {
+        // Fallback to sequential
+        console.warn('⚠️ BatchExecutor not deployed. Falling back to sequential harvest (Slow).');
+
+        for (const item of batchData) {
           const hash = await this.walletClient.sendTransaction({
-            to: toAddress(masterChef),
-            data
+            to: toAddress(item.target),
+            data: item.callData as `0x${string}`,
+            value: item.value
           });
-
           transactions.push(hash);
-          totalRewards += pool.pendingRewards;
-
-          console.log(`✅ Harvested from pool ${pool.pid}`);
-        } catch (error) {
-          console.log(`Failed to harvest from pool ${pool.pid}`);
-          continue;
+          console.log(`✅ Harvested single pool. Hash: ${hash}`);
         }
       }
 
@@ -597,9 +638,9 @@ export class DeFiModule {
    */
   private async findBestAPYPool(): Promise<any> {
     try {
-      const response = await axios.get('https://farms-api.pancakeswap.com/farms', {
+      const response = await withRetry(() => axios.get('https://farms-api.pancakeswap.com/farms', {
         timeout: 5000
-      });
+      }));
 
       if (response.data && Array.isArray(response.data)) {
         // Filter active pools and sort by APR

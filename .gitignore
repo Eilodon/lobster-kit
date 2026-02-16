@@ -39,3 +39,5 @@ typechain-types/
 
 # Misc
 .turbo/
+data/
+

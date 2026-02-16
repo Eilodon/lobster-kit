@@ -1,6 +1,6 @@
 import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS } from './EidolonTypes';
 import { IStorageProvider } from './memory/IStorageProvider';
-import { GreenfieldAdapter } from './memory/GreenfieldAdapter';
+import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
 
 /**
  * 🧠 ACTIVE LEARNING MODULE
@@ -51,9 +51,9 @@ export class ActiveLearning {
   private adjustmentCount = 0;
 
   // Persistence
-  private storage: IStorageProvider;
+  private storage: AppendOnlyAdapter;
   private readonly WEIGHTS_KEY = 'active_learning_weights.json';
-  private readonly HISTORY_KEY = 'active_learning_history.json';
+  private readonly HISTORY_KEY = 'active_learning_history.log'; // Changed to .log
   private autoSaveEnabled = true;
 
   constructor(
@@ -65,11 +65,8 @@ export class ActiveLearning {
       this.weights = { ...initialWeights };
     }
 
-    // Default to Greenfield (with local fallback)
-    this.storage = storage || new GreenfieldAdapter({
-      bucketName: 'eidolon-memory-brain',
-      useLocalFallback: !process.env.GREENFIELD_ENDPOINT
-    });
+    // Default to AppendOnly (Local) for Phase 1
+    this.storage = (storage as AppendOnlyAdapter) || new AppendOnlyAdapter();
   }
 
   /**
@@ -98,6 +95,11 @@ export class ActiveLearning {
     console.log('╠════════════════════════════════════════════════════════════╣');
 
     this.tradeHistory.push(outcome);
+
+    // 🧠 FIXED: Append to log immediately
+    if (this.autoSaveEnabled) {
+      await this.storage.append(this.HISTORY_KEY, outcome);
+    }
 
     // 🧠 NEURAL LINK: Auto-Archival
     // Instead of deleting history (Memory Loss), we archive it to long-term storage.
@@ -336,9 +338,10 @@ export class ActiveLearning {
 
       // Save history (last 1000 trades to limit file size)
       const recentHistory = this.tradeHistory.slice(-1000);
-      await this.storage.save(this.HISTORY_KEY, recentHistory);
+      await this.storage.save(this.WEIGHTS_KEY, weightsData);
 
-      console.log('💾 Weights and history saved to decentralized memory');
+      // History is already appended, no need to save whole array
+      console.log('💾 Weights saved to local memory');
     } catch (error: any) {
       console.error('❌ Failed to save weights:', error.message);
       throw error;
@@ -363,11 +366,11 @@ export class ActiveLearning {
         console.log(`   Adjustments made: ${saved.adjustmentCount}`);
       }
 
-      // Load history
-      const history = await this.storage.load<any>(this.HISTORY_KEY);
-      if (history) {
-        this.tradeHistory = history;
-        console.log(`📊 Loaded ${this.tradeHistory.length} historical trades`);
+      // Load history from AppendLog
+      const logs = await this.storage.readLog(this.HISTORY_KEY);
+      if (logs.length > 0) {
+        this.tradeHistory = logs; // Each log entry is a TradeOutcome
+        console.log(`📊 Loaded ${this.tradeHistory.length} historical trades from AppendLog`);
       } else {
         console.log('📊 No trade history found (starting fresh)');
       }
@@ -395,36 +398,14 @@ export class ActiveLearning {
    * 🧠 NEURAL LINK: Archival Mechanism
    * Moves older memories to long-term storage (Archive) instead of deleting them.
    */
+  /**
+   * 🧠 NEURAL LINK: Archival Mechanism
+   * Rotates log file if too large (Implementation for Phase 2)
+   */
   private async archiveHistory(): Promise<void> {
-    try {
-      const archiveCount = 1000;
-      // Safety check
-      if (this.tradeHistory.length <= archiveCount) return;
-
-      const toArchive = this.tradeHistory.slice(0, archiveCount);
-      const remaining = this.tradeHistory.slice(archiveCount);
-
-      // Generate archive filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const archiveKey = `archive_history_${timestamp}.json`;
-
-      // Save to storage (New file)
-      await this.storage.save(archiveKey, toArchive);
-
-      console.log(`💾 Archived ${toArchive.length} memories to ${archiveKey}`);
-
-      // Update in-memory history
-      this.tradeHistory = remaining;
-
-      // Save the updated (smaller) history to the main file to reflect the change
-      if (this.autoSaveEnabled) {
-        await this.saveToDisk();
-      }
-
-    } catch (error: any) {
-      console.error('❌ Failed to archive history:', error.message);
-      // Fallback: Slice anyway to prevent memory overflow if storage fails repeatedly
-      this.tradeHistory = this.tradeHistory.slice(-1000);
-    }
+    // For AppendLog, we might need log rotation.
+    // In Phase 1, we just keep appending.
+    // TODO: Implement Log Rotation
+    return;
   }
 }

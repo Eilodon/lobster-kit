@@ -144,4 +144,54 @@ export class GreenfieldAdapter implements IStorageProvider {
             stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
         });
     }
+
+    /**
+     * APPEND LOG (Hybrid)
+     * Always writes logs to local disk first for speed/safety.
+     * S3 sync can happen in background (future).
+     */
+    async append(key: string, data: any): Promise<void> {
+        // Logs are always local for low latency
+        const localPath = path.join(this.localDir, key);
+        try {
+            const entry = JSON.stringify({
+                ts: Date.now(),
+                data
+            }) + '\n';
+            // Ensure dir exists
+            if (!fs.existsSync(this.localDir)) {
+                fs.mkdirSync(this.localDir, { recursive: true });
+            }
+            fs.appendFileSync(localPath, entry, 'utf-8');
+        } catch (e) {
+            console.error(`❌ Failed to append to ${key}`, e);
+            throw e;
+        }
+    }
+
+    async readLog(key: string): Promise<any[]> {
+        const localPath = path.join(this.localDir, key);
+        const entries: any[] = [];
+
+        try {
+            if (!fs.existsSync(localPath)) return [];
+
+            const content = fs.readFileSync(localPath, 'utf-8');
+            const lines = content.split('\n');
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const parsed = JSON.parse(line);
+                    entries.push(parsed.data);
+                } catch (e) {
+                    console.warn(`⚠️ Corrupted log entry in ${key}, skipping.`);
+                }
+            }
+        } catch (e: any) {
+            console.error(`❌ Failed to read log ${key}`, e);
+        }
+
+        return entries;
+    }
 }
