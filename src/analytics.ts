@@ -72,7 +72,6 @@ export class AnalyticsModule {
     // Check cache first
     if (this.priceCache[cacheKey] &&
       Date.now() - this.priceCache[cacheKey].timestamp < this.CACHE_DURATION) {
-      console.log('💰 Using cached token prices');
       return this.priceCache[cacheKey].value as any;
     }
 
@@ -103,7 +102,6 @@ export class AnalyticsModule {
         timestamp: Date.now()
       };
 
-      console.log('✅ Token prices fetched from CoinGecko');
       return prices;
 
     } catch (error: any) {
@@ -113,7 +111,7 @@ export class AnalyticsModule {
 
         // Return stale cache if available
         if (this.priceCache[cacheKey]) {
-          console.log('Using stale cache');
+          console.warn('Using stale cache');
           return this.priceCache[cacheKey].value as any;
         }
       } else {
@@ -334,12 +332,11 @@ export class AnalyticsModule {
 
         if (market?.supplyApy) {
           const apy = parseFloat(market.supplyApy);
-          console.log(`✅ Fetched Venus APY for ${asset}: ${apy}%`);
           return apy;
         }
       }
     } catch (error) {
-      console.log('Venus API unavailable, using fallback');
+      console.warn('Venus API unavailable, using fallback');
     }
 
     // Fallback: Return 0 instead of fake data
@@ -367,12 +364,11 @@ export class AnalyticsModule {
         });
 
         if (farm?.apr) {
-          console.log(`✅ Fetched PancakeSwap APY for ${pair}: ${farm.apr}%`);
           return farm.apr;
         }
       }
     } catch (error) {
-      console.log('PancakeSwap API unavailable');
+      console.warn('PancakeSwap API unavailable');
     }
 
     // Return 0 instead of fake data

@@ -126,7 +126,6 @@ export class DeFiModule {
         }
         // FIX P1-04: Use BigInt division to avoid Number precision loss on large values
         const costBps = gasCost * 10000n / tradeValue; // basis points
-        console.log(`⚡ Thermodynamics OK: Gas cost is ${Number(costBps) / 100}% of trade.`);
       }
 
     } catch (error) {
@@ -207,7 +206,7 @@ export class DeFiModule {
 
         // FIX Bug #3 (Part 1): Revoke approval on error
         if (fromToken !== this.tokens.BNB.address) {
-          console.log('🔄 Revoking approval due to thermodynamic failure...');
+          console.warn('🔄 Revoking approval due to thermodynamic failure...');
           await this.revokeApproval(fromToken, router);
         }
         throw err;
@@ -220,7 +219,7 @@ export class DeFiModule {
         console.error('🛡️ Simulation Failed:', err.message);
         // FIX Bug #3 (Part 2): Revoke approval on simulation failure
         if (fromToken !== this.tokens.BNB.address) {
-          console.log('🔄 Revoking approval due to simulation failure...');
+          console.warn('🔄 Revoking approval due to simulation failure...');
           await this.revokeApproval(fromToken, router);
         }
         throw err;
@@ -280,7 +279,7 @@ export class DeFiModule {
     }
 
     if (allowance < amount) {
-      console.log(`🔓 Approving ${tokenAddress} for ${spender}...`);
+      console.info(`🔓 Approving ${tokenAddress} for ${spender}...`);
 
       // FIX U3: Optimize Approval Strategy (Approve MAX_UINT)
       // Saves gas on repeated swaps
@@ -297,9 +296,9 @@ export class DeFiModule {
       });
 
       const hash = await this.walletClient.writeContract(request);
-      console.log(`⏳ Approval Tx Sent: ${hash}`);
+      console.info(`⏳ Approval Tx Sent: ${hash}`);
       await this.publicClient.waitForTransactionReceipt({ hash });
-      console.log(`✅ Approval Confirmed.`);
+      console.info(`✅ Approval Confirmed.`);
     }
   }
 
@@ -312,7 +311,7 @@ export class DeFiModule {
     spender: string
   ): Promise<void> {
     const owner = await this.getAddress();
-    console.log(`Warning: Revoking approval for ${tokenAddress} to ${spender}`);
+    console.warn(`Warning: Revoking approval for ${tokenAddress} to ${spender}`);
 
     const data = encodeFunctionData({
       abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
@@ -328,7 +327,7 @@ export class DeFiModule {
         data
       });
       await this.publicClient.waitForTransactionReceipt({ hash }); // Optional wait
-      console.log('✅ Approval revoked (Reset to 0)');
+      console.info('✅ Approval revoked (Reset to 0)');
     } catch (e) {
       console.error("Failed to revoke approval:", e);
     }
@@ -401,7 +400,7 @@ export class DeFiModule {
     // Helper to format output based on target token decimals for logging
     // We don't have target token decimals easily here without lookup, so using formatEther as approx or generic
     // But since this is just logging, it's fine.
-    console.log(`✅ Hyper-Routing Winner: ${bestQuote.name} (Out: ${bestQuote.amountOut})`);
+    console.info(`✅ Hyper-Routing Winner: ${bestQuote.name} (Out: ${bestQuote.amountOut})`);
 
     return {
       amountOutMin,
@@ -447,7 +446,7 @@ export class DeFiModule {
         data
       });
 
-      console.log(`✅ Staked ${amount} ${pool} tokens`);
+      console.info(`✅ Staked ${amount} ${pool} tokens`);
       return { hash };
 
     } catch (error: any) {
@@ -528,7 +527,7 @@ export class DeFiModule {
         this.config.contracts?.BatchExecutor;
 
       if (batchExecutor && batchExecutor !== '0x0000000000000000000000000000000000000000') {
-        console.log(`⚡ Optimizing: Batching ${batchData.length} harvests via Executor: ${batchExecutor}`);
+        console.info(`⚡ Optimizing: Batching ${batchData.length} harvests via Executor: ${batchExecutor}`);
 
         const batchAbi = parseAbi([
           'function executeBatch(address[] targets, uint256[] values, bytes[] datas) payable'
@@ -552,7 +551,7 @@ export class DeFiModule {
         });
 
         transactions.push(hash);
-        console.log(`✅ Batch Harvest Complete! Hash: ${hash}`);
+        console.info(`✅ Batch Harvest Complete! Hash: ${hash}`);
 
       } else {
         // Fallback to sequential
@@ -565,7 +564,7 @@ export class DeFiModule {
             value: item.value
           });
           transactions.push(hash);
-          console.log(`✅ Harvested single pool. Hash: ${hash}`);
+          console.info(`✅ Harvested single pool. Hash: ${hash}`);
         }
       }
 
@@ -667,7 +666,7 @@ export class DeFiModule {
         amount: totalRewards
       });
 
-      console.log(`✅ Auto-compounded ${totalRewards} tokens into ${bestPool.symbol} pool`);
+      console.info(`✅ Auto-compounded ${totalRewards} tokens into ${bestPool.symbol} pool`);
 
       return {
         hash: stakeResult.hash,
@@ -772,7 +771,7 @@ export class DeFiModule {
     const userAddress = await this.getAddress();
 
     try {
-      console.log(`Supplying ${amount} ${asset} to Venus...`);
+      console.info(`Supplying ${amount} ${asset} to Venus...`);
 
       if (asset === 'BNB' || asset === 'WBNB') {
         const data = encodeFunctionData({
@@ -789,7 +788,7 @@ export class DeFiModule {
           value: amountBigInt
         });
 
-        console.log(`✅ Supplied BNB. Hash: ${hash}`);
+        console.info(`✅ Supplied BNB. Hash: ${hash}`);
         return { hash };
       } else {
         const tokenAddress = this.resolveTokenAddress(asset);
