@@ -30,7 +30,7 @@ export class NFTModule {
     const data = encodeFunctionData({
       abi: DYNAMIC_BADGE_ABI,
       functionName: 'mint',
-      args: [toAddress(to), onchainMetadata]
+      args: [toAddress(to), onchainMetadata, tier]
     });
 
     // Send transaction
@@ -87,10 +87,11 @@ export class NFTModule {
     }
 
     // Encode batch mint
+    const badgeTypes = badges.map(b => b.tier || 'Bronze');
     const data = encodeFunctionData({
       abi: DYNAMIC_BADGE_ABI,
-      functionName: 'mintBatch',
-      args: [recipients as `0x${string}`[], metadataArray]
+      functionName: 'batchMint',
+      args: [recipients as `0x${string}`[], metadataArray, badgeTypes]
     });
 
     const hash = await this.walletClient.sendTransaction({
@@ -227,17 +228,19 @@ const DYNAMIC_BADGE_ABI = [
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'to', type: 'address' },
-      { name: 'metadata', type: 'string' }
+      { name: 'metadata', type: 'string' },
+      { name: 'badgeType', type: 'string' }
     ],
     outputs: [{ name: 'tokenId', type: 'uint256' }]
   },
   {
-    name: 'mintBatch',
+    name: 'batchMint',
     type: 'function',
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'recipients', type: 'address[]' },
-      { name: 'metadataArray', type: 'string[]' }
+      { name: 'metadatas', type: 'string[]' },
+      { name: 'badgeTypes', type: 'string[]' }
     ],
     outputs: [{ name: 'tokenIds', type: 'uint256[]' }]
   },

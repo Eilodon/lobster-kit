@@ -34,7 +34,7 @@ describe('SecurityModule: Immune Boost (Fail Safe)', () => {
         // Assert Fail Safe behavior
         expect(result.isHoneypot).toBe(true);
         expect(result.riskScore).toBe(100);
-        expect(result.risks).toContain('🚨 CRITICAL SYSTEM FAILURE: Security scan could not complete. ASSUMING HOSTILE.');
+        expect(result.risks).toContain('⚠️ Security Scan Failed (Network/API Error) - Trading Paused for Safety');
     });
 
     it('should return safe result when API succeeds and returns clean data', async () => {

@@ -433,22 +433,54 @@ export class SecurityModule {
     }
 
     try {
-      const data = encodeFunctionData({
-        abi: parseAbi(['function batchRevoke(address[] tokens, address[] spenders)']),
-        functionName: 'batchRevoke',
+      // ApprovalRevoker is a registry — cannot directly revoke on user's behalf.
+      // Step 1: Flag approvals for revocation via the agent
+      const flagData = encodeFunctionData({
+        abi: parseAbi(['function flagApprovalsBatch(address user, address[] tokens, address[] spenders)']),
+        functionName: 'flagApprovalsBatch',
         args: [
+          toAddress(await this.getAddress()),
           tokens as `0x${string}`[],
           spenders as `0x${string}`[]
         ]
       });
 
-      const hash = await this.walletClient.sendTransaction({
+      await this.walletClient.sendTransaction({
         to: toAddress(APPROVAL_REVOKER),
-        data
+        data: flagData
+      });
+
+      // Step 2: Get revocation calldata and execute each from user's context
+      const [revokeTokens, revokeCalldatas] = await this.publicClient.readContract({
+        address: toAddress(APPROVAL_REVOKER),
+        abi: parseAbi(['function getRevocationCalldata(address user) view returns (address[] tokens, bytes[] calldatas)']),
+        functionName: 'getRevocationCalldata',
+        args: [toAddress(await this.getAddress())]
+      }) as [readonly `0x${string}`[], readonly `0x${string}`[]];
+
+      const hashes: string[] = [];
+      for (let i = 0; i < revokeTokens.length; i++) {
+        const hash = await this.walletClient.sendTransaction({
+          to: revokeTokens[i],
+          data: revokeCalldatas[i]
+        });
+        hashes.push(hash);
+      }
+
+      // Step 3: Clear flagged approvals
+      const clearData = encodeFunctionData({
+        abi: parseAbi(['function clearFlaggedApprovals(uint256 limit)']),
+        functionName: 'clearFlaggedApprovals',
+        args: [0n] // 0 = clear all
+      });
+
+      await this.walletClient.sendTransaction({
+        to: toAddress(APPROVAL_REVOKER),
+        data: clearData
       });
 
       console.error(`✅ Batch revoked ${tokens.length} approvals`);
-      return { hash, count: tokens.length };
+      return { hash: hashes[0] || '', count: tokens.length };
 
     } catch (error) {
       console.error('Error batch revoking approvals:', error);

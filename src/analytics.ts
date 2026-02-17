@@ -1,5 +1,5 @@
 import { WalletClient, PublicClient, formatEther, formatUnits, parseAbi } from 'viem';
-import { ClawKitConfig, PortfolioHealth, Position, ClawKitWalletClient, getTokenDecimals } from './types';
+import { ClawKitConfig, PortfolioHealth, Position, ClawKitWalletClient, getTokenDecimals, resolveTokenAddress } from './types';
 import axios from 'axios';
 
 export class AnalyticsModule {
@@ -267,22 +267,31 @@ export class AnalyticsModule {
             })
           ]);
 
-          // Simple LP Valuation: value = (reserve0 * price0 + reserve1 * price1) / totalSupply * userBalance
-          // For BNB-BUSD: Reserve0 is BNB, Reserve1 is BUSD (usually, need to check token0/token1)
-          // We'll assume a simplified 50/50 split value for robustness if exact token ordering isn't checked
-          // Value = 2 * (Reserve of Stable * Price of Stable) / TotalSupply * UserBalance
-
-          // However, for accuracy let's use the known prices we have.
-          // Assuming lpToken.symbol is 'BNB-BUSD', we can derive assets.
+          // FIX P1-03: Query on-chain token0/token1 to correctly map reserves
           const assets = lpToken.symbol.split('-');
-          const token0 = assets[0];
-          const token1 = assets[1];
-          const price0 = prices[token0] || 0;
-          const price1 = prices[token1] || 0;
+          const labelToken0Symbol = assets[0];
+          const labelToken1Symbol = assets[1];
+
+          // Get actual on-chain token0 address to determine reserve ordering
+          const token0Address = await this.publicClient.readContract({
+            address: lpToken.address as `0x${string}`,
+            abi: parseAbi(['function token0() view returns (address)']),
+            functionName: 'token0'
+          }) as `0x${string}`;
+
+          // Resolve expected token addresses
+          const labelToken0Address = resolveTokenAddress(labelToken0Symbol);
+          const isCorrectOrder = token0Address.toLowerCase() === labelToken0Address?.toLowerCase();
+
+          const actualToken0 = isCorrectOrder ? labelToken0Symbol : labelToken1Symbol;
+          const actualToken1 = isCorrectOrder ? labelToken1Symbol : labelToken0Symbol;
+
+          const price0 = prices[actualToken0] || 0;
+          const price1 = prices[actualToken1] || 0;
 
           // FIX Bug #4: Dynamic Decimals for LP Valuation
-          const r0 = parseFloat(formatUnits(reserves[0], getTokenDecimals(token0)));
-          const r1 = parseFloat(formatUnits(reserves[1], getTokenDecimals(token1)));
+          const r0 = parseFloat(formatUnits(reserves[0], getTokenDecimals(actualToken0)));
+          const r1 = parseFloat(formatUnits(reserves[1], getTokenDecimals(actualToken1)));
           const ts = parseFloat(formatEther(totalSupply));
           const ub = parseFloat(formatEther(balance));
 

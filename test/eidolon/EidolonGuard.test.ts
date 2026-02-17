@@ -258,6 +258,36 @@ describe('EidolonGuard', () => {
             expect(result.riskScore).toBeGreaterThan(30);
             expect(result.reason).toContain('Risk score too high');
         });
+
+        it('should reject trade when amountUSD is missing even if txCandidate exists', async () => {
+            const guard = new EidolonGuard(mockKit, {
+                maxRiskScore: 100,
+                minConfidence: 0,
+                riskParameters: {
+                    maxPositionSize: 1000,
+                    maxDrawdown: 100,
+                    minConfidence: 0,
+                    cooldownPeriod: 0
+                }
+            });
+            await guard.init();
+
+            const txCandidate = {
+                to: '0xTarget',
+                data: '0x',
+                value: 0n,
+                account: '0xSender'
+            };
+
+            const result = await guard.validateAction('BUY', {
+                tokenAddress: '0xToken',
+                txCandidate
+            });
+
+            expect(result.approved).toBe(false);
+            expect(result.reason).toContain("Missing or invalid 'amountUSD'");
+        });
+
         it('should BLOCK transaction if BLAST RADIUS is exceeded (>10 contracts)', async () => {
             const guard = new EidolonGuard(mockKit, {
                 maxRiskScore: 100,

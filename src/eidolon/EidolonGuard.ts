@@ -67,6 +67,9 @@ export class EidolonGuard {
     private securityCache: Map<string, { score: import('./WasmAdapter').SecurityScore, timestamp: number }> = new Map();
     private readonly CACHE_TTL = 60000; // 60 seconds
 
+    // Teardown
+    private snapshotIntervalId: ReturnType<typeof setInterval> | null = null;
+
     // Persistence
     private static readonly LISTS_FILE = path.resolve(process.cwd(), '.eidolon', 'antirug_lists.json');
 
@@ -123,12 +126,25 @@ export class EidolonGuard {
         });
         this.marketStream.start();
 
-        // FIX L7: Automate Snapshot Loop (Every 15s - ~5 blocks)
-        setInterval(() => {
+        // FIX P1-06: Store interval ID for cleanup
+        this.snapshotIntervalId = setInterval(() => {
             this.updateSnapshot().catch(e => console.warn('Snapshot failed', e));
         }, 15000);
 
         console.log('   🧠 Memory Loaded & Senses Active & Snapshot Loop Started');
+    }
+
+    /**
+     * 🧹 TEARDOWN: Stop all background loops and listeners
+     */
+    public destroy(): void {
+        if (this.snapshotIntervalId) {
+            clearInterval(this.snapshotIntervalId);
+            this.snapshotIntervalId = null;
+        }
+        this.marketStream.stop?.();
+        this.securityCache.clear();
+        console.log('🛡️ EIDOLON GUARD DESTROYED');
     }
 
     /**
@@ -220,11 +236,31 @@ export class EidolonGuard {
         // 🧠 FIXED: Removed side-effect from validation path.
         // updateSnapshot() must be called externally or via loop.
 
+        const isTradeAction = action === 'BUY' || action === 'SELL';
+        if (isTradeAction) {
+            if (
+                context.amountUSD === undefined ||
+                context.amountUSD === null ||
+                !Number.isFinite(context.amountUSD) ||
+                context.amountUSD <= 0
+            ) {
+                return {
+                    approved: false,
+                    riskScore: 100,
+                    confidence: 0,
+                    reason: `CRITICAL: Missing or invalid 'amountUSD' context for ${action} action.`
+                };
+            }
+        }
 
         // 1. HARD INVARIANT CHECK (The Citadel - RUST)
-        if (context.amountUSD) {
+        if (context.amountUSD !== undefined && context.amountUSD !== null) {
             // Fix: Calculate predicted impact (default to 1% slippage if unknown)
-            const slippage = context.estimatedSlippage ?? 0.01;
+            const slippage = (
+                context.estimatedSlippage !== undefined &&
+                    Number.isFinite(context.estimatedSlippage) &&
+                    context.estimatedSlippage >= 0
+            ) ? context.estimatedSlippage : 0.01;
             const predictedImpact = context.amountUSD * slippage;
             const invariantCheck = this.valueInvariant.check_invariant(context.amountUSD, predictedImpact) as unknown as import('./WasmAdapter').InvariantCheckResult;
 
@@ -327,7 +363,7 @@ export class EidolonGuard {
         }
 
         // Gate 4: MULTIVERSE CHECK (Shadow Simulation)
-        if ((action === 'BUY' || action === 'SELL') && context.txCandidate) {
+        if (isTradeAction && context.txCandidate) {
             console.log('🔮 MULTIVERSE CHECK: Spawning Shadow Clone...');
             const shadowResult = await this.simulator.simulate(context.txCandidate);
 
@@ -361,16 +397,6 @@ export class EidolonGuard {
             }
 
             console.log(`✅ Shadow Clone survived. Cost: ${shadowResult.gasUsed.toString()} gas. Blast Radius: ${touched.length}`);
-        } else if (action === 'BUY' || action === 'SELL') {
-            // Warn if no candidate provided for simulation
-            if (context.amountUSD === undefined || context.amountUSD === null) {
-                return {
-                    approved: false,
-                    riskScore: 100,
-                    confidence: decision.confidence,
-                    reason: `CRITICAL: Missing 'amountUSD' context for ${action} action.`
-                };
-            }
         }
 
         const adjustedPositionSize = this.config.riskParameters.maxPositionSize * riskMultiplier;
@@ -427,4 +453,3 @@ export class EidolonGuard {
         return Math.min(100, Math.max(0, score));
     }
 }
-

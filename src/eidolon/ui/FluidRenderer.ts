@@ -245,12 +245,18 @@ export class FluidRenderer {
 
     private programs: any = {};
     private textures: any = {};
-    private framebuffers: any = {};
+    private quadBuffer: WebGLBuffer | null = null;
 
     // State
     private lastUpdateTime: number = 0;
     private lastEmotionalState: EmotionalState | null = null;
     public color: { r: number, g: number, b: number } = { r: 0.2, g: 0.5, b: 1.0 }; // Default Blue
+
+    // P1-07: Store refs for cleanup
+    private splatIntervalId: ReturnType<typeof setInterval> | null = null;
+    private resizeHandler: (() => void) | null = null;
+    private animationFrameId: number | null = null;
+    private disposed: boolean = false;
 
     constructor(canvas: HTMLCanvasElement, config: Partial<FluidConfig> = {}) {
         this.canvas = canvas;
@@ -265,15 +271,19 @@ export class FluidRenderer {
         // OES_texture_float_linear is crucial for smooth advection
         gl.getExtension('OES_texture_float_linear');
 
+        this.initGeometry();
         this.initShaders();
         this.initFramebuffers();
         this.resize();
 
-        window.addEventListener('resize', () => this.resize());
+        // FIX P1-07: Store listener and interval refs for teardown
+        this.resizeHandler = () => this.resize();
+        if (typeof window !== 'undefined') {
+            window.addEventListener('resize', this.resizeHandler);
+        }
 
-        // Random splats for liveliness
-        setInterval(() => {
-            if (!this.config.PAUSED)
+        this.splatIntervalId = setInterval(() => {
+            if (!this.disposed && !this.config.PAUSED)
                 this.splat(Math.random(), Math.random(), (Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200, this.color);
         }, 3000);
     }
@@ -316,6 +326,7 @@ export class FluidRenderer {
     }
 
     public splat(x: number, y: number, dx: number, dy: number, color: { r: number, g: number, b: number }) {
+        if (this.disposed) return;
         const gl = this.gl;
         this.programs.splat.bind();
         gl.uniform1i(this.programs.splat.uniforms.uTarget, this.textures.velocity.read.attach(0));
@@ -333,15 +344,22 @@ export class FluidRenderer {
     }
 
     public render() {
+        if (this.disposed) return;
         if (this.config.PAUSED) return;
 
-        const dt = Math.min((Date.now() - this.lastUpdateTime) / 1000, 0.016);
-        this.lastUpdateTime = Date.now();
+        const now = Date.now();
+        if (this.lastUpdateTime === 0) {
+            this.lastUpdateTime = now;
+        }
+        const dt = Math.min((now - this.lastUpdateTime) / 1000, 0.016);
+        this.lastUpdateTime = now;
 
         this.step(dt);
         this.display();
 
-        requestAnimationFrame(() => this.render());
+        if (!this.disposed) {
+            this.animationFrameId = requestAnimationFrame(() => this.render());
+        }
     }
 
     private step(dt: number) {
@@ -432,6 +450,16 @@ export class FluidRenderer {
         this.programs.display = this.createProgram(baseVertexShader, displayShader);
     }
 
+    private initGeometry() {
+        const gl = this.gl;
+        this.quadBuffer = gl.createBuffer();
+        if (!this.quadBuffer) {
+            throw new Error('Failed to create quad buffer');
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
+    }
+
     private createProgram(vertexShader: string, fragmentShader: string) {
         const gl = this.gl;
         const program = gl.createProgram();
@@ -447,6 +475,10 @@ export class FluidRenderer {
         if (!gl.getProgramParameter(program, gl.LINK_STATUS))
             console.error(gl.getProgramInfoLog(program));
 
+        // No longer needed after linking; free shader objects immediately.
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+
         const uniforms: any = {};
         const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
         for (let i = 0; i < count; i++) {
@@ -459,13 +491,13 @@ export class FluidRenderer {
             uniforms,
             bind: () => {
                 gl.useProgram(program);
-                // Setup quad
-                const buffer = gl.createBuffer();
-                gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
+                if (!this.quadBuffer) return;
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
                 const loc = gl.getAttribLocation(program, 'aPosition');
-                gl.enableVertexAttribArray(loc);
-                gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+                if (loc >= 0) {
+                    gl.enableVertexAttribArray(loc);
+                    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+                }
             }
         };
     }
@@ -488,9 +520,7 @@ export class FluidRenderer {
         const simRes = this.config.SIM_RESOLUTION;
         const dyeRes = this.config.DYE_RESOLUTION;
 
-        const texType = this.gl.getExtension('OES_texture_float_linear') ? this.gl.FLOAT : this.gl.HALF_FLOAT;
-        // In WebGL2 HALF_FLOAT is HALF_FLOAT
-        const type = this.gl.FLOAT; // Forcing float for now, usually supported in WebGL2
+        const type = this.gl.FLOAT;
 
         this.textures.velocity = this.createDoubleFBO(simRes, simRes, type);
         this.textures.density = this.createDoubleFBO(dyeRes, dyeRes, type);
@@ -507,7 +537,7 @@ export class FluidRenderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.FLOAT, null);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, type, null);
 
         const fbo = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -530,16 +560,77 @@ export class FluidRenderer {
         let fbo1 = this.createFBO(w, h, type);
         let fbo2 = this.createFBO(w, h, type);
 
-        return {
+        // FIX P1-08: Return object that updates its OWN read/write properties
+        const dblFbo = {
             read: fbo1,
             write: fbo2,
             swap: () => {
-                let temp = fbo1;
-                fbo1 = fbo2;
-                fbo2 = temp;
-                this.textures.velocity.read = fbo1; // This logic is slightly flawed in this simple impl but sufficient for now
+                let temp = dblFbo.read;
+                dblFbo.read = dblFbo.write;
+                dblFbo.write = temp;
             }
         };
+        return dblFbo;
+    }
+
+    /**
+     * 🧹 DISPOSE: Release all GPU resources, listeners, timers
+     */
+    public dispose(): void {
+        this.disposed = true;
+
+        if (this.splatIntervalId) {
+            clearInterval(this.splatIntervalId);
+            this.splatIntervalId = null;
+        }
+        if (this.resizeHandler) {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('resize', this.resizeHandler);
+            }
+            this.resizeHandler = null;
+        }
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+
+        // Clean up WebGL resources
+        const gl = this.gl;
+        for (const key of Object.keys(this.programs)) {
+            gl.deleteProgram(this.programs[key]?.program);
+        }
+        this.programs = {};
+
+        for (const key of Object.keys(this.textures)) {
+            const target = this.textures[key];
+            if (target?.read && target?.write) {
+                this.deleteRenderTarget(target.read);
+                this.deleteRenderTarget(target.write);
+            } else {
+                this.deleteRenderTarget(target);
+            }
+        }
+        this.textures = {};
+
+        if (this.quadBuffer) {
+            gl.deleteBuffer(this.quadBuffer);
+            this.quadBuffer = null;
+        }
+
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+
+        console.log('🌊 FluidRenderer disposed');
+    }
+
+    private deleteRenderTarget(target: any) {
+        if (!target) return;
+        const gl = this.gl;
+        if (target.texture) {
+            gl.deleteTexture(target.texture);
+        }
+        if (target.fbo) {
+            gl.deleteFramebuffer(target.fbo);
+        }
     }
 
     private resize() {

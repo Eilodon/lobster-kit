@@ -200,11 +200,11 @@ export class GasModule {
 
       const data = encodeFunctionData({
         abi: parseAbi([
-          'function executeBatch(address[] targets, bytes[] datas, uint256[] values)',
-          'function executeBatchTolerant(address[] targets, bytes[] datas, uint256[] values)'
+          'function executeBatch(address[] targets, uint256[] values, bytes[] datas)',
+          'function executeBatchTolerant(address[] targets, uint256[] values, bytes[] datas)'
         ]),
         functionName: functionName,
-        args: [targets, datas, values]
+        args: [targets, values, datas]
       });
 
       // Estimate batched gas
@@ -339,9 +339,9 @@ export class GasModule {
       const values = transactions.map(tx => tx.value || 0n);
 
       const data = encodeFunctionData({
-        abi: parseAbi(['function executeBatch(address[] targets, bytes[] datas, uint256[] values)']),
+        abi: parseAbi(['function executeBatch(address[] targets, uint256[] values, bytes[] datas)']),
         functionName: 'executeBatch',
-        args: [targets, datas, values]
+        args: [targets, values, datas]
       });
 
       const batchGas = await this.publicClient.estimateGas({

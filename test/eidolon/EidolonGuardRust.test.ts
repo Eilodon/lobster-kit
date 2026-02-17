@@ -86,7 +86,7 @@ describe('EidolonGuard: Rust Integration', () => {
 
         (guard as any).securityOracle = { checkToken: vi.fn().mockResolvedValue({}) };
         (guard as any).antiRug = { compute_score: vi.fn().mockReturnValue(mockScore) };
-        (guard as any).mind.explain.mockResolvedValue({ confidence: 90 });
+        vi.spyOn((guard as any).mind, 'explain').mockResolvedValue({ confidence: 90 } as any);
 
         // First Call
         await guard.validateAction('BUY', { amountUSD: 100, tokenAddress: token });

@@ -1,4 +1,4 @@
-import { ThermodynamicEngine, ThermoConfig } from './ai/ThermodynamicEngine';
+import { ThermodynamicEngine } from './ai/ThermodynamicEngine';
 import { BreathEngine, BreathPhase } from './ai/BreathEngine';
 import { Vector } from './ai/LinearAlgebra';
 import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
@@ -33,6 +33,8 @@ export class EmotionalCore {
 
   private readonly SNAPSHOT_KEY = 'emotional_core_snapshot.json';
   private readonly LOG_KEY = 'emotional_core.log'; // Keep for audit trail if needed
+  private unsubs: Array<() => void> = [];
+  private disposed = false;
 
   constructor(storage?: AppendOnlyAdapter) {
     this.storage = storage || new AppendOnlyAdapter();
@@ -60,31 +62,36 @@ export class EmotionalCore {
 
   private setupEventListeners() {
     // Metabolic Tax: Every block costs energy
-    this.bus.subscribe(EidolonEventType.BLOCK_MINED, () => {
+    const unsubBlock = this.bus.subscribe(EidolonEventType.BLOCK_MINED, () => {
+      if (this.disposed) return;
       const now = Date.now();
       const dt = (now - this.state.lastUpdate) / 1000;
       this.tick(this.state.volatility, dt);
     });
+    this.unsubs.push(unsubBlock);
 
     // Trauma: Instant Cortisol Spike
-    this.bus.subscribe(EidolonEventType.TRAUMA, (event: any) => {
+    const unsubTrauma = this.bus.subscribe(EidolonEventType.TRAUMA, (event: any) => {
+      if (this.disposed) return;
       const severity = event.payload.severity || 10;
       this.stimulate(severity, 'DANGER');
     });
+    this.unsubs.push(unsubTrauma);
   }
 
   /**
    * Main simulation tick (Now driven by Block Events)
    */
   async tick(marketVolatility: number = 0.1, dt?: number) {
+    if (this.disposed) return this.state;
     const now = Date.now();
-    const deltaTime = dt || (now - this.state.lastUpdate) / 1000; // seconds
+    const deltaTime = dt ?? (now - this.state.lastUpdate) / 1000; // seconds
     if (deltaTime <= 0) return this.state;
     this.stateModified = true;
 
-    // FIX: NaN Guard for Volatility
-    if (isNaN(marketVolatility)) {
-      console.warn('⚠️ Market Volatility is NaN, defaulting to 0.1');
+    // Fail closed on invalid volatility input.
+    if (!Number.isFinite(marketVolatility) || marketVolatility < 0) {
+      console.warn('⚠️ Market Volatility is invalid, defaulting to 0.1');
       marketVolatility = 0.1;
     }
 
@@ -198,48 +205,52 @@ export class EmotionalCore {
    * FIXED: Uses Relative ROI (Sharpe-like) instead of absolute value
    */
   stimulate(value: number, type: 'PROFIT' | 'LOSS' | 'DANGER', capitalAtRisk: number = 0) {
+    if (this.disposed) return;
     this.stateModified = true;
+    const safeValue = Number.isFinite(value) ? value : (type === 'DANGER' ? 30 : 0);
+    const safeCapital = Number.isFinite(capitalAtRisk) && capitalAtRisk > 0 ? capitalAtRisk : 0;
+
     // 1. Calculate Relative Impact (ROI)
     // If capital is 0 (legacy/danger), use raw value but capped
-    let impact = value;
+    let impact = safeValue;
 
-    if (capitalAtRisk > 0) {
+    if (safeCapital > 0) {
       // 10% gain ($10 on $100) = 0.1
       // We scale this to dopamine units (0-100). 
       // A 10% gain is HUGE in trading, let's say that's +20 dopamine.
-      const roi = value / capitalAtRisk;
+      const roi = safeValue / safeCapital;
       impact = roi * 200; // 0.05 (5%) -> +10 Dopamine
     } else {
       // Legacy fallback: Logarithmic scaling to prevent "Whale Bias"
       // $10 -> 2.3, $100 -> 4.6, $1000 -> 6.9
       if (type !== 'DANGER') {
-        impact = Math.log(value + 1) * 2;
+        impact = Math.log(Math.max(0, safeValue) + 1) * 2;
       }
     }
 
     // Cap single-event impact to prevent emotional overdose
-    impact = Math.min(30, impact);
+    impact = Math.max(0, Math.min(30, impact));
 
     switch (type) {
       case 'PROFIT':
         this.state.dopamine = Math.min(100, this.state.dopamine + impact);
         this.state.cortisol = Math.max(0, this.state.cortisol - (impact * 0.5));
-        console.log(`🧠 STIMULUS: ${type} (+$${value.toFixed(2)} on $${capitalAtRisk}) -> +${impact.toFixed(1)} Dopamine`);
+        console.log(`🧠 STIMULUS: ${type} (+$${safeValue.toFixed(2)} on $${safeCapital}) -> +${impact.toFixed(1)} Dopamine`);
         break;
       case 'LOSS':
         // Losses hurt 2x more (Prospect Theory)
         this.state.cortisol = Math.min(100, this.state.cortisol + (impact * 2));
         this.state.dopamine = Math.max(0, this.state.dopamine - impact);
-        console.log(`🧠 STIMULUS: ${type} (-$${value.toFixed(2)} on $${capitalAtRisk}) -> +${(impact * 2).toFixed(1)} Cortisol`);
+        console.log(`🧠 STIMULUS: ${type} (-$${safeValue.toFixed(2)} on $${safeCapital}) -> +${(impact * 2).toFixed(1)} Cortisol`);
         break;
-      case 'DANGER':
-      case 'DANGER':
+      case 'DANGER': {
         // FIX L5: Scale impact by severity
-        const dangerImpact = Math.min(30, value); // Cap outcome
+        const dangerImpact = Math.max(0, Math.min(30, safeValue)); // Cap outcome
         this.state.arousal = Math.min(1.0, this.state.arousal + (dangerImpact / 100)); // Max +0.3 for severity 30
         this.state.cortisol = Math.min(100, this.state.cortisol + (dangerImpact * 0.6)); // +18 for severity 30
-        console.log(`🧠 STIMULUS: DANGER (Severity ${value}) -> Arousal +${(dangerImpact / 100).toFixed(2)}, Cortisol +${(dangerImpact * 0.6).toFixed(1)}`);
+        console.log(`🧠 STIMULUS: DANGER (Severity ${safeValue}) -> Arousal +${(dangerImpact / 100).toFixed(2)}, Cortisol +${(dangerImpact * 0.6).toFixed(1)}`);
         break;
+      }
     }
     this.tick(this.state.volatility); // Force update
   }
@@ -328,8 +339,15 @@ export class EmotionalCore {
    * 🛑 KILL SWITCH: Stop all internal loops and listeners
    */
   public dispose() {
-    // No timeout to clear anymore
-    // Unsubscribe from bus (Needs method in Bus)
-    // this.bus.unsubscribeAll(this); 
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const unsub of this.unsubs) {
+      try {
+        unsub();
+      } catch {
+        // no-op
+      }
+    }
+    this.unsubs = [];
   }
 }

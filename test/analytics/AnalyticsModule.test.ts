@@ -15,14 +15,15 @@ describe('AnalyticsModule', () => {
     } as unknown as PublicClient;
 
     const mockWalletClient = {
-        getAddresses: vi.fn().mockResolvedValue(['0xUser'])
+        getAddresses: vi.fn().mockResolvedValue(['0xUser']),
+        account: { address: '0xUser', type: 'local' }
     } as unknown as WalletClient;
 
     const mockConfig = {};
 
     beforeEach(() => {
         vi.resetAllMocks();
-        analytics = new AnalyticsModule(mockWalletClient, mockPublicClient, mockConfig);
+        analytics = new AnalyticsModule(mockWalletClient as any, mockPublicClient, mockConfig);
 
         // Mock CoinGecko response defaults
         (axios.get as any).mockResolvedValue({
@@ -46,7 +47,7 @@ describe('AnalyticsModule', () => {
             }
             // Mock getReserves (10 BNB + 6000 USDT)
             if (args.functionName === 'getReserves') {
-                return [parseEther('10'), parseEther('6000'), 0];
+                return [parseEther('10'), 6000000000n, 0]; // 6000 USDT (6 decimals)
             }
             // Mock totalSupply (100 LP Total)
             if (args.functionName === 'totalSupply') {
@@ -69,8 +70,9 @@ describe('AnalyticsModule', () => {
         (mockPublicClient.readContract as any).mockImplementation((args: any) => {
             if (args.address === LP_ADDR) {
                 if (args.functionName === 'balanceOf') return parseEther('10');
-                if (args.functionName === 'getReserves') return [parseEther('10'), parseEther('6000'), 0];
+                if (args.functionName === 'getReserves') return [parseEther('10'), 6000000000n, 0]; // 6000 USDT (6 dec)
                 if (args.functionName === 'totalSupply') return parseEther('100');
+                if (args.functionName === 'token0') return '0x0000000000000000000000000000000000000000'; // BNB is token0
             }
             return BigInt(0);
         });
@@ -87,6 +89,35 @@ describe('AnalyticsModule', () => {
         const lpPos = health.positions.find(p => p.asset === 'BNB-USDT');
         expect(lpPos).toBeDefined();
         // Allow small float variance
+        expect(lpPos?.valueUSD).toBeCloseTo(1200, 0);
+    });
+
+    it('should handle reversed token order for LP valuation (P1-03)', async () => {
+        // Mock BNB Balance
+        (mockPublicClient.getBalance as any).mockResolvedValue(parseEther('1.0'));
+
+        const LP_ADDR = '0x16b9a82891338f9bA80E2D6970FddA79D1eb0daE';
+        const USDT_ADDR = '0x9e5AAC1Ba1a2e6aEd6b32689DFcF62A509Ca96f3'; // Confirmed USDT addr in OPBNB_CONFIG
+
+        (mockPublicClient.readContract as any).mockImplementation((args: any) => {
+            if (args.address === LP_ADDR) {
+                // Return reversed token0: USDT is token0 now!
+                if (args.functionName === 'token0') return USDT_ADDR;
+
+                // Return reversed reserves: [6000 USDT (6 dec), 10 BNB (18 dec)]
+                // Note: parseEther("6000") creates 18 decimals, so for USDT (6 decimals) we need 6000 * 10^6
+                if (args.functionName === 'getReserves') return [6000000000n, parseEther('10'), 0];
+
+                if (args.functionName === 'totalSupply') return parseEther('100');
+                if (args.functionName === 'balanceOf') return parseEther('10');
+            }
+            return BigInt(0);
+        });
+
+        const health = await analytics.portfolioHealth('0xUser');
+        const lpPos = health.positions.find(p => p.asset === 'BNB-USDT');
+
+        // Should still be ~1200 USD
         expect(lpPos?.valueUSD).toBeCloseTo(1200, 0);
     });
 

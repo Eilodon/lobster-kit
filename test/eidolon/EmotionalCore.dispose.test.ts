@@ -1,49 +1,69 @@
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EmotionalCore } from '../../src/eidolon/EmotionalCore';
+import { EidolonBus, EidolonEventType } from '../../src/eidolon/events/EidolonBus';
 
-describe('EmotionalCore: Memory Management & Dispose', () => {
+describe('EmotionalCore: Dispose', () => {
     let core: EmotionalCore;
+    let bus: EidolonBus;
 
     beforeEach(() => {
-        vi.useFakeTimers();
         core = new EmotionalCore();
+        bus = EidolonBus.getInstance();
     });
 
     afterEach(() => {
-        vi.useRealTimers();
+        core.dispose();
     });
 
-    it.skip('should debounce saves to prevent I/O epilepsy', async () => {
-        const saveSpy = vi.spyOn(core, 'saveState').mockResolvedValue(undefined);
+    it('should unsubscribe BLOCK_MINED listener on dispose', () => {
+        const tickSpy = vi.spyOn(core, 'tick').mockResolvedValue(core.getCurrentState());
 
-        // Trigger multiple saves rapidly
-        await core.debouncedSave();
-        await core.debouncedSave();
-        await core.debouncedSave();
+        bus.emitEvent({
+            type: EidolonEventType.BLOCK_MINED,
+            timestamp: Date.now(),
+            payload: {
+                blockNumber: 1n,
+                hash: '0x01',
+                timestamp: 1n
+            }
+        });
+        expect(tickSpy).toHaveBeenCalledTimes(1);
 
-        expect(saveSpy).not.toHaveBeenCalled(); // Should handle immediately? No, setTimeout 10000
-
-        // Fast forward 5s
-        vi.advanceTimersByTime(5000);
-        expect(saveSpy).not.toHaveBeenCalled();
-
-        // Fast forward another 5.1s
-        vi.advanceTimersByTime(5100);
-        expect(saveSpy).toHaveBeenCalledTimes(1); // Should be called ONCE
-    });
-
-    it.skip('should clear timeout on dispose (Zombie Process Fix)', async () => {
-        const saveSpy = vi.spyOn(core, 'saveState').mockResolvedValue(undefined);
-
-        await core.debouncedSave();
-
-        // Dispose before timer fires
         core.dispose();
 
-        // Fast forward past timeout
-        vi.advanceTimersByTime(11000);
+        bus.emitEvent({
+            type: EidolonEventType.BLOCK_MINED,
+            timestamp: Date.now(),
+            payload: {
+                blockNumber: 2n,
+                hash: '0x02',
+                timestamp: 2n
+            }
+        });
+        expect(tickSpy).toHaveBeenCalledTimes(1);
+    });
 
-        expect(saveSpy).not.toHaveBeenCalled(); // Should NOT be called
+    it('should unsubscribe TRAUMA listener on dispose', () => {
+        const stimulateSpy = vi.spyOn(core, 'stimulate');
+
+        bus.emitEvent({
+            type: EidolonEventType.TRAUMA,
+            timestamp: Date.now(),
+            payload: {
+                severity: 25
+            }
+        });
+        expect(stimulateSpy).toHaveBeenCalledWith(25, 'DANGER');
+
+        core.dispose();
+
+        bus.emitEvent({
+            type: EidolonEventType.TRAUMA,
+            timestamp: Date.now(),
+            payload: {
+                severity: 10
+            }
+        });
+        expect(stimulateSpy).toHaveBeenCalledTimes(1);
     });
 });

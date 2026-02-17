@@ -93,10 +93,16 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
             // 2. Small Probe ($100) -> Returns good price
             // 3. Large Probe ($10k) -> Returns bad price
 
-            mockKit.defi.getRealQuote
-                .mockResolvedValueOnce(600000000n)  // Price Check: 1 WBNB -> 600 USDT
-                .mockResolvedValueOnce(100000000n)  // Small Probe: 0.166 BNB -> $100 (Perfect)
-                .mockResolvedValueOnce(9000000000n); // Large Probe: 16.6 BNB -> $9000 (Expected $10000) -> 10% Slippage
+            mockKit.defi.getRealQuote.mockImplementation(async (tIn, tOut, amount, slip) => {
+                const amt = Number(amount);
+                // 1. Price Check (1 BNB ~ 1e18) -> 600 USD
+                if (amt > 0.9e18 && amt < 1.1e18) return { amountOutMin: 600000000n }; // 600e6
+                // 2. Small Probe (~0.16 BNB) -> 100 USD
+                if (amt < 0.2e18) return { amountOutMin: 100000000n }; // 100e6
+                // 3. Large Probe (~16.6 BNB) -> 9000 USD (Slippage)
+                if (amt > 10e18) return { amountOutMin: 9000000000n }; // 9000e6
+                return { amountOutMin: 0n };
+            });
 
             const state = await oracle.sense();
 
@@ -115,12 +121,29 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
             const oracle = new ClawOracle(mockKit as any);
 
             mockKit.defi.getRealQuote
-                .mockResolvedValueOnce(600000000n)   // Price Check: $600
-                .mockResolvedValueOnce(100000000n)   // Small: $100 -> $100
-                .mockResolvedValueOnce(10000000000n); // Large: $10000 -> $10000
+                .mockResolvedValueOnce({ amountOutMin: 600000000n })   // Price Check: $600
+                .mockResolvedValueOnce({ amountOutMin: 100000000n })   // Small: $100 -> $100
+                .mockResolvedValueOnce({ amountOutMin: 10000000000n }); // Large: $10000 -> $10000
 
             const state = await oracle.sense();
             expect(state.liquidityDepth).toBe('DEEP');
+        });
+
+        it('should fail-closed on critical oracle divergence', async () => {
+            const mockKit = {
+                config: {
+                    pythConfig: { priceServiceUrl: 'https://hermes.pyth.network' }
+                },
+                defi: { getRealQuote: vi.fn() },
+                gas: { getOptimalExecutionTime: vi.fn().mockResolvedValue({ currentGasPrice: '0.000005' }) }
+            };
+            const oracle = new ClawOracle(mockKit as any);
+            vi.spyOn((oracle as any).pyth, 'getPrice').mockResolvedValue(600);
+
+            // 1 BNB quote reports only $100 -> >80% divergence
+            mockKit.defi.getRealQuote.mockResolvedValue({ amountOutMin: 100000000n });
+
+            await expect(oracle.getBNBPrice()).rejects.toThrow(/SENSORY BLACKOUT/);
         });
     });
 

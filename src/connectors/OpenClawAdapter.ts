@@ -28,10 +28,11 @@ export interface SkillDefinition {
 
 export class OpenClawAdapter {
     private skills: Map<string, SkillDefinition> = new Map();
+    private guard: EidolonGuard;
 
-    constructor(
-        private guard: EidolonGuard
-    ) { }
+    constructor(guard: EidolonGuard) {
+        this.guard = guard;
+    }
 
     /**
      * Register a new skill (e.g., "swap_tokens")
@@ -52,17 +53,11 @@ export class OpenClawAdapter {
 
         console.log(`🔌 OpenClaw requested: ${input.action}`);
 
-        // 1. Validate with Guard (The Soul)
-        // We Map skill names to ActionTypes roughly
-        const actionType = this.mapSkillToAction(input.action);
-        const validation = await this.guard.validateAction(
-            actionType,
-            {
-                tokenSymbol: input.params.token || input.params.symbol || input.params.asset,
-                // Normalize amount from various possible inputs
-                amountUSD: input.params.amountUSD || input.params.amount || input.params.value || input.params.size
-            }
-        );
+        // Gate 3: Guard Check (Pre-Validation)
+        // Convert unknown params to Record<string, unknown> for inspection
+        const safeParams = input.params as Record<string, unknown>;
+        const mappedAction = this.mapSkillToAction(input.action);
+        const validation = await this.guard.validateAction(mappedAction, safeParams);
 
         if (!validation.approved) {
             console.warn(`🛡️ Guard blocked action: ${validation.reason}`);
@@ -77,22 +72,27 @@ export class OpenClawAdapter {
         try {
             const result = await skill.handler(input.params);
             return { status: 'success', data: result, validation };
-        } catch (error: any) {
-            return { status: 'failed', error: error.message, validation };
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            return { status: 'failed', error: errorMessage, validation };
         }
     }
 
     private mapSkillToAction(skillName: string): 'BUY' | 'SELL' | 'HOLD' {
-        // FIX L12: Strict prefix/exact matching
-        if (skillName.startsWith('execute_buy') || skillName === 'mint_nft') return 'BUY';
-        if (skillName.startsWith('execute_sell') || skillName === 'burn_token') return 'SELL';
+        const name = skillName.toLowerCase();
+        // FIX P1-05: Broader matching to prevent anti-rug bypass
+        const buyPatterns = ['buy', 'purchase', 'acquire', 'swap_to', 'mint', 'long'];
+        const sellPatterns = ['sell', 'dispose', 'swap_from', 'burn', 'short', 'liquidate', 'close'];
+
+        if (buyPatterns.some(p => name.includes(p))) return 'BUY';
+        if (sellPatterns.some(p => name.includes(p))) return 'SELL';
         return 'HOLD';
     }
 
     /**
      * Generate OpenClaw-compatible JSON manifest
      */
-    public getManifest(): any {
+    public getManifest(): object[] {
         return Array.from(this.skills.values()).map(s => ({
             name: s.name,
             description: s.description,

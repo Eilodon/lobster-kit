@@ -47,26 +47,26 @@ impl ValueInvariant {
         self.last_snapshot_value = total_portfolio_value;
     }
 
-    pub fn check_invariant(&self, trade_value_usd: f64, predicted_impact: f64) -> JsValue {
+    pub fn check_invariant(&self, trade_value_usd: f64, predicted_impact: f64) -> Result<JsValue, JsValue> {
         // 1. Sanity Checks
         if trade_value_usd.is_nan() || trade_value_usd < 0.0 {
-            return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+            return Ok(serde_wasm_bindgen::to_value(&InvariantCheckResult {
                 safe: false,
                 reason: Some("INVALID_INPUT: Trade value is NaN or negative".to_string()),
                 circuit_broken: false,
-            }).unwrap();
+            }).map_err(|e| JsValue::from_str(&e.to_string()))?);
         }
 
         // 2. Invariant: Max Position Size
         if trade_value_usd > self.config.max_position_size {
-            return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+            return Ok(serde_wasm_bindgen::to_value(&InvariantCheckResult {
                 safe: false,
                 reason: Some(format!(
                     "INVARIANT_BREACH: Trade size ${:.2} > Max ${:.2}",
                     trade_value_usd, self.config.max_position_size
                 )),
                 circuit_broken: false,
-            }).unwrap();
+            }).map_err(|e| JsValue::from_str(&e.to_string()))?);
         }
 
         // 3. Invariant: Max Drawdown per Block
@@ -78,33 +78,33 @@ impl ValueInvariant {
 
         // 🚨 CIRCUIT BREAKER (HARD PANIC)
         if drawdown_pct > self.config.circuit_breaker_threshold {
-             return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+             return Ok(serde_wasm_bindgen::to_value(&InvariantCheckResult {
                 safe: false,
                 reason: Some(format!(
                     "💥 CIRCUIT BREAKER TRIGGERED: Drawdown {:.2}% > Threshold {:.2}%",
                     drawdown_pct, self.config.circuit_breaker_threshold
                 )),
                 circuit_broken: true, 
-            }).unwrap();
+            }).map_err(|e| JsValue::from_str(&e.to_string()))?);
         }
 
         // Soft Breach
         if drawdown_pct > self.config.max_drawdown_per_block {
-             return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+             return Ok(serde_wasm_bindgen::to_value(&InvariantCheckResult {
                 safe: false,
                 reason: Some(format!(
                     "RISK_WARNING: Predicted drawdown {:.2}% > Max {:.2}%",
                     drawdown_pct, self.config.max_drawdown_per_block
                 )),
                 circuit_broken: false,
-            }).unwrap();
+            }).map_err(|e| JsValue::from_str(&e.to_string()))?);
         }
 
-        serde_wasm_bindgen::to_value(&InvariantCheckResult {
+        Ok(serde_wasm_bindgen::to_value(&InvariantCheckResult {
             safe: true,
             reason: None,
             circuit_broken: false,
-        }).unwrap()
+        }).map_err(|e| JsValue::from_str(&e.to_string()))?)
     }
 }
 
@@ -171,43 +171,45 @@ impl AntiRug {
     }
 
     /// Export whitelist + blacklist as JSON for persistence
-    pub fn export_lists(&self) -> JsValue {
+    pub fn export_lists(&self) -> Result<JsValue, JsValue> {
         let data = ListExport {
             whitelist: self.whitelist.iter().cloned().collect(),
             blacklist: self.blacklist.iter().cloned().collect(),
         };
-        serde_wasm_bindgen::to_value(&data).unwrap()
+        Ok(serde_wasm_bindgen::to_value(&data).map_err(|e| JsValue::from_str(&e.to_string()))?)
     }
 
     /// Import previously persisted whitelist + blacklist from JSON
-    pub fn import_lists(&mut self, data: JsValue) {
-        if let Ok(imported) = serde_wasm_bindgen::from_value::<ListExport>(data) {
-            for addr in imported.whitelist {
-                self.whitelist.insert(addr.to_lowercase());
-            }
-            for addr in imported.blacklist {
-                self.blacklist.insert(addr.to_lowercase());
-            }
+    pub fn import_lists(&mut self, data: JsValue) -> Result<(), JsValue> {
+        let imported = serde_wasm_bindgen::from_value::<ListExport>(data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse import data: {}", e)))?;
+            
+        for addr in imported.whitelist {
+            self.whitelist.insert(addr.to_lowercase());
         }
+        for addr in imported.blacklist {
+            self.blacklist.insert(addr.to_lowercase());
+        }
+        Ok(())
     }
 
-    pub fn check_token_security(&self, _token_address: &str) -> JsValue {
+    pub fn check_token_security(&self, _token_address: &str) -> Result<JsValue, JsValue> {
          // Fail-safe: If API fails, assume DANGER.
-        serde_wasm_bindgen::to_value(&SecurityScore {
+        Ok(serde_wasm_bindgen::to_value(&SecurityScore {
             score: 0,
             is_honeypot: false,
             liquidity_locked: false,
             contract_verified: false,
             owner_renounced: false,
             status: "DANGER".to_string(),
-        }).unwrap()
+        }).map_err(|e| JsValue::from_str(&e.to_string()))?)
     }
 
     /**
      * compute_score
      * Real logic: Takes raw API data and computes a rigorous safety score.
      */
-    pub fn compute_score(&self, token_address: &str, data: JsValue) -> JsValue {
+    pub fn compute_score(&self, token_address: &str, data: JsValue) -> Result<JsValue, JsValue> {
         let addr_lower = token_address.to_lowercase();
         
         // 0. Manual Override
@@ -218,10 +220,8 @@ impl AntiRug {
             return self.create_score(100, false, true, true, true, "WHITELISTED");
         }
 
-        let security_data: TokenSecurityData = match serde_wasm_bindgen::from_value(data) {
-            Ok(d) => d,
-            Err(_) => return JsValue::NULL,
-        };
+        let security_data: TokenSecurityData = serde_wasm_bindgen::from_value(data)
+            .map_err(|_| JsValue::from_str("INVALID_DATA: Failed to parse TokenSecurityData"))?;
 
         let mut score: i16 = 100;
 
@@ -231,29 +231,32 @@ impl AntiRug {
         if security_data.cannot_sell_all { return self.create_score(0, true, false, false, false, "CANNOT_SELL_ALL"); }
         if security_data.is_blacklisted { return self.create_score(0, true, false, false, false, "BLACKLISTED_BY_SOURCE"); }
 
-        // 2. Major Risks
+        // 2. Ownership (computed early for accurate reporting in all paths)
+        let renounced = security_data.owner_address.is_empty() || security_data.owner_address == "0x0000000000000000000000000000000000000000";
+
+        // 3. Tax Risks — check FIRST to avoid wasted Section 4 deductions
+        let buy_tax: f64 = security_data.buy_tax.parse().unwrap_or(0.0);
+        let sell_tax: f64 = security_data.sell_tax.parse().unwrap_or(0.0);
+
+        if buy_tax > 20.0 || sell_tax > 20.0 { 
+            return self.create_score(10, false, false, security_data.is_open_source, renounced, "HIGH_TAX"); 
+        }
+
+        // 4. Major Risks
         if security_data.honeypot_with_same_creator { score -= 30; }
         if security_data.cannot_buy { score -= 20; }
         if security_data.is_proxy { score -= 20; }
         if security_data.is_mintable { score -= 15; }
         if !security_data.is_open_source { score -= 40; } // Verification is critical
 
-        // 3. Tax Risks
-        let buy_tax: f64 = security_data.buy_tax.parse().unwrap_or(0.0);
-        let sell_tax: f64 = security_data.sell_tax.parse().unwrap_or(0.0);
-
-        if buy_tax > 5.0 { score -= (buy_tax.round() as i16) * 4; } // Penalty scaling with rounding
+        // 5. Tax Penalties (for tokens within 5-20% range)
+        if buy_tax > 5.0 { score -= (buy_tax.round() as i16) * 4; }
         if sell_tax > 5.0 { score -= (sell_tax.round() as i16) * 4; }
 
-        if buy_tax > 20.0 || sell_tax > 20.0 { 
-            return self.create_score(10, false, false, security_data.is_open_source, false, "HIGH_TAX"); 
-        }
-
-        // 4. Ownership
-        let renounced = security_data.owner_address.is_empty() || security_data.owner_address == "0x0000000000000000000000000000000000000000";
+        // 6. Ownership penalty
         if !renounced { score -= 15; }
 
-        // 5. Positive Signals (Bonuses)
+        // 7. Positive Signals (Bonuses)
         if security_data.is_whitelisted { score += 10; }
         if security_data.is_open_source && renounced { score += 5; } // Verified & Renounced Synergy
 
@@ -266,14 +269,14 @@ impl AntiRug {
         self.create_score(score as u8, false, false, security_data.is_open_source, renounced, status)
     }
 
-    fn create_score(&self, score: u8, is_honeypot: bool, liquidity_locked: bool, contract_verified: bool, owner_renounced: bool, status: &str) -> JsValue {
-        serde_wasm_bindgen::to_value(&SecurityScore {
+    fn create_score(&self, score: u8, is_honeypot: bool, liquidity_locked: bool, contract_verified: bool, owner_renounced: bool, status: &str) -> Result<JsValue, JsValue> {
+        Ok(serde_wasm_bindgen::to_value(&SecurityScore {
             score,
             is_honeypot,
             liquidity_locked,
             contract_verified,
             owner_renounced,
             status: status.to_string(),
-        }).unwrap()
+        }).map_err(|e| JsValue::from_str(&e.to_string()))?)
     }
 }

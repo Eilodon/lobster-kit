@@ -33,8 +33,6 @@ export class MarketStream {
     public start() {
         if (this.unwatch) return; // Already watching
 
-        console.log('📡 MarketStream: Connecting to block feed...');
-
         this.unwatch = this.client.watchBlocks({
             onBlock: (block) => this.processBlock(block),
             onError: (err) => console.error('MarketStream Error:', err)
@@ -48,7 +46,7 @@ export class MarketStream {
         if (this.unwatch) {
             this.unwatch();
             this.unwatch = null;
-            console.log('📡 MarketStream: Disconnected.');
+            // console.log('📡 MarketStream: Disconnected.');
         }
     }
 

@@ -20,10 +20,14 @@ const mockPublicClient = {
 
 const mockConfig = {
     chainConfig: {
-        contracts: { pancakeRouter: '0x10ED43C718714eb63d5aA57B78B54704E256024E' }, // Valid Router
+        contracts: {
+            pancakeRouter: '0x10ED43C718714eb63d5aA57B78B54704E256024E',
+            pancakeQuoter: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997'
+        }, // Valid Router/Quoter
         tokens: {
             BNB: { address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' }, // Valid BNB
-            WBNB: { address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c' } // Valid WBNB
+            WBNB: { address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c' }, // Valid WBNB
+            USDT: { address: '0x55d398326f99059fF775485246999027B3197955' } // Valid USDT
         }
     }
 } as any;
@@ -47,11 +51,9 @@ describe('DeFiModule: Hunter Upgrade', () => {
         (defi as any).ensureApproval = vi.fn().mockResolvedValue(undefined);
     });
 
-    // FIXME: SKIPPED due to Vitest/Vite file caching issue (Ghost Code).
-    // The source file `src/defi.ts` is confirmed to have the fix (grep "CRITICAL FAILURE")
-    // but the test runner persistently executes an old version without the fix logic.
-    // Manual verification: The try-catch block exists in src/defi.ts.
-    it.skip('should ABORT and REVOKE APPROVAL if Gas Cost > 10% (Flash Accounting)', async () => {
+    it('should ABORT and REVOKE APPROVAL if Gas Cost > 10% (Flash Accounting)', async () => {
+        const revokeSpy = vi.spyOn(defi as any, 'revokeApproval').mockResolvedValue(undefined);
+
         // Setup Thermodynamics Failure
         mockPublicClient.getGasPrice.mockResolvedValue(parseEther('0.000000001'));
         mockPublicClient.estimateGas.mockResolvedValue(200000000n); // 0.2 BNB cost (20%)
@@ -59,17 +61,12 @@ describe('DeFiModule: Hunter Upgrade', () => {
         // Use USDT -> BNB to trigger approval logic (BNB -> Token skips approval)
         const params = { from: 'USDT', to: 'BNB', amount: '1.0' };
 
-        try {
-            await defi.swap(params);
-        } catch (e: any) {
-            expect(e.message).toMatch(/Thermodynamic Fail/);
-        }
+        await expect(defi.swap(params)).rejects.toThrow(/Thermodynamic Fail/);
 
-        // Verify Revocation (approve 0)
-        expect((defi as any).ensureApproval).toHaveBeenCalledWith(
-            expect.stringMatching(/^0x/), // Token
-            expect.stringMatching(/^0x/), // Spender
-            0n // Revocation
+        // Verify explicit revoke path was executed.
+        expect(revokeSpy).toHaveBeenCalledWith(
+            mockConfig.chainConfig.tokens.USDT.address,
+            mockConfig.chainConfig.contracts.pancakeRouter
         );
     });
 

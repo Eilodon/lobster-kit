@@ -37,7 +37,7 @@ export class EidolonSwarm extends EventEmitter {
             this.channel = new BroadcastChannel('eidolon-hive-v1');
             this.setupIncoming();
         } else {
-            console.warn('⚠️ BroadcastChannel not available (Node < 18?). Swarm P2P disabled.');
+            // console.warn('⚠️ BroadcastChannel not available (Node < 18?). Swarm P2P disabled.');
             // Dummy channel to prevent crash on method calls? 
             // Better to make channel optional or mock it.
             this.channel = {
@@ -63,7 +63,7 @@ export class EidolonSwarm extends EventEmitter {
             });
         }
 
-        console.log(`🐝 SWARM: Agent ${this.agentId} joined the Hive.`);
+        // console.log(`🐝 SWARM: Agent ${this.agentId} joined the Hive.`);
     }
 
     private setupOutgoing() {
@@ -103,13 +103,13 @@ export class EidolonSwarm extends EventEmitter {
             case 'DISCOVERY':
                 if (!this.peers.has(msg.sourceAgentId)) {
                     this.peers.add(msg.sourceAgentId);
-                    console.log(`🐝 SWARM: New Peer Discovered: ${msg.sourceAgentId}`);
+                    // console.log(`🐝 SWARM: New Peer Discovered: ${msg.sourceAgentId}`);
                 }
                 break;
 
             case 'GOSSIP':
                 // Received an Opportunity from another agent
-                console.log(`🐝 SWARM: Received INTEL from ${msg.sourceAgentId}`, msg.payload);
+                // console.log(`🐝 SWARM: Received INTEL from ${msg.sourceAgentId}`, msg.payload);
                 // In V2: Validate before blindly trusting
                 // Emit to local bus as an EXTERNAL signal?
                 break;

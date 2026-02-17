@@ -47,14 +47,21 @@ class EidolonServer {
             }
         );
 
-        // Initialize ClawKit (Read-Only Mode for Safety)
+        // Initialize ClawKit (Read-Only Mode Support)
         // FIX Bug #2: Remove unsafe fallback
+        let account;
+        let isReadOnly = false;
         const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
+
         if (!privateKey) {
-            console.error("❌ FATAL: PRIVATE_KEY env var not set. Refusing to start with unsafe default.");
-            process.exit(1);
+            console.error("⚠️ EIDOLON-V: No PRIVATE_KEY found. Starting in READ-ONLY mode (Random Identity).");
+            // Generate random account for read-only operations
+            const { generatePrivateKey } = require('viem/accounts');
+            account = privateKeyToAccount(generatePrivateKey());
+            isReadOnly = true;
+        } else {
+            account = privateKeyToAccount(privateKey);
         }
-        const account = privateKeyToAccount(privateKey);
 
         const walletClient = createWalletClient({
             account,
@@ -212,7 +219,8 @@ class EidolonServer {
                     }
 
                     case "eidolon_defi_quote": {
-                        const { tokenIn, tokenOut, amount } = request.params.arguments as any;
+                        const args = request.params.arguments as { tokenIn: string; tokenOut: string; amount: string };
+                        const { tokenIn, tokenOut, amount } = args;
                         // FIX Bug #26: Use correct decimals for input token
                         const decimals = getTokenDecimals(tokenIn);
                         const amountBn = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, decimals)));
@@ -233,7 +241,8 @@ class EidolonServer {
                     }
 
                     case "eidolon_security_scan": {
-                        const { address } = request.params.arguments as any;
+                        const args = request.params.arguments as { address: string };
+                        const { address } = args;
                         const report = await this.kit.security.scanContract(address);
                         return {
                             content: [{

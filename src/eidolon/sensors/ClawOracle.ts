@@ -18,55 +18,40 @@ export class ClawOracle {
         try {
             // 1. Primary Source: Pyth
             const pythPrice = await this.pyth.getPrice('BNB');
+            if (!Number.isFinite(pythPrice) || pythPrice <= 0) {
+                throw new Error('Invalid Pyth price');
+            }
 
             // 2. Reality Check: On-Chain DEX Quote (1 WBNB -> USDT)
-            // We verify if the oracle is hallucinating by checking real liquidity.
             try {
                 const oneBNB = 1000000000000000000n; // 1e18
-                const usdtQuote = await this.kit.defi.getRealQuote('WBNB', 'USDT', oneBNB, 0.5);
-                // Wait, USDT on BSC/opBNB might be 18 or 6. Standard USDT is 6, but BSC-USD is 18.
-                // safer to assume normalized output from getRealQuote if it returns bigint amount.
-                // ACTUALLY: getRealQuote returns amountOut. 
-                // Let's assume standard 18 for WBNB. 
-                // If USDT is 18 decimals (BSC-USD), then price = quote / 1e18.
-                // If USDT is 6 decimals, then price = quote / 1e6.
-                // We need to know USDT decimals. 
-                // For safety, let's use a rough heuristic or just verify variance relative to Pyth.
-                // If pyth is 600, dex quote should be around 600 * 10^decimals.
+                // Use slippage=0 to compare raw quoted price, not conservative minOut.
+                const usdtQuote = await this.kit.defi.getRealQuote('WBNB', 'USDT', oneBNB, 0);
+                const amountOutMin = usdtQuote?.amountOutMin;
+                if (amountOutMin === undefined || amountOutMin === null || amountOutMin <= 0n) {
+                    throw new Error('Invalid DEX quote');
+                }
 
-                // Simplification for now: We treat the "Real Quote" as the execution price reference.
-                // We need to resolve decimals.
-                // Let's fetch token info or hardcode for now if we know the chain.
-                // Assuming opBNB/BSC USDT is 18 decimals (often is for bridged versions).
-
-                // Let's just blindly trust the oracle IF the check fails, 
-                // but if we can normalize, we do. 
-                // CHECK: `defi.getRealQuote` implementation? 
-                // I don't see defi.ts in open files.
-                // I will add a TODO to verify decimals, but implement the structure.
-
-                // For this step, I will calculate variance logic assuming 18 decimals for now (common on L2s).
-                // If the variance is massive (e.g. 10^12 difference), we know it's a decimal issue and ignore the check.
-
-                // FIX Bug #7: Use strict decimals
                 const usdtDecimals = getTokenDecimals('USDT');
-                const dexPrice = Number(usdtQuote) / (10 ** usdtDecimals);
+                const dexPrice = Number(amountOutMin) / (10 ** usdtDecimals);
+                if (!Number.isFinite(dexPrice) || dexPrice <= 0) {
+                    throw new Error('Invalid DEX normalized price');
+                }
 
                 const variance = Math.abs(pythPrice - dexPrice) / pythPrice;
 
                 if (variance > 0.05) { // 5% variance threshold
                     console.warn(`⚠️ REALITY CHECK FAILED: Pyth ($${pythPrice}) vs DEX ($${dexPrice}). Variance: ${(variance * 100).toFixed(2)}%`);
-                    // If variance is too high, we trust Pyth but warn.
                     if (variance > 0.2) {
-                        throw new Error(`SENSORY DISSOCIATION: Oracle deviation ${variance.toFixed(4)}`);
+                        throw new Error(`CRITICAL_ORACLE_DIVERGENCE:${variance.toFixed(4)}`);
                     }
                 }
 
-                // console.log(`✅ Reality Check Passed. Variance: ${(variance*100).toFixed(2)}%`);
-
             } catch (dexErr: any) {
+                if (typeof dexErr?.message === 'string' && dexErr.message.startsWith('CRITICAL_ORACLE_DIVERGENCE:')) {
+                    throw dexErr;
+                }
                 console.warn('   ⚠️ Could not fetch DEX price for Reality Check:', dexErr.message);
-                // We don't block on DEX failure, but we log it.
             }
 
             return pythPrice;
@@ -83,6 +68,9 @@ export class ClawOracle {
      */
     private async probeLiquidity(bnbPrice: number): Promise<'THIN' | 'DEEP'> {
         try {
+            if (!Number.isFinite(bnbPrice) || bnbPrice <= 0) {
+                return 'THIN';
+            }
             const wbnb = 'WBNB';
             const usdt = 'USDT';
 
@@ -94,13 +82,19 @@ export class ClawOracle {
 
             // Run probes in parallel
             const [quoteSmall, quoteLarge] = await Promise.all([
-                this.kit.defi.getRealQuote(wbnb, usdt, amountSmall, 1.0),
-                this.kit.defi.getRealQuote(wbnb, usdt, amountLarge, 2.0)
+                this.kit.defi.getRealQuote(wbnb, usdt, amountSmall, 0),
+                this.kit.defi.getRealQuote(wbnb, usdt, amountLarge, 0)
             ]);
+            if (!quoteSmall?.amountOutMin || !quoteLarge?.amountOutMin) {
+                throw new Error('Invalid liquidity probe quotes');
+            }
 
             // Calculate Price per WBNB
-            const priceSmall = Number(quoteSmall) / Number(amountSmall); // USDT per Wei
-            const priceLarge = Number(quoteLarge) / Number(amountLarge);
+            const priceSmall = Number(quoteSmall.amountOutMin) / Number(amountSmall); // USDT per Wei
+            const priceLarge = Number(quoteLarge.amountOutMin) / Number(amountLarge);
+            if (!Number.isFinite(priceSmall) || !Number.isFinite(priceLarge) || priceSmall <= 0 || priceLarge <= 0) {
+                throw new Error('Invalid liquidity probe normalization');
+            }
 
             // Calculate Impact: (Small - Large) / Small
             // If Large trade gets significantly worse price, liquidity is THIN.
@@ -141,8 +135,8 @@ export class ClawOracle {
             const gas = await this.kit.gas.getOptimalExecutionTime();
             // Heuristic: < 3 gwei is LOW, < 5 is MEDIUM, > 5 is HIGH on opBNB
             const price = parseFloat(gas.currentGasPrice);
-            if (price < 0.00003) return 'LOW'; // opBNB is very cheap, adjusting scale
-            if (price < 0.00005) return 'MEDIUM';
+            if (price < 3) return 'LOW';  // < 3 Gwei = cheap on opBNB
+            if (price < 5) return 'MEDIUM'; // 3-5 Gwei = moderate
             return 'HIGH';
         } catch {
             return 'MEDIUM'; // Fallback

@@ -115,18 +115,18 @@ export class DeFiModule {
       const gasCost = gasEstimate * gasPrice;
 
       // Logic: If Gas Cost > 10% of Trade Value, ABORT.
-      const threshold = amountIn / 10n; // 10%
-
-      // Note: This logic assumes amountIn is the "Value".
-      // Strictly checking cost against input amount.
+      // Note: Both gasCost and amountIn are in Wei, so comparison is unit-consistent
+      // for native token swaps. For ERC20 swaps, amountIn is in token's smallest unit.
       if (value > 0n || amountIn > 0n) {
-        // Use amountIn as proxy for value if value is 0 (token swap)
         const tradeValue = value > 0n ? value : amountIn;
+        const threshold = tradeValue / 10n; // 10% in same unit
 
         if (gasCost > threshold) {
-          throw new Error(`Thermodynamic Fail: Gas cost (${formatEther(gasCost)}) > 10% of Trade Value (${formatEther(tradeValue)})`);
+          throw new Error(`Thermodynamic Fail: Gas cost (${formatEther(gasCost)} BNB) > 10% of Trade Value (${formatEther(tradeValue)})`);
         }
-        console.log(`⚡ Thermodynamics OK: Gas cost is ${(Number(gasCost) * 100 / Number(tradeValue)).toFixed(2)}% of trade.`);
+        // FIX P1-04: Use BigInt division to avoid Number precision loss on large values
+        const costBps = gasCost * 10000n / tradeValue; // basis points
+        console.log(`⚡ Thermodynamics OK: Gas cost is ${Number(costBps) / 100}% of trade.`);
       }
 
     } catch (error) {
@@ -531,7 +531,7 @@ export class DeFiModule {
         console.log(`⚡ Optimizing: Batching ${batchData.length} harvests via Executor: ${batchExecutor}`);
 
         const batchAbi = parseAbi([
-          'function batchExecute(address[] targets, bytes[] datas, uint256[] values) payable'
+          'function executeBatch(address[] targets, uint256[] values, bytes[] datas) payable'
         ]);
 
         const targets = batchData.map(b => b.target as `0x${string}`);
@@ -540,8 +540,8 @@ export class DeFiModule {
 
         const data = encodeFunctionData({
           abi: batchAbi,
-          functionName: 'batchExecute',
-          args: [targets, datas, values]
+          functionName: 'executeBatch',
+          args: [targets, values, datas]
         });
 
         await this.simulateTransaction(batchExecutor, data, 0n, userAddress);

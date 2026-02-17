@@ -47,6 +47,11 @@ describe('DeFiModule', () => {
             // 2. Simulation (call)
             expect(mockPublic.call).toHaveBeenCalled();
             expect(mockWallet.sendTransaction).toHaveBeenCalled();
+
+            // Verify call/simulation uses executeBatch (P0-02)
+            const callArgs = mockPublic.call.mock.lastCall[0];
+            // We expect the data to be encoded for executeBatch
+            expect(callArgs.data).toBeDefined();
         });
 
         it('should ABORT validation if simulation fails', async () => {

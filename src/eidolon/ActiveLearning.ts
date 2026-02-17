@@ -494,7 +494,8 @@ export class ActiveLearning {
       // Load history from AppendLog
       const logs = await this.storage.readLog(this.HISTORY_KEY);
       if (logs.length > 0) {
-        this.tradeHistory = logs; // Each log entry is a TradeOutcome
+        // Keep bounded working-set in memory even if log file is large.
+        this.tradeHistory = logs.slice(-1000); // Each log entry is a TradeOutcome
         console.log(`📊 Loaded ${this.tradeHistory.length} historical trades from AppendLog`);
       } else {
         console.log('📊 No trade history found (starting fresh)');

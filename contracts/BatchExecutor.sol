@@ -80,14 +80,16 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
 
         results = new bytes[](targets.length);
 
+        uint256 totalValueUsed = 0;
         for (uint256 i = 0; i < targets.length; i++) {
             require(targets[i] != address(0), "Invalid target");
             (bool success, bytes memory result) = targets[i].call{value: values[i]}(datas[i]);
             require(success, string(abi.encodePacked("Call failed at index ", _toString(i))));
             results[i] = result;
+            totalValueUsed += values[i];
         }
 
-        _refundExcess();
+        _refundExcess(totalValueUsed);
 
         bool[] memory allSuccess = new bool[](targets.length);
         for (uint256 i = 0; i < targets.length; i++) {
@@ -111,15 +113,17 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
         success = new bool[](targets.length);
         results = new bytes[](targets.length);
 
+        uint256 totalValueUsed = 0;
         for (uint256 i = 0; i < targets.length; i++) {
             if (targets[i] == address(0)) {
                 success[i] = false;
                 continue;
             }
             (success[i], results[i]) = targets[i].call{value: values[i]}(datas[i]);
+            if (success[i]) { totalValueUsed += values[i]; }
         }
 
-        _refundExcess();
+        _refundExcess(totalValueUsed);
 
         emit BatchExecuted(msg.sender, targets.length, success);
     }
@@ -137,7 +141,7 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
         (success, result) = target.call{value: value}(data);
         emit SingleExecuted(msg.sender, target, success);
 
-        _refundExcess();
+        _refundExcess(success ? value : 0);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -150,13 +154,14 @@ contract BatchExecutor is Ownable, ReentrancyGuard {
 
     /**
      * @dev Accumulate excess ETH as pending refund for the caller.
-     * Trustless: User must withdraw. No risk of bricking via failed transfer.
+     * FIX P0-05: Only refund excess from THIS transaction, not entire balance.
+     * Prevents claiming ETH sent by other sources.
      */
-    function _refundExcess() internal {
-        uint256 remaining = address(this).balance;
-        if (remaining > 0) {
-            pendingRefunds[msg.sender] += remaining;
-            emit RefundAvailable(msg.sender, remaining);
+    function _refundExcess(uint256 totalValueUsed) internal {
+        if (msg.value > totalValueUsed) {
+            uint256 excess = msg.value - totalValueUsed;
+            pendingRefunds[msg.sender] += excess;
+            emit RefundAvailable(msg.sender, excess);
         }
     }
 
