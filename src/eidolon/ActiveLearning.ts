@@ -1,4 +1,4 @@
-import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS } from './EidolonTypes';
+import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS, QTable, Q_CONFIG, MarketState, ActionType, QStateHash } from './EidolonTypes';
 import { IStorageProvider } from './memory/IStorageProvider';
 import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
 
@@ -44,8 +44,9 @@ export const LEARNING_CONFIG = {
 };
 
 export class ActiveLearning {
-  private weights = { ...REASONING_WEIGHTS };
-  private learningRate = LEARNING_CONFIG.BASE_LEARNING_RATE;
+  private weights = { ...REASONING_WEIGHTS }; // @deprecated: Keeping for backward compatibility
+  private qTable: QTable = {}; // 🧠 The Brain 2.0
+  private learningRate = Q_CONFIG.ALPHA;
 
   private tradeHistory: TradeOutcome[] = [];
   private adjustmentCount = 0;
@@ -53,7 +54,8 @@ export class ActiveLearning {
   // Persistence
   private storage: AppendOnlyAdapter;
   private readonly WEIGHTS_KEY = 'active_learning_weights.json';
-  private readonly HISTORY_KEY = 'active_learning_history.log'; // Changed to .log
+  private readonly Q_TABLE_KEY = 'active_learning_q_table.json'; // New Brain Memory
+  private readonly HISTORY_KEY = 'active_learning_history.log';
   private autoSaveEnabled = true;
 
   constructor(
@@ -116,7 +118,14 @@ export class ActiveLearning {
     console.log(`║ ${rewardEmoji} Outcome: ${reward > 0 ? 'PROFIT' : 'LOSS'} | P&L: $${outcome.profitLoss.toFixed(2)}`.padEnd(61) + '║');
     console.log(`║    Reward Signal: ${reward.toFixed(4)}`.padEnd(61) + '║');
 
-    // Update weights based on causal factors
+    // Update Q-Values (The Brain 2.0)
+    // We assume the 'next state' is the current state of the market (or unknown/terminal if trade closed)
+    // For single-step RL (Bandit-like), nextState might be ignored or set to current.
+    // In a continuous agent, we should pass the *current* market state as nextState.
+    // However, since we don't have nextState here, we treat this as a terminal step for the episode (trade).
+    this.updateQValue(decision.marketState, decision.action, reward);
+
+    // Legacy Weight Update (Keep for compatibility until full migration)
     if (outcome.success) {
       this.updateWeights(decision, reward);
     } else {
@@ -136,6 +145,72 @@ export class ActiveLearning {
         console.error('⚠️ Failed to save weights:', err.message);
       });
     }
+  }
+
+  /**
+   * 🧠 QUANTUM BRAIN: State Quantization
+   * Converts complex market reality into a distinct state key.
+   */
+  private getMarketStateHash(state: MarketState): QStateHash {
+    // Format: "GAS:WHALE:SENTIMENT:LIQUIDITY:PRICE"
+    return `${state.gasPrice}:${state.whaleFlow}:${state.sentiment}:${state.liquidityDepth}:${state.priceAction}`;
+  }
+
+  /**
+   * 🧠 QUANTUM BRAIN: Bellman Update
+   * Q(s,a) = Q(s,a) + alpha * (R + gamma * max(Q(s',a')) - Q(s,a))
+   * Note: Since we are learning from a completed trade, successful or not, 
+   * we treat it as a terminal state for that specific decision context, 
+   * so max(Q(s',a')) is 0.
+   */
+  private updateQValue(state: MarketState, action: ActionType, reward: number): void {
+    const stateHash = this.getMarketStateHash(state);
+
+    // Initialize state if new
+    if (!this.qTable[stateHash]) {
+      this.qTable[stateHash] = {
+        BUY: 0, SELL: 0, HOLD: 0, EMERGENCY_EXIT: 0
+      };
+    }
+
+    const currentQ = this.qTable[stateHash][action] || 0;
+
+    // Bellman Equation (Terminal State version)
+    // NewQ = OldQ + Alpha * (Reward - OldQ)
+    const newQ = currentQ + this.learningRate * (reward - currentQ);
+
+    this.qTable[stateHash][action] = newQ;
+    console.log(`    🧠 Q-UPDATE [${stateHash}][${action}]: ${currentQ.toFixed(4)} -> ${newQ.toFixed(4)}`);
+  }
+
+  /**
+   * 🧠 QUANTUM BRAIN: Action Recommendation (Epsilon-Greedy)
+   */
+  public recommendAction(state: MarketState): ActionType {
+    // Exploration
+    if (Math.random() < Q_CONFIG.EPSILON) {
+      const actions: ActionType[] = ['BUY', 'SELL', 'HOLD'];
+      return actions[Math.floor(Math.random() * actions.length)];
+    }
+
+    // Exploitation
+    const stateHash = this.getMarketStateHash(state);
+    const actions = this.qTable[stateHash];
+
+    if (!actions) return 'HOLD'; // Default safety
+
+    // Find action with max Q-value
+    let bestAction: ActionType = 'HOLD';
+    let maxQ = -Infinity;
+
+    for (const [action, q] of Object.entries(actions)) {
+      if (q > maxQ) {
+        maxQ = q;
+        bestAction = action as ActionType;
+      }
+    }
+
+    return bestAction;
   }
 
   /**
@@ -336,12 +411,19 @@ export class ActiveLearning {
 
       await this.storage.save(this.WEIGHTS_KEY, weightsData);
 
+      // Save Q-Table
+      const qData = {
+        qTable: this.qTable,
+        version: '2.0',
+        savedAt: new Date().toISOString()
+      };
+      await this.storage.save(this.Q_TABLE_KEY, qData);
+
       // Save history (last 1000 trades to limit file size)
       const recentHistory = this.tradeHistory.slice(-1000);
-      await this.storage.save(this.WEIGHTS_KEY, weightsData);
+      // await this.storage.save(this.HISTORY_KEY, recentHistory); // Log is already appended
 
-      // History is already appended, no need to save whole array
-      console.log('💾 Weights saved to local memory');
+      console.log('💾 Brain State (Weights + Q-Table) saved to local memory');
     } catch (error: any) {
       console.error('❌ Failed to save weights:', error.message);
       throw error;
@@ -364,6 +446,13 @@ export class ActiveLearning {
 
         console.log(`🧠 Loaded learned weights from ${saved.savedAt}`);
         console.log(`   Adjustments made: ${saved.adjustmentCount}`);
+      }
+
+      // Load Q-Table
+      const savedQ = await this.storage.load<any>(this.Q_TABLE_KEY);
+      if (savedQ) {
+        this.qTable = savedQ.qTable;
+        console.log(`🧠 Loaded Q-Table (Size: ${Object.keys(this.qTable).length} states)`);
       }
 
       // Load history from AppendLog
@@ -403,9 +492,17 @@ export class ActiveLearning {
    * Rotates log file if too large (Implementation for Phase 2)
    */
   private async archiveHistory(): Promise<void> {
-    // For AppendLog, we might need log rotation.
-    // In Phase 1, we just keep appending.
-    // TODO: Implement Log Rotation
-    return;
+    const archiveKey = `archive_history_${Date.now()}.json`;
+    console.log(`📦 Archiving ${this.tradeHistory.length} trades to ${archiveKey}`);
+
+    // Save all current history to archive file
+    await this.storage.save(archiveKey, this.tradeHistory);
+
+    // Reduce in-memory history (Keep last 1000)
+    // We treat the active 'tradeHistory' array as the working memory (RAM).
+    // The AppendLog on disk contains everything, but we don't want to load it all next time.
+    // When we loadFromDisk, we only read the log, which might be huge. 
+    // Ideally we should rotate the log, but for now this archival saves a snapshot.
+    this.tradeHistory = this.tradeHistory.slice(-1000);
   }
 }

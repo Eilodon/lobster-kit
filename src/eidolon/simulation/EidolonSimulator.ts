@@ -8,6 +8,8 @@ export interface SimulationResult {
     logs: any[];
     returnValue?: any;
     simulatedValueUSD?: number; // Estimated value of output
+    touchedAddresses?: string[]; // 🕵️ Footprint Analysis (Access List)
+    estimatedGasLimit?: bigint;
 }
 
 export interface ShadowTransaction {
@@ -15,6 +17,7 @@ export interface ShadowTransaction {
     data: string;
     value?: bigint;
     account: string;
+    stateOverride?: any; // 🛠️ GOD MODE: Alter reality (Users balance, Nonce, Code)
 }
 
 /**
@@ -41,25 +44,56 @@ export class EidolonSimulator {
         try {
             console.log(`🔮 SHADOW CLONE: Simulating tx to ${tx.to}...`);
 
-            // 1. Dry Run via Call (eth_call) with state overrides if needed
-            // Ideally we use simulateContract provided we have the ABI, 
-            // but for generic txs, we use 'call' or 'estimateGas' as proxy.
-            // However, 'call' gives us the return data.
+            // 1. GOD MODE: State Overrides
+            // If stateOverride is provided, or if we want to ensure liquidity/balance
+            let overrides = tx.stateOverride;
 
+            // Auto-fund if no override provided (Infinite Money Glitch for Simulation)
+            if (!overrides) {
+                overrides = {
+                    [tx.account]: {
+                        balance: 1000000000000000000000n // 1000 BNB
+                    }
+                };
+            }
+
+            // 2. Footprint Analysis (Access List)
+            // Detects what contracts this transaction touches (Blast Radius)
+            let touched: string[] = [];
+            try {
+                const accessList = await this.client.createAccessList({
+                    account: tx.account as `0x${string}`,
+                    to: tx.to as `0x${string}`,
+                    data: tx.data as `0x${string}`,
+                    value: tx.value || 0n
+                } as any); // Type cast as viem types might be strict
+
+                if (accessList && accessList.accessList) {
+                    touched = accessList.accessList.map(a => a.address);
+                    console.log(`   🕵️ Footprint: Touched ${touched.length} contracts.`);
+                }
+            } catch (e) {
+                console.warn('   ⚠️ Failed to generate Access List (Simulator might be limited)');
+            }
+
+            // 3. Dry Run via Call (eth_call) with State Overrides
+            // Allows us to see result even if user has 0 BNB in reality
             const { data: returnData } = await this.client.call({
                 account: tx.account as `0x${string}`,
                 to: tx.to as `0x${string}`,
                 data: tx.data as `0x${string}`,
-                value: tx.value || 0n
-            });
+                value: tx.value || 0n,
+                stateOverride: overrides
+            } as any);
 
-            // 2. Estimate Gas (Reverts if tx fails)
+            // 4. Estimate Gas
             const gasEstimate = await this.client.estimateGas({
                 account: tx.account as `0x${string}`,
                 to: tx.to as `0x${string}`,
                 data: tx.data as `0x${string}`,
-                value: tx.value || 0n
-            });
+                value: tx.value || 0n,
+                stateOverride: overrides
+            } as any);
 
             console.log(`   ✅ Shadow Clone Survived. Gas: ${gasEstimate}`);
 
@@ -67,7 +101,9 @@ export class EidolonSimulator {
                 success: true,
                 gasUsed: gasEstimate,
                 returnValue: returnData,
-                logs: [] // Logs hard to capture via simple 'call' without Trace API
+                logs: [], // Logs hard to capture via simple 'call' without Trace API
+                touchedAddresses: touched,
+                estimatedGasLimit: (gasEstimate * 120n) / 100n // +20% buffer
             };
 
         } catch (error: any) {
@@ -78,6 +114,25 @@ export class EidolonSimulator {
                 revertReason: error.shortMessage || error.message,
                 logs: []
             };
+        }
+    }
+
+    /**
+     * 🕵️ DETECTIVE MODE: Scan transaction footprint without executing
+     */
+    public async scanFootprint(tx: ShadowTransaction): Promise<string[]> {
+        try {
+            const accessList = await this.client.createAccessList({
+                account: tx.account as `0x${string}`,
+                to: tx.to as `0x${string}`,
+                data: tx.data as `0x${string}`,
+                value: tx.value || 0n
+            } as any);
+
+            return accessList.accessList.map(item => item.address);
+        } catch (e) {
+            console.error('Footprint scan failed:', e);
+            return [];
         }
     }
 }

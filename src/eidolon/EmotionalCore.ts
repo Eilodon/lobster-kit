@@ -30,7 +30,8 @@ export class EmotionalCore {
   private thermoEngine: ThermodynamicEngine;
   private breathEngine: BreathEngine;
 
-  private readonly STORAGE_KEY = 'emotional_core.log'; // Changed to .log
+  private readonly SNAPSHOT_KEY = 'emotional_core_snapshot.json';
+  private readonly LOG_KEY = 'emotional_core.log'; // Keep for audit trail if needed
 
   constructor(storage?: AppendOnlyAdapter) {
     this.storage = storage || new AppendOnlyAdapter();
@@ -253,15 +254,21 @@ export class EmotionalCore {
 
   async loadState() {
     try {
-      const logs = await this.storage.readLog(this.STORAGE_KEY);
+      // 1. Try loading from SNAPSHOT (Fast & Recent)
+      const snapshot = await this.storage.load<{ state: EmotionalState }>(this.SNAPSHOT_KEY);
+      if (snapshot && snapshot.state) {
+        this.state = { ...this.state, ...snapshot.state };
+        console.log('🧠 Emotional State restored from SNAPSHOT (Ethernal Recurrence)');
+        return;
+      }
+
+      // 2. Fallback to Log (Slow Replay) - Legacy support
+      const logs = await this.storage.readLog(this.LOG_KEY);
       if (logs.length > 0) {
-        // Replay all logs to get final state
-        // OR just take the last valid state if it's a full snapshot
-        // Here we assume each log is a full state snapshot for simplicity in Phase 1
         const lastEntry = logs[logs.length - 1];
         if (lastEntry && lastEntry.state) {
           this.state = { ...this.state, ...lastEntry.state };
-          console.log('🧠 Emotional State restored from AppendLog');
+          console.log('🧠 Emotional State restored from LOG (Legacy)');
         }
       }
     } catch (e) {
@@ -271,13 +278,14 @@ export class EmotionalCore {
 
   async appendState() {
     try {
-      // Only append if state changed significantly? 
-      // For now, append every tick is too much.
-      // Let's append only on significant events or throttle it.
-      // Actually, the tick() is called on block mined (3 sec). Appending every 3s is fine for local disk.
-      await this.storage.append(this.STORAGE_KEY, { state: this.state });
+      // ♾️ ETERNAL RECURRENCE: Overwrite Snapshot (O(1) storage)
+      // We save the latest state atomically.
+      await this.storage.save(this.SNAPSHOT_KEY, { state: this.state, savedAt: Date.now() });
+
+      // We do NOT append to log every tick anymore to prevent memory leak.
+      // Logs are reserved for TRAUMA events (handled in stimulate/processOutcome if needed).
     } catch (e) {
-      console.warn("Failed to append emotional state", e);
+      console.warn("Failed to save emotional state snapshot", e);
     }
   }
 

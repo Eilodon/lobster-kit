@@ -248,7 +248,27 @@ export class EidolonGuard {
                     reason: `💀 SHADOW CLONE DIED: Transaction Revert (${shadowResult.revertReason})`
                 };
             }
-            console.log(`✅ Shadow Clone survived. Cost: ${shadowResult.gasUsed.toString()} gas`);
+
+            // 🛡️ BLAST RADIUS CHECK (New in Phase 5)
+            const touched = shadowResult.touchedAddresses || [];
+            if (touched.length > 10) {
+                return {
+                    approved: false,
+                    riskScore: 95,
+                    confidence: 10,
+                    reason: `💥 BLAST RADIUS EXCEEDED: Touched ${touched.length} contracts (Max 10). Possible complexity attack.`
+                };
+            }
+
+            // 🛡️ PHISHING/ROUTING CHECK
+            // If it's a simple APPROVE, it should only touch the Token and the Spender.
+            // Check based on txCandidate data if available
+            if (context.txCandidate?.data?.includes('0x095ea7b3')) { // partial approve sig check
+                // TODO: Parse tx data properly to identify Approve.
+                // For now, relies on context.action which might be coarse.
+            }
+
+            console.log(`✅ Shadow Clone survived. Cost: ${shadowResult.gasUsed.toString()} gas. Blast Radius: ${touched.length}`);
         } else if (action === 'BUY' || action === 'SELL') {
             // Warn if no candidate provided for simulation
             if (context.amountUSD === undefined || context.amountUSD === null) {

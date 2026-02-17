@@ -112,12 +112,38 @@ export class MarketStream {
     }
 
     private deriveSentiment(txCount: number): 'EUPHORIC' | 'FEAR' | 'NEUTRAL' {
-        if (this.lastTxCounts.length < 5) return 'NEUTRAL';
+        if (this.lastTxCounts.length < 5 || this.lastGasPrices.length < 5) return 'NEUTRAL';
 
         const avgTx = this.lastTxCounts.reduce((a, b) => a + b, 0) / this.lastTxCounts.length;
+        const currentGas = this.lastGasPrices[this.lastGasPrices.length - 1];
+        const prevGas = this.lastGasPrices[this.lastGasPrices.length - 5]; // 5 blocks ago
 
-        if (txCount > avgTx * 1.5) return 'EUPHORIC'; // +50% activity
-        if (txCount < avgTx * 0.5) return 'FEAR';   // -50% activity
+        // Gas Trend: (Current - Prev) / Prev
+        const gasTrend = Number(currentGas - prevGas) / Number(prevGas);
+
+        // 1. High Activity Check
+        if (txCount > avgTx * 1.5) {
+            // High Activity + Rising Gas = EUPHORIA (FOMO)
+            if (gasTrend > 0.1) return 'EUPHORIC';
+
+            // High Activity + Dumping Gas = FEAR (Panic Selling / Liquidation Cascade?)
+            // Or just efficient block clearing. 
+            // Often Panic Selling also spikes gas, but if price is crashing and gas is high, it's fear.
+            // Without price, we assume High Activity + High Gas = EXTREME EMOTION.
+            // Let's use Gas Acceleration as the differentiation.
+
+            // If gas is skyrocketing (> 50% increase), it's EUPHORIC/MANIC.
+            if (gasTrend > 0.5) return 'EUPHORIC';
+
+            // If gas is stable but volume is huge, it might be a capitulation wick.
+            return 'FEAR';
+        }
+
+        // 2. Low Activity
+        if (txCount < avgTx * 0.5) {
+            return 'FEAR'; // "Ghost Town" -> Uncertainty/Fear
+        }
+
         return 'NEUTRAL';
     }
 

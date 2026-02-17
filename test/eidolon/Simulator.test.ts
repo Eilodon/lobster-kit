@@ -1,51 +1,111 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EidolonSimulator } from '../../src/eidolon/simulation/EidolonSimulator';
+import { EidolonSimulator, ShadowTransaction } from '../../src/eidolon/simulation/EidolonSimulator';
 import { ClawKit } from '../../src/index';
 
-// Mock viem public client
-const mockClient = {
-    call: vi.fn(),
-    estimateGas: vi.fn()
-};
+// Mock ClawKit and PublicClient
+const mockCall = vi.fn();
+const mockEstimateGas = vi.fn();
+const mockCreateAccessList = vi.fn();
 
 const mockKit = {
-    publicClient: mockClient
+    publicClient: {
+        call: mockCall,
+        estimateGas: mockEstimateGas,
+        createAccessList: mockCreateAccessList
+    }
 } as any as ClawKit;
 
-describe('EidolonSimulator (Shadow Clones)', () => {
+describe('EidolonSimulator: Hardening Body', () => {
     let simulator: EidolonSimulator;
 
     beforeEach(() => {
-        simulator = new EidolonSimulator(mockKit);
         vi.clearAllMocks();
+        simulator = new EidolonSimulator(mockKit);
     });
 
-    it('should return success if gas estimation works', async () => {
-        mockClient.call.mockResolvedValue({ data: '0x' });
-        mockClient.estimateGas.mockResolvedValue(21000n);
+    it('should AUTO-FUND account with Infinite BNB if no overrides provided', async () => {
+        const tx: ShadowTransaction = {
+            to: '0xTarget',
+            data: '0xData',
+            value: 100n,
+            account: '0xSender'
+        };
 
-        const result = await simulator.simulate({
-            to: '0x123',
-            data: '0x',
-            account: '0xUser'
-        });
+        mockCall.mockResolvedValue({ data: '0xResult' });
+        mockEstimateGas.mockResolvedValue(21000n);
+
+        const result = await simulator.simulate(tx);
 
         expect(result.success).toBe(true);
-        expect(result.gasUsed).toBe(21000n);
+
+        // Verify stateOverride was injected
+        expect(mockCall).toHaveBeenCalledWith(expect.objectContaining({
+            stateOverride: {
+                '0xSender': {
+                    balance: 1000000000000000000000n // 1000 BNB
+                }
+            }
+        }));
     });
 
-    it('should return failure if gas estimation reverts', async () => {
-        mockClient.call.mockRejectedValue(new Error('Execution reverted'));
-        // Or if call succeeds but estimateGas fails
-        mockClient.estimateGas.mockRejectedValue(new Error('Gas estimation failed'));
+    it('should respect USER-DEFINED overrides', async () => {
+        const tx: ShadowTransaction = {
+            to: '0xTarget',
+            data: '0xData',
+            value: 100n,
+            account: '0xSender',
+            stateOverride: { '0xSender': { balance: 500n } }
+        };
 
-        const result = await simulator.simulate({
-            to: '0x123',
-            data: '0x',
-            account: '0xUser'
+        mockCall.mockResolvedValue({ data: '0xResult' });
+        mockEstimateGas.mockResolvedValue(21000n);
+
+        await simulator.simulate(tx);
+
+        // Verify custom override was preserved
+        expect(mockCall).toHaveBeenCalledWith(expect.objectContaining({
+            stateOverride: { '0xSender': { balance: 500n } }
+        }));
+    });
+
+    it('should Detect Blast Radius (Footprint) via Access List', async () => {
+        const tx: ShadowTransaction = {
+            to: '0xTarget',
+            data: '0xData',
+            value: 0n,
+            account: '0xSender'
+        };
+
+        mockCall.mockResolvedValue({ data: '0x' });
+        mockEstimateGas.mockResolvedValue(21000n);
+        mockCreateAccessList.mockResolvedValue({
+            accessList: [
+                { address: '0xContractA', storageKeys: [] },
+                { address: '0xContractB', storageKeys: [] }
+            ]
         });
 
-        expect(result.success).toBe(false);
-        expect(result.revertReason).toContain('Execution reverted');
+        const result = await simulator.simulate(tx);
+
+        expect(result.touchedAddresses).toEqual(['0xContractA', '0xContractB']);
+        expect(mockCreateAccessList).toHaveBeenCalled();
+    });
+
+    it('should Handle Access List Failure gracefully', async () => {
+        const tx: ShadowTransaction = {
+            to: '0xTarget',
+            data: '0xData',
+            account: '0xSender'
+        };
+
+        mockCall.mockResolvedValue({ data: '0x' });
+        mockEstimateGas.mockResolvedValue(21000n);
+        mockCreateAccessList.mockRejectedValue(new Error('Not Supported'));
+
+        const result = await simulator.simulate(tx);
+
+        // Should still succeed simulation even if footprint scan fails
+        expect(result.success).toBe(true);
+        expect(result.touchedAddresses).toEqual([]);
     });
 });

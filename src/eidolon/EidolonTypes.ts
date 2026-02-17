@@ -48,3 +48,17 @@ export const DEFAULT_WEIGHTS: ReasoningWeights = {
     sentiment: { EUPHORIC: -5, FEAR: 10, NEUTRAL: 0 },
     priceAction: { PUMPING: 15, DUMPING: -20, RANGING: 0 }
 };
+
+// --- Q-LEARNING (The Brain 2.0) ---
+export type QStateHash = string; // e.g. "HIGH:ACCUMULATING:NEUTRAL:DEEP:RANGING"
+
+export interface QTable {
+    // Map StateHash -> Action -> Expected Reward (Q-Value)
+    [stateHash: string]: Record<ActionType, number>;
+}
+
+export const Q_CONFIG = {
+    ALPHA: 0.1,    // Learning Rate
+    GAMMA: 0.9,    // Discount Factor (Importance of future rewards)
+    EPSILON: 0.1   // Exploration Rate (10% random actions)
+};

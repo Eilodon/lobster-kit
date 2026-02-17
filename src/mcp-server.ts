@@ -11,6 +11,7 @@ import { z } from "zod";
 
 // Import ClawKit Core Modules
 import { ClawKit } from "./index";
+import { ClawOracle } from "./eidolon/sensors/ClawOracle"; // Import Oracle
 import { ClawKitConfig } from "./types";
 import { OPBNB_CONFIG } from "./types";
 import { createWalletClient, http, custom } from 'viem';
@@ -60,7 +61,13 @@ class EidolonServer {
 
         try {
             this.kit = new ClawKit(walletClient, config);
-            console.error("🦅 EIDOLON-V: MCP Server Initialized. Connected to opBNB.");
+
+            // 👻 GHOST PROTOCOL: Inject Internal Oracle for Privacy
+            // This prevents GasModule from calling CoinGecko/Binance public APIs
+            const oracle = new ClawOracle(this.kit);
+            this.kit.gas.setOracle(oracle);
+
+            console.error("🦅 EIDOLON-V: MCP Server Initialized. Connected to opBNB. GHOST Protocol Active.");
         } catch (e) {
             console.error("❌ EIDOLON-V: Failed to initialize ClawKit:", e);
             process.exit(1);

@@ -28,8 +28,16 @@ export class GasModule {
   constructor(
     private walletClient: ClawKitWalletClient,
     private publicClient: PublicClient,
-    private config: ClawKitConfig
+    private config: ClawKitConfig,
+    private oracle?: any // Loosely typed to avoid circular import hell, or use Interface
   ) { }
+
+  /**
+   * Inject Oracle for GHOST Protocol (Privacy)
+   */
+  public setOracle(oracle: any) {
+    this.oracle = oracle;
+  }
 
   /**
    * Get REAL BNB price from multiple sources with caching
@@ -37,14 +45,29 @@ export class GasModule {
    * Added: Caching, multiple fallbacks, rate limit handling
    */
   async getBNBPrice(): Promise<number> {
+    // 👻 GHOST PROTOCOL: Use Internal Oracle if available
+    // Does not leak IP to CoinGecko/Binance
+    if (this.oracle) {
+      try {
+        const price = await this.oracle.getBNBPrice();
+        this.priceCache = { value: price, timestamp: Date.now() };
+        return price;
+      } catch (e) {
+        console.warn('⚠️ Internal Oracle failed, falling back to cached or external (Not recommended for Ghost Mode)');
+      }
+    }
+
     // Check cache first (prevents rate limiting)
     if (this.priceCache && Date.now() - this.priceCache.timestamp < this.CACHE_DURATION) {
       console.log(`💰 Using cached BNB price: $${this.priceCache.value.toFixed(2)}`);
       return this.priceCache.value;
     }
 
-    // FIX C5: Removed duplicate nested try block
-    // Try CoinGecko first
+    // ... (Legacy External APIs omitted/kept as fallback if strictly needed, but we prefer Oracle)
+    // For GHOST compliance, we should ideally REMOVE them, but for robustness we keep them as last resort
+    // wrapped in a "Privacy Warning"
+
+    // Try CoinGecko first (Privacy Leak!)
     try {
       const response = await axios.get(`${this.COINGECKO_API}/simple/price`, {
         params: {

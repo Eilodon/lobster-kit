@@ -40,12 +40,12 @@ vi.mock('../../src/eidolon/WasmAdapter', () => {
 // Mock GoPlusSecurity
 vi.mock('../../src/eidolon/oracles/GoPlusSecurity', () => {
     return {
-        GoPlusSecurity: vi.fn().mockImplementation(() => ({
-            checkToken: vi.fn().mockResolvedValue({
+        GoPlusSecurity: class {
+            checkToken = vi.fn().mockResolvedValue({
                 is_honeypot: false,
                 is_open_source: true
             })
-        }))
+        }
     };
 });
 
@@ -256,6 +256,49 @@ describe('EidolonGuard', () => {
             expect(result.approved).toBe(false);
             expect(result.riskScore).toBeGreaterThan(30);
             expect(result.reason).toContain('Risk score too high');
+        });
+        it('should BLOCK transaction if BLAST RADIUS is exceeded (>10 contracts)', async () => {
+            const guard = new EidolonGuard(mockKit, {
+                maxRiskScore: 100,
+                minConfidence: 0,
+                riskParameters: {
+                    maxPositionSize: 1000,
+                    maxDrawdown: 100,
+                    minConfidence: 0,
+                    cooldownPeriod: 0
+                }
+            });
+            await guard.init();
+
+            const txCandidate = {
+                to: '0xTarget',
+                data: '0x',
+                value: 0n,
+                account: '0xSender'
+            };
+
+            // Mock Simulator returning high footprint
+            const mockShadowResult = {
+                success: true,
+                gasUsed: 50000n,
+                logs: [],
+                touchedAddresses: Array(15).fill('0xContract') // 15 touched addresses
+            };
+
+            // Inject Mock Simulator
+            const mockSim = {
+                simulate: vi.fn().mockResolvedValue(mockShadowResult)
+            };
+            (guard as any).simulator = mockSim;
+
+            const result = await guard.validateAction('BUY', {
+                amountUSD: 100,
+                tokenAddress: '0xToken',
+                txCandidate
+            });
+
+            expect(result.approved).toBe(false);
+            expect(result.reason).toContain('BLAST RADIUS EXCEEDED');
         });
     });
 });
