@@ -41,3 +41,10 @@ typechain-types/
 .turbo/
 data/
 
+
+# Rust
+core-rust/target/
+
+# Test Outputs
+test_output*.txt
+test_debug.txt

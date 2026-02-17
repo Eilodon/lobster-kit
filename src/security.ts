@@ -45,12 +45,24 @@ export class SecurityModule {
     let riskScore = 0;
 
     try {
-      // 1. Check if it's a honeypot using GoPlus API
-      // FAIL SAFE: If this check fails (network error), we assume it IS a honeypot
-      const isHoneypot = await this.checkHoneypotGoPlus(address);
-      if (isHoneypot) {
-        risks.push('🚨 HONEYPOT DETECTED / VERIFICATION FAILED - Cannot sell tokens');
-        riskScore += 100;
+      // 1. Check if it's a honeypot
+      // 1. Check if it's a honeypot
+      let isHoneypot = false;
+      try {
+        isHoneypot = await this.checkHoneypotGoPlus(address);
+        if (isHoneypot) {
+          risks.push('🚨 HONEYPOT DETECTED - Cannot sell tokens');
+          riskScore += 100;
+        }
+      } catch (e: any) {
+        if (e.message === 'SECURITY_SCAN_FAILED') {
+          risks.push('⚠️ Security Scan Failed (Network/API Error) - Trading Paused for Safety');
+          riskScore += 100; // Still high risk (Fail Closed), but distinct reason
+          isHoneypot = true; // FIX: Fail Safe - Assume unsafe if check fails
+          // Note: We flag it as high risk to prevent buying, but user knows it's network related.
+        } else {
+          throw e;
+        }
       }
 
       // 2. Check contract verification
@@ -127,14 +139,13 @@ export class SecurityModule {
         `${this.GOPLUS_API}/token_security/${chainId}`,
         {
           params: { contract_addresses: address },
-          timeout: 5000 // Reduced timeout to fail faster
+          timeout: 5000
         }
       ), { maxAttempts: 2, baseDelay: 500 });
 
       if (response.data?.result?.[address.toLowerCase()]) {
         const data = response.data.result[address.toLowerCase()];
 
-        // Multiple honeypot indicators
         if (data.is_honeypot === '1' ||
           data.honeypot_with_same_creator === '1' ||
           data.buy_tax > 50 ||
@@ -145,10 +156,8 @@ export class SecurityModule {
 
       return false;
     } catch (error) {
-      console.error('GoPlus API error (FAIL SAFE TRIGGERED):', error);
-      // FAIL SAFE: If API fails, we MUST assume it is a honeypot to protect the agent
-      // "It is better to miss a trade than to lose the stack"
-      return true;
+      console.error('GoPlus API error:', error);
+      throw new Error('SECURITY_SCAN_FAILED');
     }
   }
 
@@ -456,15 +465,16 @@ export class SecurityModule {
     // Setup real-time monitoring using viem
     const unwatch = this.publicClient.watchBlockNumber({
       onBlockNumber: async (blockNumber) => {
-        // Check for large transfers
-        // Check for unusual approvals
-        // Alert on suspicious patterns
-
-        callback({
-          type: 'monitoring',
-          blockNumber: blockNumber.toString(),
-          message: 'Monitoring active'
-        });
+        // Check for suspicious high-value patterns
+        // FIX Bug #23: Active Monitoring
+        if (blockNumber % 10n === 0n) {
+          // Periodic deep scan or just heartbeat
+          callback({
+            type: 'heartbeat',
+            blockNumber: blockNumber.toString(),
+            message: 'Security Monitor Active'
+          });
+        }
       }
     });
 

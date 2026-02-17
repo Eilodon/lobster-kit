@@ -37,7 +37,21 @@ export class DivineTransparency {
    * @param action Proposed action
    * @returns Decision log with confidence and reasoning
    */
-  public explain(state: MarketState, action: ActionType): DecisionLog {
+  public async explain(state: MarketState, action: ActionType): Promise<DecisionLog> {
+
+    // FIX L1: Connect DeepSeek Oracle (Neural)
+    if (this.oracle) {
+      try {
+        const dynamicWeights = await this.oracle.analyze({
+          marketState: state
+        });
+        // Override weights with neural context
+        this.weights = { ...this.weights, ...dynamicWeights };
+      } catch (e) {
+        console.warn('🔮 Oracle connection failed, using instinct (Symbolic)', e);
+      }
+    }
+
     const factors: CausalFactor[] = [];
     let confidence = 50; // Base confidence
 
@@ -106,6 +120,8 @@ export class DivineTransparency {
     }
 
     // 2. Action-Specific Adjustments
+    // FIX Bug #27: Clamp before adjustment to prevent negative logic flip
+    confidence = Math.max(0, confidence);
     confidence = this.adjustForAction(action, state, confidence);
 
     // 3. Bounds checking

@@ -31,9 +31,10 @@ describe('SecurityModule: Immune Boost (Fail Safe)', () => {
         const result = await security.scanContract('0xTargetContract');
 
         // Assert Fail Safe behavior
-        expect(result.isHoneypot).toBe(true); // Should assume worst case
-        expect(result.riskScore).toBeGreaterThanOrEqual(100);
-        expect(result.risks).toContainEqual(expect.stringMatching(/HONEYPOT DETECTED/));
+        // Assert Fail Safe behavior
+        expect(result.isHoneypot).toBe(true);
+        expect(result.riskScore).toBe(100);
+        expect(result.risks).toContain('🚨 CRITICAL SYSTEM FAILURE: Security scan could not complete. ASSUMING HOSTILE.');
     });
 
     it('should return safe result when API succeeds and returns clean data', async () => {

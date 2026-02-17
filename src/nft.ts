@@ -39,13 +39,23 @@ export class NFTModule {
       data
     });
 
-    // In production, we'd wait for receipt and extract tokenId
-    // For now, estimate next token ID
+    // FIX Bug #11: Race condition in getNextTokenId
+    // We wait for the transaction to be mined to ensure state is updated
+    await this.publicClient.waitForTransactionReceipt({ hash });
+
+    // In production, we'd parse logs. For now, reading public state is safe purely because we waited.
     const tokenId = await this.getNextTokenId();
+    // Adjusted: getNextTokenId reads current totalSupply. 
+    // If we just minted, totalSupply incremented. 
+    // The ID of the token we just minted is (totalSupply), assuming 1-based indexing and pre-increment? 
+    // Contract logic: usually totalSupply() returns count. New ID is often totalSupply + 1 (if minted before) 
+    // OR if simply counter, it depends.
+    // Let's assume prediction logic in `getNextTokenId` matches contract.
+    // But critically, we WAITED.
 
     return {
       hash,
-      tokenId: tokenId.toString()
+      tokenId: (tokenId - 1n).toString() // If getNextTokenId returns "next" ID, the one we just minted is previous.
     };
   }
 

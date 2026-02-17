@@ -183,7 +183,8 @@ describe('EidolonGuard', () => {
         },
         gas: {
             getOptimalExecutionTime: vi.fn().mockResolvedValue({ currentGasPrice: '0.000005' })
-        }
+        },
+        config: {}
     } as unknown as any; // Using any to avoid importing full ClawKit type complexity in test, or cast to ClawKit if imported
 
 

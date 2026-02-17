@@ -83,8 +83,9 @@ export class OpenClawAdapter {
     }
 
     private mapSkillToAction(skillName: string): 'BUY' | 'SELL' | 'HOLD' {
-        if (skillName.includes('buy') || skillName.includes('mint')) return 'BUY';
-        if (skillName.includes('sell') || skillName.includes('burn')) return 'SELL';
+        // FIX L12: Strict prefix/exact matching
+        if (skillName.startsWith('execute_buy') || skillName === 'mint_nft') return 'BUY';
+        if (skillName.startsWith('execute_sell') || skillName === 'burn_token') return 'SELL';
         return 'HOLD';
     }
 

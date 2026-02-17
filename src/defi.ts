@@ -1,49 +1,51 @@
-import { WalletClient, PublicClient, parseEther, formatEther, encodeFunctionData, parseAbi, SimulateContractParameters } from 'viem';
-import { ClawKitConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, ClawKitWalletClient, OPBNB_CONFIG, toAddress } from './types';
+import { WalletClient, PublicClient, parseEther, parseUnits, formatEther, encodeFunctionData, parseAbi, SimulateContractParameters } from 'viem';
+import { ClawKitConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, ClawKitWalletClient, OPBNB_CONFIG, toAddress, getTokenDecimals } from './types';
 import axios from 'axios';
 import { withRetry } from './utils/Resilience';
 
-const PANCAKE_SWAP_ROUTER_ABI = [
+const PANCAKE_V3_ROUTER_ABI = [
   {
-    name: 'swapExactETHForTokens',
-    type: 'function',
+    inputs: [
+      {
+        components: [
+          { name: 'tokenIn', type: 'address' },
+          { name: 'tokenOut', type: 'address' },
+          { name: 'fee', type: 'uint24' },
+          { name: 'recipient', type: 'address' },
+          { name: 'deadline', type: 'uint256' },
+          { name: 'amountIn', type: 'uint256' },
+          { name: 'amountOutMinimum', type: 'uint256' },
+          { name: 'sqrtPriceLimitX96', type: 'uint160' }
+        ],
+        name: 'params',
+        type: 'tuple'
+      }
+    ],
+    name: 'exactInputSingle',
+    outputs: [{ name: 'amountOut', type: 'uint256' }],
     stateMutability: 'payable',
-    inputs: [
-      { name: 'amountOutMin', type: 'uint256' },
-      { name: 'path', type: 'address[]' },
-      { name: 'to', type: 'address' },
-      { name: 'deadline', type: 'uint256' }
-    ],
-    outputs: [{ name: 'amounts', type: 'uint256[]' }]
+    type: 'function'
   },
   {
-    name: 'swapExactTokensForTokens',
-    type: 'function',
-    stateMutability: 'nonpayable',
     inputs: [
-      { name: 'amountIn', type: 'uint256' },
-      { name: 'amountOutMin', type: 'uint256' },
-      { name: 'path', type: 'address[]' },
-      { name: 'to', type: 'address' },
-      { name: 'deadline', type: 'uint256' }
+      {
+        components: [
+          { name: 'path', type: 'bytes' },
+          { name: 'recipient', type: 'address' },
+          { name: 'deadline', type: 'uint256' },
+          { name: 'amountIn', type: 'uint256' },
+          { name: 'amountOutMinimum', type: 'uint256' }
+        ],
+        name: 'params',
+        type: 'tuple'
+      }
     ],
-    outputs: [{ name: 'amounts', type: 'uint256[]' }]
-  },
-  {
-    name: 'swapExactTokensForETH',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'amountIn', type: 'uint256' },
-      { name: 'amountOutMin', type: 'uint256' },
-      { name: 'path', type: 'address[]' },
-      { name: 'to', type: 'address' },
-      { name: 'deadline', type: 'uint256' }
-    ],
-    outputs: [{ name: 'amounts', type: 'uint256[]' }]
+    name: 'exactInput',
+    outputs: [{ name: 'amountOut', type: 'uint256' }],
+    stateMutability: 'payable',
+    type: 'function'
   }
 ] as const;
-
 
 export class DeFiModule {
 
@@ -90,43 +92,6 @@ export class DeFiModule {
     }
   }
 
-
-
-  /**
-   * 🛡️ HUNTER EYES: Liquidity Probing
-   * Poke the pool with a small amount to verify it's not a trap (Honeypot/High Tax/Revert)
-   */
-  private async probeLiquidity(
-    tokenIn: string,
-    tokenOut: string,
-    router: string,
-    userAddress: string
-  ): Promise<void> {
-    console.log(`🛡️ Probing liquidity for ${tokenIn} -> ${tokenOut}...`);
-    // Simulate a $10 equivalent swap (approx 0.02 BNB or equivalent)
-    // For simplicity, we use a small fixed amount based on token type
-    // In production, this should be dynamic based on price
-    const probeAmount = 1000000000000000n; // 0.001 (generic small amount)
-
-    try {
-      // Create a static call check
-      // We don't need to actually approve for a view/static call simulation if we use `eth_call` overrides,
-      // but viem's simulateContract might check allowance.
-      // However, `publicClient.call` is a raw call.
-      // We will try to simulate a quote or a small swap.
-      // Actually, standard practice is to simulate the REAL transaction logic but with small amount?
-      // No, we want to see if the pool reacts normally.
-      // Let's rely on the main `simulateTransaction` doing the heavy lifting for the FULL amount.
-      // But `probeLiquidity` specifically checks for "Tax" or "Honeypot" mechanics by checking output difference.
-
-      // Skipping implementation of complex probe for now to avoid breaking changes without Price Oracle.
-      // Instead, we reinforce the Main Simulation.
-      console.log("   Liquidity Probe bypassed (Relaying on Atomic Simulation)");
-    } catch (e) {
-      console.warn("   Probe warning:", e);
-    }
-  }
-
   /**
    * ⚡ FLASH ACCOUNTING: Thermodynamic Check
    * Ensure we are not burning move energy (Gas) than the food is worth.
@@ -150,17 +115,18 @@ export class DeFiModule {
       const gasCost = gasEstimate * gasPrice;
 
       // Logic: If Gas Cost > 10% of Trade Value, ABORT.
-      // "Don't spend 100 calories to hunt a mouse worth 50 calories."
       const threshold = amountIn / 10n; // 10%
 
-      // Note: This logic assumes amountIn is the "Value". For tokens, this is hard without Oracle.
-      // But for BNB swaps, it's easy.
-      // We will apply this strictly for BNB operations for now.
-      if (value > 0n) {
+      // Note: This logic assumes amountIn is the "Value".
+      // Strictly checking cost against input amount.
+      if (value > 0n || amountIn > 0n) {
+        // Use amountIn as proxy for value if value is 0 (token swap)
+        const tradeValue = value > 0n ? value : amountIn;
+
         if (gasCost > threshold) {
-          throw new Error(`Thermodynamic Fail: Gas cost (${formatEther(gasCost)}) > 10% of Trade Value (${formatEther(value)})`);
+          throw new Error(`Thermodynamic Fail: Gas cost (${formatEther(gasCost)}) > 10% of Trade Value (${formatEther(tradeValue)})`);
         }
-        console.log(`⚡ Thermodynamics OK: Gas cost is ${(Number(gasCost) * 100 / Number(value)).toFixed(2)}% of trade.`);
+        console.log(`⚡ Thermodynamics OK: Gas cost is ${(Number(gasCost) * 100 / Number(tradeValue)).toFixed(2)}% of trade.`);
       }
 
     } catch (error) {
@@ -170,7 +136,8 @@ export class DeFiModule {
   }
 
   /**
-   * Swap tokens using PancakeSwap with approval check
+   * Swap tokens using PancakeSwap V3 (ExactInputSingle)
+   * FIXED: Bug #1 (Decimals) & Bug #5 (V3 ABI)
    * @example
    * await kit.defi.swap({ from: 'BNB', to: 'USDT', amount: '0.1' })
    */
@@ -181,97 +148,83 @@ export class DeFiModule {
     const fromToken = this.resolveTokenAddress(from);
     const toToken = this.resolveTokenAddress(to);
 
-    // Parse amount
-    const amountIn = parseEther(amount);
+    // FIX Bug #1: Dynamic Decimal Resolution
+    const fromDecimals = getTokenDecimals(from);
+    const amountIn = parseUnits(amount, fromDecimals);
 
-    // Get real quote from PancakeSwap
-    const amountOutMin = await this.getRealQuote(fromToken, toToken, amountIn, slippage);
+    // Get real quote from PancakeSwap V3 Quoter
+    // We get the best fee tier from the quote result
+    const quoteResult = await this.getRealQuote(fromToken, toToken, amountIn, slippage);
+    const amountOutMin = quoteResult.amountOutMin;
+    const feeTier = quoteResult.fee;
 
     // Build transaction
     const deadlineTimestamp = Math.floor(Date.now() / 1000) + deadline * 60;
     const userAddress = await this.getAddress();
-    const router = this.contracts.pancakeRouter;
+    const router = this.contracts.pancakeRouter; // V3 Router
 
     try {
       // 🛡️ Pre-computation: Prepare Data
       let data: `0x${string}`;
       let value = 0n;
 
-      // For BNB -> Token swap (no approval needed)
-      if (fromToken === this.tokens.BNB.address || fromToken === this.tokens.WBNB.address) {
-        data = encodeFunctionData({
-          abi: PANCAKE_SWAP_ROUTER_ABI,
-          functionName: 'swapExactETHForTokens',
-          args: [
-            amountOutMin,
-            [this.tokens.WBNB.address as `0x${string}`, toAddress(toToken)],
-            toAddress(userAddress),
-            BigInt(deadlineTimestamp)
-          ]
-        });
+      const isNativeIn = fromToken === this.tokens.BNB.address || fromToken === this.tokens.WBNB.address;
+
+      if (fromToken === this.tokens.BNB.address) {
+        // Native BNB -> Token
+        // V3 Router handles native ETH/BNB wrapping automatically if msg.value > 0 and tokenIn is WBNB
+        // But technically exactInputSingle params.tokenIn must be WBNB address
         value = amountIn;
       } else {
-        // For Token -> Token or Token -> BNB (requires approval)
+        // Token -> Token
         await this.ensureApproval(fromToken, router, amountIn);
-
-        // Determine swap function
-        let functionName: string;
-        let path: `0x${string}`[];
-
-        if (toToken === this.tokens.WBNB.address || toToken === this.tokens.BNB.address) {
-          functionName = 'swapExactTokensForETH';
-          path = [toAddress(fromToken), this.tokens.WBNB.address as `0x${string}`];
-        } else {
-          functionName = 'swapExactTokensForTokens';
-          path = [toAddress(fromToken), this.tokens.WBNB.address as `0x${string}`, toAddress(toToken)];
-        }
-
-        data = encodeFunctionData({
-          abi: PANCAKE_SWAP_ROUTER_ABI,
-          functionName: functionName as any,
-          args: [
-            amountIn,
-            amountOutMin,
-            path,
-            toAddress(userAddress),
-            BigInt(deadlineTimestamp)
-          ]
-        });
+        value = 0n;
       }
+
+      // V3 Params
+      const v3Params = {
+        tokenIn: isNativeIn ? (this.tokens.WBNB.address as `0x${string}`) : toAddress(fromToken),
+        tokenOut: toAddress(toToken),
+        fee: feeTier,
+        recipient: toAddress(userAddress),
+        deadline: BigInt(deadlineTimestamp),
+        amountIn: amountIn,
+        amountOutMinimum: amountOutMin,
+        sqrtPriceLimitX96: 0n
+      };
+
+      data = encodeFunctionData({
+        abi: PANCAKE_V3_ROUTER_ABI,
+        functionName: 'exactInputSingle',
+        args: [v3Params]
+      });
 
       // ⚡ CHECK 1: FLASH ACCOUNTING (Thermodynamics)
       try {
         await this.checkThermodynamics(router, data, value, amountIn);
       } catch (err: any) {
-        console.error('⚡ CRITICAL FAILURE (DEBUG PROBE):', err.message);
-        console.error(`DEBUG: fromToken=${fromToken}`);
-        console.error(`DEBUG: BNB=${this.tokens.BNB?.address}`);
-        console.error(`DEBUG: Condition=${fromToken !== this.tokens.BNB.address && fromToken !== this.tokens.WBNB.address}`);
+        console.error('⚡ CRITICAL FAILURE (Thermodynamic):', err.message);
 
-
-        // REVOKE APPROVAL if needed
-        if (fromToken !== this.tokens.BNB.address && fromToken !== this.tokens.WBNB.address) {
+        // FIX Bug #3 (Part 1): Revoke approval on error
+        if (fromToken !== this.tokens.BNB.address) {
           console.log('🔄 Revoking approval due to thermodynamic failure...');
-          // 0 approval to reset
-          await this.ensureApproval(fromToken, router, 0n);
+          await this.revokeApproval(fromToken, router);
         }
         throw err;
       }
 
       // 🛡️ CHECK 2: SIMULATION (The Hunter's Eye)
-
       try {
         await this.simulateTransaction(router, data, value, userAddress);
       } catch (err: any) {
         console.error('🛡️ Simulation Failed:', err.message);
-        // REVOKE APPROVAL if needed
-        if (fromToken !== this.tokens.BNB.address && fromToken !== this.tokens.WBNB.address) {
+        // FIX Bug #3 (Part 2): Revoke approval on simulation failure
+        if (fromToken !== this.tokens.BNB.address) {
           console.log('🔄 Revoking approval due to simulation failure...');
-          await this.ensureApproval(fromToken, router, 0n);
+          await this.revokeApproval(fromToken, router);
         }
         throw err;
       }
-
 
       // 🚀 EXECUTION (The Strike)
       const hash = await this.walletClient.sendTransaction({
@@ -282,7 +235,7 @@ export class DeFiModule {
 
       return {
         hash,
-        amountOut: formatEther(amountOutMin)
+        amountOut: formatEther(amountOutMin) // Display purpose
       };
 
     } catch (error: any) {
@@ -304,6 +257,7 @@ export class DeFiModule {
 
   /**
    * Ensure token approval for spender
+   * Updated to support force behavior if needed, but standard flow checks allowance.
    */
   private async ensureApproval(
     tokenAddress: string,
@@ -320,32 +274,70 @@ export class DeFiModule {
       args: [toAddress(owner), toAddress(spender)]
     });
 
-    // If allowance is sufficient, no need to approve
+    // If allowance is sufficient, return
     if (allowance >= amount) {
       return;
     }
 
-    // Request approval
-    console.log('Requesting approval...');
+    if (allowance < amount) {
+      console.log(`🔓 Approving ${tokenAddress} for ${spender}...`);
+
+      // FIX U3: Optimize Approval Strategy (Approve MAX_UINT)
+      // Saves gas on repeated swaps
+      const MAX_UINT = 2n ** 256n - 1n;
+
+      // ERC20_ABI is not defined in the provided context, assuming it's available globally or imported.
+      // For a complete solution, it would need to be defined, e.g., `const ERC20_ABI = parseAbi(['function approve(address spender, uint256 amount) returns (bool)']);`
+      const { request } = await this.publicClient.simulateContract({
+        address: tokenAddress as `0x${string}`,
+        abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']), // Using parseAbi directly for ERC20 approve
+        functionName: 'approve',
+        args: [toAddress(spender), MAX_UINT],
+        account: toAddress(this.walletClient.account.address), // Ensure account is `Address` type
+      });
+
+      const hash = await this.walletClient.writeContract(request);
+      console.log(`⏳ Approval Tx Sent: ${hash}`);
+      await this.publicClient.waitForTransactionReceipt({ hash });
+      console.log(`✅ Approval Confirmed.`);
+    }
+  }
+
+  /**
+   * FIX Bug #3: Dedicated Revoke Function
+   * Forces approval to 0 regardless of current state to clear risks.
+   */
+  private async revokeApproval(
+    tokenAddress: string,
+    spender: string
+  ): Promise<void> {
+    const owner = await this.getAddress();
+    console.log(`Warning: Revoking approval for ${tokenAddress} to ${spender}`);
+
     const data = encodeFunctionData({
       abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
       functionName: 'approve',
-      args: [toAddress(spender), amount]
+      args: [toAddress(spender), 0n]
     });
 
-    // Simulate approval (rarely fails, but good practice)
-    await this.simulateTransaction(tokenAddress, data, 0n, owner);
-
-    const hash = await this.walletClient.sendTransaction({
-      to: toAddress(tokenAddress),
-      data
-    });
-
-    // Wait for approval transaction
-    await this.publicClient.waitForTransactionReceipt({ hash });
-    console.log('✅ Approval granted');
+    try {
+      // We assume this might be called in an error state, so we try-catch the revoke itself 
+      // to ensuring it doesn't mask the original error if it fails (though unlikely for 0 approve)
+      const hash = await this.walletClient.sendTransaction({
+        to: toAddress(tokenAddress),
+        data
+      });
+      await this.publicClient.waitForTransactionReceipt({ hash }); // Optional wait
+      console.log('✅ Approval revoked (Reset to 0)');
+    } catch (e) {
+      console.error("Failed to revoke approval:", e);
+    }
   }
 
+  /**
+  * Get real quote from PancakeSwap
+  * FIXED: Try multiple fee tiers to find liquidity
+  */
   /**
   * Get real quote from PancakeSwap
   * FIXED: Try multiple fee tiers to find liquidity
@@ -355,7 +347,7 @@ export class DeFiModule {
     tokenOut: string,
     amountIn: bigint,
     slippage: number
-  ): Promise<bigint> {
+  ): Promise<{ amountOutMin: bigint; fee: number }> {
     // FIXED: Parallel execution for all fee tiers (Hyper-Routing)
     const feeTiers = [
       { fee: 2500, name: '0.25%' },  // Most common
@@ -384,6 +376,7 @@ export class DeFiModule {
         });
         return { ...tier, amountOut, error: null };
       } catch (error) {
+        // console.error(`Error fetching quote for tier ${tier.fee}:`, error);
         return { ...tier, amountOut: 0n, error };
       }
     });
@@ -405,8 +398,15 @@ export class DeFiModule {
     const bestQuote = validQuotes[0];
     const amountOutMin = bestQuote.amountOut - (bestQuote.amountOut * BigInt(Math.floor(slippage * 100)) / 10000n);
 
-    console.log(`✅ Hyper-Routing Winner: ${bestQuote.name} (Out: ${formatEther(bestQuote.amountOut)})`);
-    return amountOutMin;
+    // Helper to format output based on target token decimals for logging
+    // We don't have target token decimals easily here without lookup, so using formatEther as approx or generic
+    // But since this is just logging, it's fine.
+    console.log(`✅ Hyper-Routing Winner: ${bestQuote.name} (Out: ${bestQuote.amountOut})`);
+
+    return {
+      amountOutMin,
+      fee: bestQuote.fee
+    };
   }
 
   /**
@@ -586,10 +586,57 @@ export class DeFiModule {
   /**
    * Get user's staked pools
    */
+  /**
+   * Get user's staked pools
+   * FIX L2: Real on-chain query to MasterChef
+   */
   private async getUserStakedPools(address: string): Promise<any[]> {
-    // This would query the MasterChef contract for user positions
-    // Simplified for demo - real implementation would read contract state
-    return [];
+    const masterChef = this.contracts.pancakeMasterChef;
+
+    try {
+      // 1. Get pool length
+      const poolLength = await this.publicClient.readContract({
+        address: toAddress(masterChef),
+        abi: parseAbi(['function poolLength() view returns (uint256)']),
+        functionName: 'poolLength'
+      }) as bigint;
+
+      const pools = [];
+      // 2. Iterate pools (Optimized: In production, use Multicall or Graph)
+      // For now, limiting to first 20 pools to avoid RPC timeout if thousands exist
+      // or just iterate known PIDs if we had a config.
+      // We'll iterate up to 10 for demo/safety, or loop all if small.
+      const scanLimit = poolLength > 20n ? 20n : poolLength;
+
+      for (let pid = 0n; pid < scanLimit; pid++) {
+        const userInfo = await this.publicClient.readContract({
+          address: toAddress(masterChef),
+          abi: parseAbi(['function userInfo(uint256 pid, address user) view returns (uint256 amount, uint256 rewardDebt)']),
+          functionName: 'userInfo',
+          args: [pid, toAddress(address)]
+        }) as [bigint, bigint];
+
+        if (userInfo[0] > 0n) {
+          // Determine pending rewards
+          const pending = await this.publicClient.readContract({
+            address: toAddress(masterChef),
+            abi: parseAbi(['function pendingCake(uint256 pid, address user) view returns (uint256)']),
+            functionName: 'pendingCake', // V3 might be different, assuming V2/MasterChef style
+            args: [pid, toAddress(address)]
+          }) as bigint;
+
+          pools.push({
+            pid: Number(pid),
+            stakedAmount: userInfo[0],
+            pendingRewards: pending
+          });
+        }
+      }
+      return pools;
+    } catch (e) {
+      console.warn('Failed to fetch staked pools', e);
+      return [];
+    }
   }
 
   /**
@@ -718,7 +765,10 @@ export class DeFiModule {
     this.checkVenusSupport();
     const { asset, amount } = params;
     const vTokenAddress = this.resolveVToken(asset);
-    const amountBigInt = parseEther(amount);
+
+    // FIX Bug #1: Dynamic Decimals for Lend
+    const decimals = getTokenDecimals(asset);
+    const amountBigInt = parseUnits(amount, decimals);
     const userAddress = await this.getAddress();
 
     try {
@@ -776,7 +826,10 @@ export class DeFiModule {
     this.checkVenusSupport();
     const { asset, amount } = params;
     const vTokenAddress = this.resolveVToken(asset);
-    const amountBigInt = parseEther(amount); // Note: verify decimals for USDT/USDC
+
+    // FIX Bug #1: Dynamic Decimals for Borrow
+    const decimals = getTokenDecimals(asset);
+    const amountBigInt = parseUnits(amount, decimals);
 
     try {
       console.log(`Borrowing ${amount} ${asset} from Venus...`);
@@ -812,7 +865,10 @@ export class DeFiModule {
     this.checkVenusSupport();
     const { asset, amount } = params;
     const vTokenAddress = this.resolveVToken(asset);
-    const amountBigInt = parseEther(amount);
+
+    // FIX Bug #1: Dynamic Decimals for Repay
+    const decimals = getTokenDecimals(asset);
+    const amountBigInt = parseUnits(amount, decimals);
     const userAddress = await this.getAddress();
 
     try {

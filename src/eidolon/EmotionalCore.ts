@@ -25,6 +25,7 @@ export class EmotionalCore {
   private state: EmotionalState;
   private storage: AppendOnlyAdapter;
   private bus: EidolonBus;
+  private stateModified = false; // Guards against async loadState overwrite race
 
   // AI Engines
   private thermoEngine: ThermodynamicEngine;
@@ -79,6 +80,13 @@ export class EmotionalCore {
     const now = Date.now();
     const deltaTime = dt || (now - this.state.lastUpdate) / 1000; // seconds
     if (deltaTime <= 0) return this.state;
+    this.stateModified = true;
+
+    // FIX: NaN Guard for Volatility
+    if (isNaN(marketVolatility)) {
+      console.warn('⚠️ Market Volatility is NaN, defaulting to 0.1');
+      marketVolatility = 0.1;
+    }
 
     // 1. Update Market Temperature (affects Thermodynamic interaction)
     this.state.volatility = marketVolatility;
@@ -95,7 +103,11 @@ export class EmotionalCore {
       this.state.arousal,
       this.state.valence,
       this.state.attention,
-      this.state.rhythm,
+      // FIX L3: Blend breath into rhythm
+      // Breath phase: Inhale (0-1) -> Rise, Exhale (0-1) -> Fall, Hold -> Stable
+      breath.phase === BreathPhase.Inhale ? 0.5 + (breath.progress * 0.5) :
+        breath.phase === BreathPhase.Exhale ? 1.0 - (breath.progress * 0.5) :
+          0.5,
       this.state.momentum
     ]);
 
@@ -149,21 +161,36 @@ export class EmotionalCore {
   }
 
   private processBiologicalFunction(dt: number) {
-    // Glucose burn (Energy)
-    const burnRate = BioParams.metabolism.glucoseBurnRate * (1 + this.state.arousal); // Faster burn at high arousal
-    this.state.glucose = Math.max(BioParams.limits.minHormoneLevel, this.state.glucose - burnRate * dt);
+    // 1. Glucose Consumption (Brain needs fuel)
+    const burnRate = 0.5 + (this.state.arousal * 0.5) + (this.state.attention * 0.5);
+    this.state.glucose = Math.max(0, this.state.glucose - burnRate * dt);
 
-    // Dopamine decay (Motivation)
+    // Gluconeogenesis: Slow glucose recovery when low (prevents starvation deadlock)
+    if (this.state.glucose < 40) {
+      this.state.glucose = Math.min(40, this.state.glucose + 0.2 * dt);
+    }
+
+    // 2. Dopamine Decay (natural depletion)
     this.state.dopamine = Math.max(BioParams.limits.minHormoneLevel, this.state.dopamine - BioParams.metabolism.dopamineDecayRate * dt);
 
-    // Cortisol accumulation (Stress) - driven by volatility and low glucose
-    const stressFactor = this.state.volatility * BioParams.metabolism.cortisolSpikeFactor + (this.state.glucose < BioParams.thresholds.starvationGlucose ? 5.0 : 0);
-    this.state.cortisol = Math.min(BioParams.limits.maxHormoneLevel, this.state.cortisol + stressFactor * dt);
+    // 3. Cortisol Dynamics (UNIFIED — FIX A2: Prevents deadlock)
+    //    Stress accumulation only above volatility dead-zone (0.15)
+    //    Below dead-zone = baseline market noise, no stress buildup
+    const volatilityDeadZone = 0.15;
+    const activeStress = this.state.volatility > volatilityDeadZone
+      ? (this.state.volatility - volatilityDeadZone) * BioParams.metabolism.cortisolSpikeFactor
+      : 0;
+    const starvationStress = this.state.glucose < BioParams.thresholds.starvationGlucose ? 3.0 : 0;
+    const totalStress = activeStress + starvationStress;
 
-    // Cortisol decay (Rest)
-    if (this.state.arousal < 0.3) {
-      this.state.cortisol = Math.max(BioParams.limits.minHormoneLevel, this.state.cortisol - BioParams.metabolism.cortisolDecayRate * dt);
-    }
+    // Natural cortisol clearance (HPA axis negative feedback — always active)
+    const basalClearance = 0.3;
+    const restBonus = this.state.arousal < 0.3 ? BioParams.metabolism.cortisolDecayRate : 0;
+    const totalDecay = basalClearance + restBonus;
+
+    // Net cortisol change per tick
+    const netCortisol = (totalStress - totalDecay) * dt;
+    this.state.cortisol = Math.max(0, Math.min(BioParams.limits.maxHormoneLevel, this.state.cortisol + netCortisol));
   }
 
   /**
@@ -171,6 +198,7 @@ export class EmotionalCore {
    * FIXED: Uses Relative ROI (Sharpe-like) instead of absolute value
    */
   stimulate(value: number, type: 'PROFIT' | 'LOSS' | 'DANGER', capitalAtRisk: number = 0) {
+    this.stateModified = true;
     // 1. Calculate Relative Impact (ROI)
     // If capital is 0 (legacy/danger), use raw value but capped
     let impact = value;
@@ -205,8 +233,12 @@ export class EmotionalCore {
         console.log(`🧠 STIMULUS: ${type} (-$${value.toFixed(2)} on $${capitalAtRisk}) -> +${(impact * 2).toFixed(1)} Cortisol`);
         break;
       case 'DANGER':
-        this.state.arousal = Math.min(1.0, this.state.arousal + 0.3);
-        this.state.cortisol = Math.min(100, this.state.cortisol + 20);
+      case 'DANGER':
+        // FIX L5: Scale impact by severity
+        const dangerImpact = Math.min(30, value); // Cap outcome
+        this.state.arousal = Math.min(1.0, this.state.arousal + (dangerImpact / 100)); // Max +0.3 for severity 30
+        this.state.cortisol = Math.min(100, this.state.cortisol + (dangerImpact * 0.6)); // +18 for severity 30
+        console.log(`🧠 STIMULUS: DANGER (Severity ${value}) -> Arousal +${(dangerImpact / 100).toFixed(2)}, Cortisol +${(dangerImpact * 0.6).toFixed(1)}`);
         break;
     }
     this.tick(this.state.volatility); // Force update
@@ -257,6 +289,9 @@ export class EmotionalCore {
       // 1. Try loading from SNAPSHOT (Fast & Recent)
       const snapshot = await this.storage.load<{ state: EmotionalState }>(this.SNAPSHOT_KEY);
       if (snapshot && snapshot.state) {
+        // Guard: Don't overwrite if tick/stimulate already modified state
+        // (async loadState can resolve after live events have fired)
+        if (this.stateModified) return;
         this.state = { ...this.state, ...snapshot.state };
         console.log('🧠 Emotional State restored from SNAPSHOT (Ethernal Recurrence)');
         return;

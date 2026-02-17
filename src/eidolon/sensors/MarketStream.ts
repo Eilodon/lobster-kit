@@ -87,16 +87,41 @@ export class MarketStream {
         if (this.lastTxCounts.length > 10) this.lastTxCounts.shift();
 
         // 4. Derive Market State
+        // FIX Bug #20: Real Heuristics
+        const gasState = this.deriveGasState();
+        const priceAction = this.derivePriceAction(); // U2
+        const whaleFlow = this.deriveWhaleFlow(block); // U2
+
         const newState: MarketState = {
-            gasPrice: this.deriveGasState(),
-            whaleFlow: 'NEUTRAL', // Need DEX indexer for real flow
-            sentiment: this.deriveSentiment(txCount), // Activity = Excitement?
-            liquidityDepth: 'DEEP', // Placeholder
-            priceAction: 'RANGING' // Placeholder
+            gasPrice: gasState,
+            whaleFlow: whaleFlow,
+            sentiment: this.deriveSentiment(txCount),
+            liquidityDepth: 'DEEP', // Still hard to judge without Depth Chart
+            priceAction: priceAction
         };
 
         // 5. Notify Listeners
         this.notify(newState);
+
+        // FIX L13: Emit OPPORTUNITY event
+        if (newState.sentiment === 'FEAR' || newState.sentiment === 'EUPHORIC') {
+            this.bus.emitEvent({
+                type: EidolonEventType.OPPORTUNITY,
+                timestamp: Date.now(),
+                payload: {
+                    type: newState.sentiment === 'FEAR' ? 'BUY_DIP' : 'SELL_TOP',
+                    reason: `Market Sentiment is ${newState.sentiment} (GasTrend: ${(this.getLastGasTrend() * 100).toFixed(1)}%)`,
+                    confidence: 80
+                }
+            });
+        }
+    }
+
+    private getLastGasTrend(): number {
+        if (this.lastGasPrices.length < 5) return 0;
+        const currentGas = this.lastGasPrices[this.lastGasPrices.length - 1];
+        const prevGas = this.lastGasPrices[this.lastGasPrices.length - 5];
+        return Number(currentGas - prevGas) / Number(prevGas);
     }
 
     private deriveGasState(): 'LOW' | 'MEDIUM' | 'HIGH' {
@@ -109,6 +134,38 @@ export class MarketStream {
         if (current > avg * 120n / 100n) return 'HIGH'; // +20% surge
         if (current < avg * 80n / 100n) return 'LOW';   // -20% drop
         return 'MEDIUM';
+    }
+
+    // FIX U2: Implement Price Action from Gas/Activity Proxy (as requested)
+    private derivePriceAction(): 'PUMPING' | 'DUMPING' | 'RANGING' {
+        if (this.lastGasPrices.length < 5) return 'RANGING';
+
+        // Proxy: Gas Price often correlates with Price Action volatility
+        // Rising Gas + High Tx = Pumping or Dumping. 
+        // We need a direction. Without price feed, we assume:
+        // - Steady rise = Accumulation/Pumping
+        // - Sharp spike = Panic/Dumping
+
+        const current = Number(this.lastGasPrices[this.lastGasPrices.length - 1]);
+        const prev = Number(this.lastGasPrices[this.lastGasPrices.length - 5]);
+        const change = (current - prev) / (prev || 1);
+
+        if (change > 0.50) return 'DUMPING'; // >50% Spike = Panic
+        if (change > 0.10) return 'PUMPING'; // >10% Rise = Demand
+        return 'RANGING';
+    }
+
+    // FIX U2: Whale Flow Proxy
+    private deriveWhaleFlow(block: Block): 'ACCUMULATING' | 'DUMPING' | 'NEUTRAL' {
+        // Heuristic: Gas Limit Usage Density
+        // Whales use complex contracts (high gas)
+        const gasUsed = Number(block.gasUsed);
+        const gasLimit = Number(block.gasLimit);
+        const density = gasUsed / gasLimit;
+
+        if (density > 0.8) return 'ACCUMULATING'; // Congestion = High Value Activity?
+        if (density < 0.2) return 'NEUTRAL';
+        return 'NEUTRAL'; // Hard to say DUMPING without transfer logs
     }
 
     private deriveSentiment(txCount: number): 'EUPHORIC' | 'FEAR' | 'NEUTRAL' {
@@ -124,7 +181,7 @@ export class MarketStream {
         // 1. High Activity Check
         if (txCount > avgTx * 1.5) {
             // High Activity + Rising Gas = EUPHORIA (FOMO)
-            if (gasTrend > 0.1) return 'EUPHORIC';
+            // REMOVED premature check > 0.1 here to allow > 0.5 check below
 
             // High Activity + Dumping Gas = FEAR (Panic Selling / Liquidation Cascade?)
             // Or just efficient block clearing. 
@@ -134,6 +191,9 @@ export class MarketStream {
 
             // If gas is skyrocketing (> 50% increase), it's EUPHORIC/MANIC.
             if (gasTrend > 0.5) return 'EUPHORIC';
+
+            // High Activity + Rising Gas = EUPHORIA (FOMO)
+            if (gasTrend > 0.1) return 'EUPHORIC'; // Lower threshold check AFTER higher one
 
             // If gas is stable but volume is huge, it might be a capitulation wick.
             return 'FEAR';

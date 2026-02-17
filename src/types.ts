@@ -109,6 +109,10 @@ export interface ClawKitConfig {
   contracts?: Partial<typeof CLAWKIT_CONTRACTS>;
   chainConfig?: ChainConfig; // Inject chain specific config
   pythConfig?: PythConfig; // [NEW] Pyth Network Configuration
+  deepSeekConfig?: {
+    apiKey: string;
+    model?: string;
+  };
 }
 
 
@@ -163,7 +167,7 @@ export const OPBNB_CONFIG: ChainConfig = {
       symbol: 'USDT',
     },
     USDC: {
-      address: '0xecA88125a5ADbe82614ffC12D0DB554E2e2867C8', // Verified opBNB USDC
+      address: '0xed6B3DC9c277b0775d7105E4922F51f5D7E958A4', // Verified opBNB USDC (Bridged)
       decimals: 6,
       symbol: 'USDC',
     },

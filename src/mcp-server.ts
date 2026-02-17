@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+
+// 🔴 CRITICAL: Redirect console.log to stderr BEFORE any imports.
+// MCP stdio transport uses stdout as the JSON-RPC channel.
+// Any console.log from imported modules (defi.ts, EmotionalCore.ts, etc.)
+// would inject non-JSON text into the protocol stream → client disconnect.
+console.log = console.error;
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -12,7 +19,7 @@ import { z } from "zod";
 // Import ClawKit Core Modules
 import { ClawKit } from "./index";
 import { ClawOracle } from "./eidolon/sensors/ClawOracle"; // Import Oracle
-import { ClawKitConfig } from "./types";
+import { ClawKitConfig, getTokenDecimals } from "./types";
 import { OPBNB_CONFIG } from "./types";
 import { createWalletClient, http, custom } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -41,11 +48,12 @@ class EidolonServer {
         );
 
         // Initialize ClawKit (Read-Only Mode for Safety)
-        // We use a dummy private key or environment variable if available
-        // For MCP, we mainly want READ operations (Oracle, Scan, Quote).
-        // Write operations should require explicit user confirmation via tool call, 
-        // but here we are just exposing logic.
-        const privateKey = process.env.PRIVATE_KEY as `0x${string}` || "0x0000000000000000000000000000000000000000000000000000000000000001";
+        // FIX Bug #2: Remove unsafe fallback
+        const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
+        if (!privateKey) {
+            console.error("❌ FATAL: PRIVATE_KEY env var not set. Refusing to start with unsafe default.");
+            process.exit(1);
+        }
         const account = privateKeyToAccount(privateKey);
 
         const walletClient = createWalletClient({
@@ -187,14 +195,14 @@ class EidolonServer {
                         // In a real run, we'd use this.kit.security.guard.senseMarket()
                         // But we can instantiate Oracle directly if needed or use exposed method
                         // For now, let's simulate a sense call or use a direct one if available
-                        const price = await this.kit.defi.getRealQuote('WBNB', 'USDT', 1000000000000000000n, 1);
+                        const quoteResult = await this.kit.defi.getRealQuote('WBNB', 'USDT', 1000000000000000000n, 1);
                         return {
                             content: [
                                 {
                                     type: "text",
                                     text: JSON.stringify({
                                         symbol: "WBNB",
-                                        priceUSD: Number(price) / 1000000,
+                                        priceUSD: Number(quoteResult.amountOutMin) / Math.pow(10, getTokenDecimals('USDT')), // FIX Bug #25: Destructure quote result
                                         marketCondition: "VOLATILE",
                                         liquidityDepth: "DEEP" // Would call probeLiquidity here
                                     }, null, 2),
@@ -205,14 +213,20 @@ class EidolonServer {
 
                     case "eidolon_defi_quote": {
                         const { tokenIn, tokenOut, amount } = request.params.arguments as any;
-                        const amountBn = BigInt(Math.floor(parseFloat(amount) * 1e18)); // Simplified logic
+                        // FIX Bug #26: Use correct decimals for input token
+                        const decimals = getTokenDecimals(tokenIn);
+                        const amountBn = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, decimals)));
                         const quote = await this.kit.defi.getRealQuote(tokenIn, tokenOut, amountBn, 0.5);
+
+                        // Calculate output human readable
+                        const outDecimals = getTokenDecimals(tokenOut);
+                        const outAmount = Number(quote.amountOutMin) / Math.pow(10, outDecimals);
 
                         return {
                             content: [
                                 {
                                     type: "text",
-                                    text: `⚡ HYPER-ROUTE FOUND:\nInput: ${amount} ${tokenIn}\nOutput: ${Number(quote) / 1e18} ${tokenOut}\nExecution: PARALLEL`,
+                                    text: `⚡ HYPER-ROUTE FOUND:\nInput: ${amount} ${tokenIn}\nOutput: ${outAmount} ${tokenOut}\nExecution: PARALLEL`,
                                 },
                             ],
                         };

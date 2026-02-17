@@ -1,5 +1,5 @@
 import { WalletClient, PublicClient, encodeFunctionData, parseAbi, formatEther, parseEther } from 'viem';
-import { ClawKitConfig, BATCH_EXECUTOR, ClawKitWalletClient, toAddress } from './types';
+import { ClawKitConfig, BATCH_EXECUTOR, ClawKitWalletClient, toAddress, assertDeployed } from './types';
 import axios from 'axios';
 
 interface GasEstimate {
@@ -208,6 +208,8 @@ export class GasModule {
       });
 
       // Estimate batched gas
+      assertDeployed('BatchExecutor');
+
       const batchGasCost = await this.publicClient.estimateGas({
         account: await this.getAddress() as `0x${string}`,
         to: toAddress(BATCH_EXECUTOR),

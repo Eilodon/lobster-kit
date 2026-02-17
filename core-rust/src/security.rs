@@ -146,6 +146,12 @@ pub struct AntiRug {
     blacklist: HashSet<String>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct ListExport {
+    whitelist: Vec<String>,
+    blacklist: Vec<String>,
+}
+
 #[wasm_bindgen]
 impl AntiRug {
     #[wasm_bindgen(constructor)]
@@ -164,15 +170,36 @@ impl AntiRug {
         self.blacklist.insert(address.to_lowercase());
     }
 
+    /// Export whitelist + blacklist as JSON for persistence
+    pub fn export_lists(&self) -> JsValue {
+        let data = ListExport {
+            whitelist: self.whitelist.iter().cloned().collect(),
+            blacklist: self.blacklist.iter().cloned().collect(),
+        };
+        serde_wasm_bindgen::to_value(&data).unwrap()
+    }
+
+    /// Import previously persisted whitelist + blacklist from JSON
+    pub fn import_lists(&mut self, data: JsValue) {
+        if let Ok(imported) = serde_wasm_bindgen::from_value::<ListExport>(data) {
+            for addr in imported.whitelist {
+                self.whitelist.insert(addr.to_lowercase());
+            }
+            for addr in imported.blacklist {
+                self.blacklist.insert(addr.to_lowercase());
+            }
+        }
+    }
+
     pub fn check_token_security(&self, _token_address: &str) -> JsValue {
-         // Deprecated mock check - use check_with_data instead
+         // Fail-safe: If API fails, assume DANGER.
         serde_wasm_bindgen::to_value(&SecurityScore {
-            score: 50,
+            score: 0,
             is_honeypot: false,
             liquidity_locked: false,
             contract_verified: false,
             owner_renounced: false,
-            status: "UNKNOWN".to_string(),
+            status: "DANGER".to_string(),
         }).unwrap()
     }
 
@@ -200,10 +227,13 @@ impl AntiRug {
 
         // 1. Critical Failures (Instant Death)
         if security_data.is_honeypot { return self.create_score(0, true, false, false, false, "HONEYPOT"); }
+        if security_data.owner_change_balance { return self.create_score(0, true, false, false, false, "OWNER_CONTROLS_BALANCE"); }
         if security_data.cannot_sell_all { return self.create_score(0, true, false, false, false, "CANNOT_SELL_ALL"); }
         if security_data.is_blacklisted { return self.create_score(0, true, false, false, false, "BLACKLISTED_BY_SOURCE"); }
 
         // 2. Major Risks
+        if security_data.honeypot_with_same_creator { score -= 30; }
+        if security_data.cannot_buy { score -= 20; }
         if security_data.is_proxy { score -= 20; }
         if security_data.is_mintable { score -= 15; }
         if !security_data.is_open_source { score -= 40; } // Verification is critical
@@ -212,16 +242,20 @@ impl AntiRug {
         let buy_tax: f64 = security_data.buy_tax.parse().unwrap_or(0.0);
         let sell_tax: f64 = security_data.sell_tax.parse().unwrap_or(0.0);
 
-        if buy_tax > 5.0 { score -= (buy_tax as i16) * 4; } // Penalty scaling
-        if sell_tax > 5.0 { score -= (sell_tax as i16) * 4; }
+        if buy_tax > 5.0 { score -= (buy_tax.round() as i16) * 4; } // Penalty scaling with rounding
+        if sell_tax > 5.0 { score -= (sell_tax.round() as i16) * 4; }
 
         if buy_tax > 20.0 || sell_tax > 20.0 { 
-            return self.create_score(10, false, false, true, false, "HIGH_TAX"); 
+            return self.create_score(10, false, false, security_data.is_open_source, false, "HIGH_TAX"); 
         }
 
         // 4. Ownership
         let renounced = security_data.owner_address.is_empty() || security_data.owner_address == "0x0000000000000000000000000000000000000000";
         if !renounced { score -= 15; }
+
+        // 5. Positive Signals (Bonuses)
+        if security_data.is_whitelisted { score += 10; }
+        if security_data.is_open_source && renounced { score += 5; } // Verified & Renounced Synergy
 
         // Clamp 0-100
         if score < 0 { score = 0; }
@@ -229,7 +263,7 @@ impl AntiRug {
 
         let status = if score >= 80 { "SAFE" } else if score >= 50 { "CAUTION" } else { "DANGER" };
 
-        self.create_score(score as u8, false, true, security_data.is_open_source, renounced, status)
+        self.create_score(score as u8, false, false, security_data.is_open_source, renounced, status)
     }
 
     fn create_score(&self, score: u8, is_honeypot: bool, liquidity_locked: bool, contract_verified: bool, owner_renounced: bool, status: &str) -> JsValue {

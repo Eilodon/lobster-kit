@@ -1,5 +1,5 @@
-import { WalletClient, PublicClient, formatEther, parseAbi } from 'viem';
-import { ClawKitConfig, PortfolioHealth, Position, ClawKitWalletClient } from './types';
+import { WalletClient, PublicClient, formatEther, formatUnits, parseAbi } from 'viem';
+import { ClawKitConfig, PortfolioHealth, Position, ClawKitWalletClient, getTokenDecimals } from './types';
 import axios from 'axios';
 
 export class AnalyticsModule {
@@ -189,9 +189,9 @@ export class AnalyticsModule {
     // FIX M7: Venus vToken contracts — these are BSC mainnet addresses
     // TODO: Verify if Venus is deployed on opBNB and get correct addresses
     const venusMarkets: { vToken: string; symbol: string; decimals: number }[] = [
-      // { vToken: '0x95c78222B3D6e262426483D42CfA53685A67Ab9D', symbol: 'BUSD', decimals: 18 }, // BSC only
-      // { vToken: '0xfD5840Cd36d94D7229439859C0112a4185BC0255', symbol: 'USDT', decimals: 18 }, // BSC only
-      // { vToken: '0xA07c5b74C9B40447a954e1466938b865b6BBea36', symbol: 'BNB', decimals: 18 }  // BSC only
+      { vToken: '0x95c78222B3D6e262426483D42CfA53685A67Ab9D', symbol: 'BUSD', decimals: 18 }, // Verify addresses for opBNB!
+      { vToken: '0xfD5840Cd36d94D7229439859C0112a4185BC0255', symbol: 'USDT', decimals: 18 },
+      { vToken: '0xA07c5b74C9B40447a954e1466938b865b6BBea36', symbol: 'BNB', decimals: 18 }
     ];
 
     for (const market of venusMarkets) {
@@ -275,11 +275,14 @@ export class AnalyticsModule {
           // However, for accuracy let's use the known prices we have.
           // Assuming lpToken.symbol is 'BNB-BUSD', we can derive assets.
           const assets = lpToken.symbol.split('-');
-          const price0 = prices[assets[0]] || 0;
-          const price1 = prices[assets[1]] || 0;
+          const token0 = assets[0];
+          const token1 = assets[1];
+          const price0 = prices[token0] || 0;
+          const price1 = prices[token1] || 0;
 
-          const r0 = parseFloat(formatEther(reserves[0]));
-          const r1 = parseFloat(formatEther(reserves[1])); // Assuming 18 decimals for simplicity, reality varies
+          // FIX Bug #4: Dynamic Decimals for LP Valuation
+          const r0 = parseFloat(formatUnits(reserves[0], getTokenDecimals(token0)));
+          const r1 = parseFloat(formatUnits(reserves[1], getTokenDecimals(token1)));
           const ts = parseFloat(formatEther(totalSupply));
           const ub = parseFloat(formatEther(balance));
 
@@ -412,7 +415,8 @@ export class AnalyticsModule {
 
     try {
       // Note: Requires BSCScan API key for production
-      const response = await axios.get('https://api.bscscan.com/api', {
+      // FIX Bug #10: Target opBNB scan API
+      const response = await axios.get('https://api-opbnb.bscscan.com/api', {
         params: {
           module: 'account',
           action: 'txlist',

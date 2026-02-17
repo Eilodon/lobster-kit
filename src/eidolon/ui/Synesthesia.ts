@@ -27,7 +27,10 @@ export class Synesthesia {
         if (this.audioCtx?.state === 'suspended') {
             await this.audioCtx.resume();
         }
-        this.playDrone();
+        // Fix: Idempotency check to prevent duplicate drones
+        if (this.oscillators.length === 0) {
+            this.playDrone();
+        }
     }
 
     public updateState(state: EmotionalState) {

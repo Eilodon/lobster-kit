@@ -11,6 +11,8 @@ export interface RetryConfig {
     baseDelay: number;
     maxDelay: number;
     jitter: boolean;
+    // FIX U4: Discriminative Retry Hook
+    shouldRetry?: (error: any) => boolean;
 }
 
 const DEFAULT_CONFIG: RetryConfig = {
@@ -49,6 +51,24 @@ export async function withRetry<T>(
             if (attempt === finalConfig.maxAttempts) {
                 console.error(`❌ Retry limit reached (${attempt}/${finalConfig.maxAttempts}). Fail.`);
                 break;
+            }
+
+            // FIX L11: Don't retry client errors (4xx)
+            if (error.response?.status && error.response.status >= 400 && error.response.status < 500) {
+                if (error.response.status === 429) {
+                    // Rate limit: Respect Retry-After or just wait
+                    const retryAfter = parseInt(error.response.headers?.['retry-after'] || '5');
+                    console.warn(`⏳ Rate Limited (429). Waiting ${retryAfter}s...`);
+                    await sleep(retryAfter * 1000);
+                    continue; // Retry after wait
+                }
+                throw error; // Abort on 400, 401, 403, 404
+            }
+
+            // FIX U4: Check User-defined Retry Predicate
+            if (finalConfig.shouldRetry && !finalConfig.shouldRetry(error)) {
+                console.warn(`🛑 Retry aborted by shouldRetry predicate.`);
+                throw error;
             }
 
             // Calculate delay with exponential backoff

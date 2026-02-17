@@ -100,7 +100,7 @@ describe('ActiveLearning: Neural Link Upgrade', () => {
             } as any;
 
             const hash = (brain as any).getMarketStateHash(state);
-            expect(hash).toBe('LOW:ACCUMULATING:NEUTRAL:DEEP:RANGING');
+            expect(hash).toBe('v1:LOW:ACCUMULATING:NEUTRAL:DEEP:RANGING');
         });
 
         it('should Update Q-Values using Bellman Equation', async () => {
@@ -134,7 +134,7 @@ describe('ActiveLearning: Neural Link Upgrade', () => {
 
             // Access Q-Table
             const qTable = (brain as any).qTable;
-            const hash = 'LOW:ACCUMULATING:NEUTRAL:DEEP:RANGING';
+            const hash = 'v1:LOW:ACCUMULATING:NEUTRAL:DEEP:RANGING';
 
             // Expected: 0 + alpha * (reward - 0)
             // Reward = tanh(100/50) = ~0.96
@@ -152,7 +152,7 @@ describe('ActiveLearning: Neural Link Upgrade', () => {
                 liquidityDepth: 'DEEP',
                 priceAction: 'RANGING'
             } as any;
-            const hash = 'LOW:ACCUMULATING:NEUTRAL:DEEP:RANGING';
+            const hash = 'v1:LOW:ACCUMULATING:NEUTRAL:DEEP:RANGING';
 
             // Manually set Q-Values
             (brain as any).qTable[hash] = {

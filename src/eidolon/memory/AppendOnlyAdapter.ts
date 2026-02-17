@@ -78,6 +78,18 @@ export class AppendOnlyAdapter implements IStorageProvider {
     async append(key: string, data: any): Promise<void> {
         const filePath = path.join(this.baseDir, key);
         try {
+            // FIX Bug #18: Log Rotation
+            try {
+                const stats = await fs.stat(filePath);
+                if (stats.size > 10 * 1024 * 1024) { // 10MB limit
+                    const backupPath = `${filePath}.${Date.now()}.bak`;
+                    await fs.rename(filePath, backupPath);
+                    console.log(`📦 Log rotated: ${key} -> ${path.basename(backupPath)}`);
+                }
+            } catch (e) {
+                // File might not exist yet, ignore
+            }
+
             const entry = JSON.stringify({
                 ts: Date.now(),
                 data

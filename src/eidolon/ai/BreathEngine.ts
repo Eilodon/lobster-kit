@@ -51,6 +51,20 @@ export class BreathEngine {
             this.nextPhase();
         }
 
+        return this.getCurrentState();
+    }
+
+    private getCurrentDuration(): number {
+        switch (this.currentPhase) {
+            case BreathPhase.Inhale: return this.durations.inhale;
+            case BreathPhase.HoldIn: return this.durations.holdIn;
+            case BreathPhase.Exhale: return this.durations.exhale;
+            case BreathPhase.HoldOut: return this.durations.holdOut;
+        }
+    }
+
+    private getCurrentState(): { phase: BreathPhase; progress: number } {
+        const duration = this.getCurrentDuration();
         return {
             phase: this.currentPhase,
             progress: Math.min(this.phaseTimer / duration, 1.0)
@@ -69,7 +83,7 @@ export class BreathEngine {
     getNorm(): number {
         // Return a normalized value (-1 to 1) representing the breath wave
         // Inhale: -1 -> 1, Exhale: 1 -> -1
-        const { phase, progress } = this.tick(0); // Peek
+        const { phase, progress } = this.getCurrentState(); // No side-effects
         switch (phase) {
             case BreathPhase.Inhale: return -1 + (progress * 2);
             case BreathPhase.HoldIn: return 1;

@@ -8,7 +8,7 @@ import { GasModule } from './gas';
 import { AnalyticsModule } from './analytics';
 import { EidolonSwarm } from './eidolon/swarm/EidolonSwarm';
 
-import { ClawKitConfig, ClawKitWalletClient } from './types';
+import { ClawKitConfig, ClawKitWalletClient, OPBNB_CONFIG } from './types';
 
 export class ClawKit {
   public readonly defi: DeFiModule;
@@ -53,8 +53,8 @@ export class ClawKit {
    */
   private validateConfig(config: ClawKitConfig) {
     if (!config.chainConfig) {
-      console.warn("⚠️ ChainConfig missing - Defaulting to opBNB (Legacy Mode)");
-      return; // Allow legacy mode for now, but warn loudly
+      console.warn("⚠️ ChainConfig missing - Defaulting to opBNB (Standard Mode)");
+      config.chainConfig = OPBNB_CONFIG; // FIX U8: Apply defaults instead of skipping validation
     }
 
     // validate contracts
@@ -70,7 +70,7 @@ export class ClawKit {
         throw new Error(`💥 ATOMIC CRASH: Invalid token address for '${symbol}': ${info.address}`);
       }
     }
-    console.error("🛡️ ATOMIC CONFIG: Integrity Verified.");
+    console.log("🛡️ ATOMIC CONFIG: Integrity Verified.");
   }
 
   /**

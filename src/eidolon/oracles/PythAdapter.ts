@@ -26,7 +26,7 @@ export class PythAdapter {
                     encoding: 'hex',
                     parsed: true
                 },
-                timeout: 2000 // Fast timeout
+                timeout: 10000 // Robust timeout
             });
 
             if (response.data?.parsed?.[0]) {
@@ -34,8 +34,15 @@ export class PythAdapter {
                 const price = Number(priceData.price);
                 const expo = Number(priceData.expo);
 
-                // precise calculation: price * 10^expo
-                return price * Math.pow(10, expo);
+                // precise calculation: price * 10^expo using BigInt to avoid float issues
+                const priceBig = BigInt(priceData.price);
+                const expoNum = Number(priceData.expo);
+
+                if (expoNum >= 0) {
+                    return Number(priceBig * 10n ** BigInt(expoNum));
+                } else {
+                    return Number(priceBig) / Math.pow(10, -expoNum);
+                }
             }
 
             throw new Error('Invalid Pyth response format');

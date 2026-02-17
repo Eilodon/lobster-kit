@@ -27,7 +27,11 @@ export interface TokenSecurityData {
 }
 
 export class GoPlusSecurity {
-    private readonly API_URL = 'https://api.gopluslabs.io/api/v1/token_security/204'; // 204 = opBNB
+    constructor(private chainId: number = 204) { }
+
+    private get API_URL() {
+        return `https://api.gopluslabs.io/api/v1/token_security/${this.chainId}`;
+    }
 
     /**
      * Fetch security data for a token address

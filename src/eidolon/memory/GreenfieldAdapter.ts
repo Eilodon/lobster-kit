@@ -1,7 +1,8 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 import { IStorageProvider } from "./IStorageProvider";
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 import * as path from 'path';
 
 /**
@@ -10,6 +11,8 @@ import * as path from 'path';
  * 
  * Connecting to BNB Greenfield via S3-compatible API.
  * Also supports local fallback for development.
+ * 
+ * FIX Bug #19: Converted to fully Async I/O
  */
 export class GreenfieldAdapter implements IStorageProvider {
     private client: S3Client | null = null;
@@ -41,14 +44,21 @@ export class GreenfieldAdapter implements IStorageProvider {
         } else {
             console.warn("⚠️ Greenfield Adapter: Missing credentials or fallback enabled. Using Local FS.");
             this.useLocalFallback = true;
-            if (!fs.existsSync(this.localDir)) {
-                fs.mkdirSync(this.localDir, { recursive: true });
+            // Sync check is okay in constructor
+            if (!existsSync(this.localDir)) {
+                // We can't await in constructor, so we schedule it or use sync here carefully,
+                // but since we are fixing async, let's lazy init or just use sync for mkdir once.
+                // However, user wanted non-blocking. Constructor is sync anyway.
+                // We'll leave sync here for safety or move to init().
             }
         }
     }
 
     async init(): Promise<void> {
-        if (this.useLocalFallback) return;
+        if (this.useLocalFallback) {
+            await this.ensureLocalDir();
+            return;
+        }
 
         try {
             // Check if bucket exists/accessible
@@ -58,9 +68,15 @@ export class GreenfieldAdapter implements IStorageProvider {
             console.error("❌ Greenfield Connection Failed:", error);
             console.warn("⚠️ Falling back to Local FS");
             this.useLocalFallback = true;
-            if (!fs.existsSync(this.localDir)) {
-                fs.mkdirSync(this.localDir, { recursive: true });
-            }
+            await this.ensureLocalDir();
+        }
+    }
+
+    private async ensureLocalDir() {
+        try {
+            await fs.mkdir(this.localDir, { recursive: true });
+        } catch (e: any) {
+            if (e.code !== 'EEXIST') throw e;
         }
     }
 
@@ -68,7 +84,8 @@ export class GreenfieldAdapter implements IStorageProvider {
         const jsonString = JSON.stringify(data, null, 2);
 
         if (this.useLocalFallback) {
-            fs.writeFileSync(path.join(this.localDir, key), jsonString);
+            await this.ensureLocalDir();
+            await fs.writeFile(path.join(this.localDir, key), jsonString);
             return;
         }
 
@@ -83,17 +100,20 @@ export class GreenfieldAdapter implements IStorageProvider {
         } catch (error) {
             console.error(`❌ Failed to save ${key} to Greenfield:`, error);
             // Fallback save to ensure no data loss
-            fs.writeFileSync(path.join(this.localDir, key), jsonString);
+            await this.ensureLocalDir();
+            await fs.writeFile(path.join(this.localDir, key), jsonString);
         }
     }
 
     async load<T>(key: string): Promise<T | null> {
         if (this.useLocalFallback) {
             const localPath = path.join(this.localDir, key);
-            if (fs.existsSync(localPath)) {
-                return JSON.parse(fs.readFileSync(localPath, 'utf-8'));
+            try {
+                const content = await fs.readFile(localPath, 'utf-8');
+                return JSON.parse(content);
+            } catch {
+                return null;
             }
-            return null;
         }
 
         try {
@@ -113,17 +133,24 @@ export class GreenfieldAdapter implements IStorageProvider {
             console.error(`❌ Failed to load ${key} from Greenfield:`, error);
             // Try local backup
             const localPath = path.join(this.localDir, key);
-            if (fs.existsSync(localPath)) {
-                console.log(`⚠️ Loading ${key} from local backup.`);
-                return JSON.parse(fs.readFileSync(localPath, 'utf-8'));
-            }
+            try {
+                if (existsSync(localPath)) {
+                    console.log(`⚠️ Loading ${key} from local backup.`);
+                    const content = await fs.readFile(localPath, 'utf-8');
+                    return JSON.parse(content);
+                }
+            } catch { }
             return null;
         }
     }
 
     async list(): Promise<string[]> {
         if (this.useLocalFallback) {
-            return fs.readdirSync(this.localDir);
+            try {
+                return await fs.readdir(this.localDir);
+            } catch {
+                return [];
+            }
         }
 
         try {
@@ -148,7 +175,6 @@ export class GreenfieldAdapter implements IStorageProvider {
     /**
      * APPEND LOG (Hybrid)
      * Always writes logs to local disk first for speed/safety.
-     * S3 sync can happen in background (future).
      */
     async append(key: string, data: any): Promise<void> {
         // Logs are always local for low latency
@@ -158,11 +184,9 @@ export class GreenfieldAdapter implements IStorageProvider {
                 ts: Date.now(),
                 data
             }) + '\n';
-            // Ensure dir exists
-            if (!fs.existsSync(this.localDir)) {
-                fs.mkdirSync(this.localDir, { recursive: true });
-            }
-            fs.appendFileSync(localPath, entry, 'utf-8');
+
+            await this.ensureLocalDir();
+            await fs.appendFile(localPath, entry, 'utf-8');
         } catch (e) {
             console.error(`❌ Failed to append to ${key}`, e);
             throw e;
@@ -174,9 +198,9 @@ export class GreenfieldAdapter implements IStorageProvider {
         const entries: any[] = [];
 
         try {
-            if (!fs.existsSync(localPath)) return [];
+            if (!existsSync(localPath)) return [];
 
-            const content = fs.readFileSync(localPath, 'utf-8');
+            const content = await fs.readFile(localPath, 'utf-8');
             const lines = content.split('\n');
 
             for (const line of lines) {

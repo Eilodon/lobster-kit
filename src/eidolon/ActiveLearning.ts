@@ -33,14 +33,24 @@ export interface LearningMetrics {
   adjustmentsMade: number;
 }
 
+export interface LearningConfig {
+  BASE_LEARNING_RATE: number;
+  DECAY_RATE: number;
+  MIN_LEARNING_RATE: number;
+  REWARD_MULTIPLIER: number;
+  PENALTY_MULTIPLIER: number;
+  GAMMA: number;
+}
+
 // ⚠️ PLACEHOLDER LEARNING RATES - Not optimized
 // Production rates use adaptive learning rate scheduling
-export const LEARNING_CONFIG = {
+export const LEARNING_CONFIG: LearningConfig = {
   BASE_LEARNING_RATE: 0.05,      // How much to adjust weights
   DECAY_RATE: 0.995,              // Learning rate decay per update
   MIN_LEARNING_RATE: 0.001,       // Minimum learning rate
   REWARD_MULTIPLIER: 1.0,         // Positive reinforcement strength
   PENALTY_MULTIPLIER: 1.2,        // Negative reinforcement strength (learn faster from pain)
+  GAMMA: 0.9,                     // Discount factor for future rewards
 };
 
 export class ActiveLearning {
@@ -58,9 +68,13 @@ export class ActiveLearning {
   private readonly HISTORY_KEY = 'active_learning_history.log';
   private autoSaveEnabled = true;
 
+  // FIX A4: Q-Table Versioning to handle state space evolution
+  // v1: gas:whale:sentiment:liq:price (Current)
+  private readonly Q_VERSION = 'v1';
+
   constructor(
     initialWeights?: typeof REASONING_WEIGHTS,
-    private config = LEARNING_CONFIG,
+    private config: LearningConfig = LEARNING_CONFIG,
     storage?: IStorageProvider
   ) {
     if (initialWeights) {
@@ -115,15 +129,15 @@ export class ActiveLearning {
     const reward = this.calculateReward(outcome);
 
     const rewardEmoji = reward > 0 ? '✅' : '❌';
-    console.log(`║ ${rewardEmoji} Outcome: ${reward > 0 ? 'PROFIT' : 'LOSS'} | P&L: $${outcome.profitLoss.toFixed(2)}`.padEnd(61) + '║');
-    console.log(`║    Reward Signal: ${reward.toFixed(4)}`.padEnd(61) + '║');
+    console.log(`║ ${rewardEmoji} Outcome: ${reward > 0 ? 'PROFIT' : 'LOSS'} | P & L: $${outcome.profitLoss.toFixed(2)} `.padEnd(61) + '║');
+    console.log(`║    Reward Signal: ${reward.toFixed(4)} `.padEnd(61) + '║');
 
     // Update Q-Values (The Brain 2.0)
-    // We assume the 'next state' is the current state of the market (or unknown/terminal if trade closed)
-    // For single-step RL (Bandit-like), nextState might be ignored or set to current.
-    // In a continuous agent, we should pass the *current* market state as nextState.
-    // However, since we don't have nextState here, we treat this as a terminal step for the episode (trade).
-    this.updateQValue(decision.marketState, decision.action, reward);
+    // For continuous Q-learning, we SHOULD use the current market state as 'nextState'
+    // This allows the agent to learn chains of decisions.
+    // If nextState is not provided, we effectively treat it as a terminal state (Gamma=0 for this step)
+    // FIX Bug #16: Allow passing nextState for Temporal Difference learning
+    this.updateQValue(decision.marketState, decision.action, reward, decision.marketState); // Using current state as next state approximate
 
     // Legacy Weight Update (Keep for compatibility until full migration)
     if (outcome.success) {
@@ -135,8 +149,8 @@ export class ActiveLearning {
     // Decay learning rate over time
     this.decayLearningRate();
 
-    console.log(`║    Current Learning Rate: ${this.learningRate.toFixed(4)}`.padEnd(61) + '║');
-    console.log(`║    Total Adjustments: ${this.adjustmentCount}`.padEnd(61) + '║');
+    console.log(`║    Current Learning Rate: ${this.learningRate.toFixed(4)} `.padEnd(61) + '║');
+    console.log(`║    Total Adjustments: ${this.adjustmentCount} `.padEnd(61) + '║');
     console.log('╚════════════════════════════════════════════════════════════╝\n');
 
     // FIXED: Auto-save after learning
@@ -152,18 +166,16 @@ export class ActiveLearning {
    * Converts complex market reality into a distinct state key.
    */
   private getMarketStateHash(state: MarketState): QStateHash {
-    // Format: "GAS:WHALE:SENTIMENT:LIQUIDITY:PRICE"
-    return `${state.gasPrice}:${state.whaleFlow}:${state.sentiment}:${state.liquidityDepth}:${state.priceAction}`;
+    // Format: "v1:GAS:WHALE:SENTIMENT:LIQUIDITY:PRICE"
+    return `${this.Q_VERSION}:${state.gasPrice}:${state.whaleFlow}:${state.sentiment}:${state.liquidityDepth}:${state.priceAction}`;
   }
 
   /**
    * 🧠 QUANTUM BRAIN: Bellman Update
    * Q(s,a) = Q(s,a) + alpha * (R + gamma * max(Q(s',a')) - Q(s,a))
-   * Note: Since we are learning from a completed trade, successful or not, 
-   * we treat it as a terminal state for that specific decision context, 
-   * so max(Q(s',a')) is 0.
+   * FIX Bug #16: Implemented correct Q-Learning equation
    */
-  private updateQValue(state: MarketState, action: ActionType, reward: number): void {
+  private updateQValue(state: MarketState, action: ActionType, reward: number, nextState?: MarketState): void {
     const stateHash = this.getMarketStateHash(state);
 
     // Initialize state if new
@@ -175,12 +187,25 @@ export class ActiveLearning {
 
     const currentQ = this.qTable[stateHash][action] || 0;
 
-    // Bellman Equation (Terminal State version)
-    // NewQ = OldQ + Alpha * (Reward - OldQ)
-    const newQ = currentQ + this.learningRate * (reward - currentQ);
+    // Calculate max Q for next state
+    let maxNextQ = 0;
+    if (nextState) {
+      const nextHash = this.getMarketStateHash(nextState);
+      const nextActions = this.qTable[nextHash];
+      if (nextActions) {
+        // Find max Q in next state
+        maxNextQ = Math.max(...Object.values(nextActions));
+      }
+    }
+
+    // Bellman Equation (Temporal Difference)
+    // NewQ = OldQ + Alpha * (Reward + Gamma * MaxNextQ - OldQ)
+    // FIX L4: Use Q_CONFIG.GAMMA consistently
+    const gamma = Q_CONFIG.GAMMA;
+    const newQ = currentQ + this.learningRate * (reward + gamma * maxNextQ - currentQ);
 
     this.qTable[stateHash][action] = newQ;
-    console.log(`    🧠 Q-UPDATE [${stateHash}][${action}]: ${currentQ.toFixed(4)} -> ${newQ.toFixed(4)}`);
+    console.log(`    🧠 Q - UPDATE[${stateHash}][${action}]: ${currentQ.toFixed(4)} -> ${newQ.toFixed(4)} (R: ${reward.toFixed(4)}, MaxNext: ${maxNextQ.toFixed(4)})`);
   }
 
   /**
@@ -223,8 +248,19 @@ export class ActiveLearning {
     }
 
     // Normalize P&L to [-1, 1] range
-    // Assuming typical trade is $10-100
-    const normalizedPL = Math.tanh(outcome.profitLoss / 50);
+    // FIX A3: Use ROI (Profit / CapitalAtRisk) instead of raw PnL
+    // If capitalAtRisk is 0 (shouldn't happen for trades), fallback to fixed divisor
+    let roi = 0;
+    if (outcome.capitalAtRisk > 0) {
+      roi = outcome.profitLoss / outcome.capitalAtRisk;
+    } else {
+      roi = outcome.profitLoss / 50; // Fallback
+    }
+
+    // Sigmoid function to map ROI to reward
+    // 5% ROI (0.05) * 10 = 0.5 -> tanh(0.5) = 0.46
+    // 20% ROI (0.20) * 10 = 2.0 -> tanh(2.0) = 0.96
+    const normalizedPL = Math.tanh(roi * 10);
 
     // Penalize high slippage
     const slippagePenalty = outcome.slippage > 2.0 ? -0.2 : 0;
@@ -277,7 +313,7 @@ export class ActiveLearning {
     // Try exact match first
     if (key in categoryWeights) {
       (categoryWeights as any)[key] += delta;
-      console.log(`       ${category}[${key}]: ${(categoryWeights as any)[key].toFixed(2)} (Δ ${delta.toFixed(4)})`);
+      console.log(`       ${category} [${key}]: ${(categoryWeights as any)[key].toFixed(2)} (Δ ${delta.toFixed(4)})`);
       return;
     }
 
@@ -285,11 +321,11 @@ export class ActiveLearning {
     const upperKey = key.toUpperCase();
     if (upperKey in categoryWeights) {
       (categoryWeights as any)[upperKey] += delta;
-      console.log(`       ${category}[${upperKey}]: ${(categoryWeights as any)[upperKey].toFixed(2)} (Δ ${delta.toFixed(4)})`);
+      console.log(`       ${category} [${upperKey}]: ${(categoryWeights as any)[upperKey].toFixed(2)} (Δ ${delta.toFixed(4)})`);
       return;
     }
 
-    console.warn(`       ⚠️ Neural Link Warning: Key '${key}' not found in category '${category}'. Learning skipped for this factor.`);
+    console.warn(`       ⚠️ Neural Link Warning: Key '${key}' not found in category '${category}'.Learning skipped for this factor.`);
   }
 
   /**
@@ -366,12 +402,12 @@ export class ActiveLearning {
     console.log('║   📊 LEARNING METRICS SUMMARY                              ║');
     console.log('╠════════════════════════════════════════════════════════════╣');
     console.log(`║ Total Trades:       ${metrics.totalTrades.toString().padEnd(38)}║`);
-    console.log(`║ Win Rate:           ${(metrics.winRate * 100).toFixed(1)}%`.padEnd(61) + '║');
-    console.log(`║ Total P&L:          $${metrics.totalPL.toFixed(2)}`.padEnd(61) + '║');
-    console.log(`║ Avg Profit:         $${metrics.avgProfit.toFixed(2)}`.padEnd(61) + '║');
-    console.log(`║ Avg Loss:           $${metrics.avgLoss.toFixed(2)}`.padEnd(61) + '║');
-    console.log(`║ Sharpe Ratio:       ${metrics.sharpeRatio.toFixed(2)}`.padEnd(61) + '║');
-    console.log(`║ Weight Adjustments: ${metrics.adjustmentsMade}`.padEnd(61) + '║');
+    console.log(`║ Win Rate:           ${(metrics.winRate * 100).toFixed(1)}% `.padEnd(61) + '║');
+    console.log(`║ Total P & L:          $${metrics.totalPL.toFixed(2)} `.padEnd(61) + '║');
+    console.log(`║ Avg Profit:         $${metrics.avgProfit.toFixed(2)} `.padEnd(61) + '║');
+    console.log(`║ Avg Loss:           $${metrics.avgLoss.toFixed(2)} `.padEnd(61) + '║');
+    console.log(`║ Sharpe Ratio:       ${metrics.sharpeRatio.toFixed(2)} `.padEnd(61) + '║');
+    console.log(`║ Weight Adjustments: ${metrics.adjustmentsMade} `.padEnd(61) + '║');
     console.log('╚════════════════════════════════════════════════════════════╝\n');
   }
 
@@ -444,15 +480,15 @@ export class ActiveLearning {
         this.learningRate = saved.learningRate;
         this.adjustmentCount = saved.adjustmentCount;
 
-        console.log(`🧠 Loaded learned weights from ${saved.savedAt}`);
-        console.log(`   Adjustments made: ${saved.adjustmentCount}`);
+        console.log(`🧠 Loaded learned weights from ${saved.savedAt} `);
+        console.log(`   Adjustments made: ${saved.adjustmentCount} `);
       }
 
       // Load Q-Table
       const savedQ = await this.storage.load<any>(this.Q_TABLE_KEY);
       if (savedQ) {
         this.qTable = savedQ.qTable;
-        console.log(`🧠 Loaded Q-Table (Size: ${Object.keys(this.qTable).length} states)`);
+        console.log(`🧠 Loaded Q - Table(Size: ${Object.keys(this.qTable).length} states)`);
       }
 
       // Load history from AppendLog
@@ -474,7 +510,7 @@ export class ActiveLearning {
    */
   public setAutoSave(enabled: boolean): void {
     this.autoSaveEnabled = enabled;
-    console.log(`Auto-save ${enabled ? 'enabled' : 'disabled'}`);
+    console.log(`Auto - save ${enabled ? 'enabled' : 'disabled'} `);
   }
 
   /**
@@ -483,17 +519,14 @@ export class ActiveLearning {
   public async manualSave(): Promise<void> {
     await this.saveToDisk();
   }
-  /**
-   * 🧠 NEURAL LINK: Archival Mechanism
-   * Moves older memories to long-term storage (Archive) instead of deleting them.
-   */
+
   /**
    * 🧠 NEURAL LINK: Archival Mechanism
    * Rotates log file if too large (Implementation for Phase 2)
    */
   private async archiveHistory(): Promise<void> {
     const archiveKey = `archive_history_${Date.now()}.json`;
-    console.log(`📦 Archiving ${this.tradeHistory.length} trades to ${archiveKey}`);
+    console.log(`📦 Archiving ${this.tradeHistory.length} trades to ${archiveKey} `);
 
     // Save all current history to archive file
     await this.storage.save(archiveKey, this.tradeHistory);

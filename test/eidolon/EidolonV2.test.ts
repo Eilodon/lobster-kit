@@ -24,6 +24,9 @@ const mockConfig = {
         tokens: {
             WBNB: { address: '0x4200000000000000000000000000000000000006', decimals: 18, symbol: 'WBNB' },
             USDT: { address: '0x9e5AAC1Ba1a2e6aEd6b32689DFcF62A509Ca96f3', decimals: 6, symbol: 'USDT' }
+        },
+        pythConfig: {
+            priceServiceUrl: 'https://hermes.pyth.network'
         }
     }
 };
@@ -39,26 +42,32 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
             const defi = new DeFiModule(mockWalletClient as any, mockPublicClient as any, mockConfig as any);
 
             // Mock responses for different fee tiers
-            mockPublicClient.readContract.mockImplementation(async ({ args }) => {
-                const fee = args[0].fee;
-                if (fee === 2500) return 100n; // 0.25% tie -> base
-                if (fee === 500) return 120n;  // 0.05% tier -> BETTER
-                if (fee === 10000) return 80n; // 1.00% tier -> WORSE
-                if (fee === 100) return 0n;    // 0.01% tier -> NO POOL
-                return 0n;
+            mockPublicClient.readContract.mockImplementation(async (params) => {
+                const args = params.args;
+                if (!args || !args[0]) return 100n;
+                const param = args[0];
+                const fee = Number(param.fee);
+
+                if (fee === 2500) return 100n;
+                if (fee === 500) return 120n;
+                if (fee === 10000) return 80n;
+                if (fee === 100) return 0n;
+                return 100n;
             });
 
             // Make sure Promise.all logic works
             // In the implementation, we use Promise.all.
             // We can't verify parallelism strictly here, but we verify 4 calls were made.
 
-            const result = await defi.getRealQuote('WBNB', 'USDT', 1000n, 0);
+            const WBNB = mockConfig.chainConfig.tokens.WBNB.address;
+            const USDT = mockConfig.chainConfig.tokens.USDT.address;
+            const result = await defi.getRealQuote(WBNB, USDT, 1000n, 0);
 
             // Expect 4 calls (Hyper-Routing)
             expect(mockPublicClient.readContract).toHaveBeenCalledTimes(4);
 
             // Expect best result (120n) to be chosen
-            expect(result).toBe(120n);
+            expect(result.amountOutMin).toBe(120n);
         });
     });
 
@@ -66,6 +75,9 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
         it('should detect THIN liquidity when slippage is high', async () => {
             // Mock ClawKit context
             const mockKit = {
+                config: {
+                    pythConfig: { priceServiceUrl: 'https://hermes.pyth.network' }
+                },
                 defi: {
                     getRealQuote: vi.fn()
                 },
@@ -94,6 +106,9 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
 
         it('should return DEEP liquidity when price is stable', async () => {
             const mockKit = {
+                config: {
+                    pythConfig: { priceServiceUrl: 'https://hermes.pyth.network' }
+                },
                 defi: { getRealQuote: vi.fn() },
                 gas: { getOptimalExecutionTime: vi.fn().mockResolvedValue({ currentGasPrice: '0.000005' }) }
             };

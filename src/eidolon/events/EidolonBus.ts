@@ -9,7 +9,7 @@ import { MarketState } from '../EidolonTypes';
 export enum EidolonEventType {
     BLOCK_MINED = 'BLOCK_MINED',
     PRICE_UPDATE = 'PRICE_UPDATE',
-    OPPORTUNITY = 'OPPORTUNITY',
+    OPPORTUNITY = 'OPPORTUNITY',   // Emitter: MarketStream
     TRAUMA = 'TRAUMA',
     TRADE_EXECUTED = 'TRADE_EXECUTED'
 }
@@ -71,7 +71,8 @@ export class EidolonBus extends EventEmitter {
         this.emit(event.type, event);
     }
 
-    public subscribe(type: EidolonEventType, callback: (event: any) => void): void {
+    public subscribe(type: EidolonEventType, callback: (event: any) => void): () => void {
         this.on(type, callback);
+        return () => this.off(type, callback);
     }
 }

@@ -79,8 +79,11 @@ export class ThermodynamicEngine {
         // Irreversible component: M·∇S
         const irreversible = this.frictionM.mulVec(gradS);
 
-        // dz = (L·∇H * EnergyScale) + (M·∇S * EntropyScale)
-        const dz = reversible.mul(this.config.energyScale)
+        // Dissipative component: -M·∇H (Energy Minimization / Friction)
+        const dissipation = this.frictionM.mulVec(gradH);
+
+        // dz = (L·∇H - M·∇H) * EnergyScale + (M·∇S * EntropyScale)
+        const dz = reversible.sub(dissipation).mul(this.config.energyScale)
             .add(irreversible.mul(this.config.entropyScale));
 
         // Euler integration: z_new = z + dz * dt
@@ -103,14 +106,19 @@ export class ThermodynamicEngine {
      */
     private entropyGradient(state: Vector): Vector {
         const grad = Vector.zeros(state.len);
+        // 3. Compute Entropy Gradient (Force towards equilibrium 0.5)
+        // H(p) = -p*log(p) - (1-p)*log(1-p)
+        // dH/dp = log((1-p)/p)
+        // FIX A1: Symmetric gradient pushes from both 0 and 1 towards 0.5
         const eps = this.config.epsilon;
-
         for (let i = 0; i < state.len; i++) {
             const p = Math.min(Math.max(state.get(i), eps), 1.0 - eps);
-            // ∇S pushes towards center (0.5) to maximize entropy
-            // Simplified: -ln(p) tends to push away from 0
-            grad.set(i, -Math.log(p) * this.config.temperature);
+            const entropyForce = Math.log((1 - p) / p) * this.config.temperature;
+
+            // entropyScale is applied once in step() — do NOT apply here to avoid double-scaling
+            grad.set(i, entropyForce);
         }
+
         return grad;
     }
 

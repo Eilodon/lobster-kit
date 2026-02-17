@@ -32,22 +32,36 @@ export class EidolonSwarm extends EventEmitter {
         this.agentId = agentId;
         this.bus = EidolonBus.getInstance();
 
-        // Connect to the Hive Channel
-        this.channel = new BroadcastChannel('eidolon-hive-v1');
+        // FIX Bug #13: Node < 18 Compatibility
+        if (typeof BroadcastChannel !== 'undefined') {
+            this.channel = new BroadcastChannel('eidolon-hive-v1');
+            this.setupIncoming();
+        } else {
+            console.warn('⚠️ BroadcastChannel not available (Node < 18?). Swarm P2P disabled.');
+            // Dummy channel to prevent crash on method calls? 
+            // Better to make channel optional or mock it.
+            this.channel = {
+                postMessage: () => { },
+                onmessage: null,
+                close: () => { }
+            } as any;
+        }
 
         // Listen for internal events to broadcast
         this.setupOutgoing();
 
         // Listen for external events from the swarm
-        this.setupIncoming(); // This needs to be correctly bound
+        // this.setupIncoming(); // Moved inside check
 
         // Announce presence
-        this.broadcast({
-            sourceAgentId: this.agentId,
-            type: 'DISCOVERY',
-            payload: { status: 'ONLINE', strategy: 'CLAW_V1' },
-            timestamp: Date.now()
-        });
+        if (typeof BroadcastChannel !== 'undefined') {
+            this.broadcast({
+                sourceAgentId: this.agentId,
+                type: 'DISCOVERY',
+                payload: { status: 'ONLINE', strategy: 'CLAW_V1' },
+                timestamp: Date.now()
+            });
+        }
 
         console.log(`🐝 SWARM: Agent ${this.agentId} joined the Hive.`);
     }

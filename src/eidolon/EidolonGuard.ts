@@ -1,4 +1,6 @@
 import { PublicClient, WalletClient, formatEther } from 'viem';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ClawKit } from '../index';
 import { DivineTransparency } from './DivineTransparency';
 import { MarketState, ActionType, DecisionLog } from './EidolonTypes';
@@ -10,6 +12,7 @@ import { GoPlusSecurity } from './oracles/GoPlusSecurity';
 import { MarketStream } from './sensors/MarketStream';
 import { EidolonSimulator, ShadowTransaction } from './simulation/EidolonSimulator';
 import RiskParams from '../config/RiskConfig.json';
+import { DeepSeekOracle } from './ai/DeepSeekOracle';
 
 /**
  * 🛡️ EIDOLON GUARD
@@ -60,6 +63,13 @@ export class EidolonGuard {
     private simulator: EidolonSimulator;
     private lastMarketState: MarketState | null = null;
 
+    // Caching
+    private securityCache: Map<string, { score: import('./WasmAdapter').SecurityScore, timestamp: number }> = new Map();
+    private readonly CACHE_TTL = 60000; // 60 seconds
+
+    // Persistence
+    private static readonly LISTS_FILE = path.resolve(process.cwd(), '.eidolon', 'antirug_lists.json');
+
     constructor(
         kit: ClawKit,
         config: GuardConfig = {
@@ -78,7 +88,13 @@ export class EidolonGuard {
         this.wallet = kit.walletClient;
         this.config = config;
 
-        this.mind = new DivineTransparency();
+        // FIX U1: Wire DeepSeek Oracle
+        let neuralOracle;
+        if (kit.config.deepSeekConfig) {
+            neuralOracle = new DeepSeekOracle(kit.config.deepSeekConfig);
+        }
+
+        this.mind = new DivineTransparency(neuralOracle);
         this.brain = new ActiveLearning();
         this.soul = new EmotionalCore();
 
@@ -99,11 +115,66 @@ export class EidolonGuard {
         await this.brain.init();
         // Soul init is automatic in constructor now
 
+        // Load persisted whitelist/blacklist into WASM
+        this.loadAntiRugLists();
+
         this.marketStream.subscribe((state) => {
             this.lastMarketState = state;
         });
         this.marketStream.start();
-        console.log('   🧠 Memory Loaded & Senses Active');
+
+        // FIX L7: Automate Snapshot Loop (Every 15s - ~5 blocks)
+        setInterval(() => {
+            this.updateSnapshot().catch(e => console.warn('Snapshot failed', e));
+        }, 15000);
+
+        console.log('   🧠 Memory Loaded & Senses Active & Snapshot Loop Started');
+    }
+
+    /**
+     * 💾 PERSISTENCE: Load whitelist/blacklist from disk into WASM
+     */
+    private loadAntiRugLists(): void {
+        try {
+            if (fs.existsSync(EidolonGuard.LISTS_FILE)) {
+                const raw = fs.readFileSync(EidolonGuard.LISTS_FILE, 'utf-8');
+                const data = JSON.parse(raw);
+                (this.antiRug as any).import_lists(data);
+                console.log(`   📋 Loaded ${data.whitelist?.length ?? 0} whitelist + ${data.blacklist?.length ?? 0} blacklist entries`);
+            }
+        } catch (e) {
+            console.warn('Failed to load AntiRug lists, starting fresh', e);
+        }
+    }
+
+    /**
+     * 💾 PERSISTENCE: Save whitelist/blacklist from WASM to disk
+     */
+    private persistAntiRugLists(): void {
+        try {
+            const dir = path.dirname(EidolonGuard.LISTS_FILE);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const data = (this.antiRug as any).export_lists();
+            fs.writeFileSync(EidolonGuard.LISTS_FILE, JSON.stringify(data, null, 2));
+        } catch (e) {
+            console.warn('Failed to persist AntiRug lists', e);
+        }
+    }
+
+    /**
+     * Add address to whitelist (persisted)
+     */
+    public addToWhitelist(address: string): void {
+        this.antiRug.add_to_whitelist(address);
+        this.persistAntiRugLists();
+    }
+
+    /**
+     * Add address to blacklist (persisted)
+     */
+    public addToBlacklist(address: string): void {
+        this.antiRug.add_to_blacklist(address);
+        this.persistAntiRugLists();
     }
 
 
@@ -128,8 +199,9 @@ export class EidolonGuard {
             // Also update market state if needed
             // this.lastMarketState = await this.senseMarket(); 
         } catch (e) {
-            console.warn('Failed to update portfolio snapshot, using safe fallback', e);
-            this.valueInvariant.update_snapshot(0);
+            // Do NOT reset to 0 — that disables the circuit breaker entirely.
+            // Stale snapshot is safer than no snapshot.
+            console.warn('Failed to update portfolio snapshot, keeping stale value', e);
         }
     }
 
@@ -140,7 +212,8 @@ export class EidolonGuard {
             amountUSD?: number,
             tokenSymbol?: string,
             tokenAddress?: string,
-            txCandidate?: ShadowTransaction
+            txCandidate?: ShadowTransaction,
+            estimatedSlippage?: number
         }
     ): Promise<ValidationResult> {
 
@@ -150,7 +223,11 @@ export class EidolonGuard {
 
         // 1. HARD INVARIANT CHECK (The Citadel - RUST)
         if (context.amountUSD) {
-            const invariantCheck = this.valueInvariant.check_invariant(context.amountUSD, 0) as unknown as import('./WasmAdapter').InvariantCheckResult;
+            // Fix: Calculate predicted impact (default to 1% slippage if unknown)
+            const slippage = context.estimatedSlippage ?? 0.01;
+            const predictedImpact = context.amountUSD * slippage;
+            const invariantCheck = this.valueInvariant.check_invariant(context.amountUSD, predictedImpact) as unknown as import('./WasmAdapter').InvariantCheckResult;
+
 
             if (invariantCheck.circuit_broken) {
                 return {
@@ -173,14 +250,26 @@ export class EidolonGuard {
 
         // Check 2: Anti-Rug
         if (action === 'BUY' && context.tokenAddress) {
-            console.log(`🕵️ Inspecting token: ${context.tokenAddress}`);
-            const tokenData = await this.securityOracle.checkToken(context.tokenAddress);
+            const now = Date.now();
+            const cached = this.securityCache.get(context.tokenAddress);
+
             let security: import('./WasmAdapter').SecurityScore;
 
-            if (tokenData) {
-                security = (this.antiRug as any).compute_score(context.tokenAddress, tokenData) as import('./WasmAdapter').SecurityScore;
+            if (cached && (now - cached.timestamp < this.CACHE_TTL)) {
+                // console.log(`⚡ Cache Hit for ${context.tokenAddress}`);
+                security = cached.score;
             } else {
-                security = this.antiRug.check_token_security(context.tokenAddress) as unknown as import('./WasmAdapter').SecurityScore;
+                console.log(`🕵️ Inspecting token: ${context.tokenAddress}`);
+                const tokenData = await this.securityOracle.checkToken(context.tokenAddress);
+
+                if (tokenData) {
+                    security = (this.antiRug as any).compute_score(context.tokenAddress, tokenData) as import('./WasmAdapter').SecurityScore;
+                } else {
+                    security = this.antiRug.check_token_security(context.tokenAddress) as unknown as import('./WasmAdapter').SecurityScore;
+                }
+
+                // Cache the result
+                this.securityCache.set(context.tokenAddress, { score: security, timestamp: now });
             }
 
             if (security.is_honeypot || !security.contract_verified || security.score < 50) {
@@ -197,6 +286,8 @@ export class EidolonGuard {
         const marketState = context.marketState || this.lastMarketState || await this.senseMarket();
 
         // 3. Consult the Mind
+        // 3. Consult the Mind
+        // FIX L1: Await the now-async explain method (Neural Oracle)
         const decision: DecisionLog = await this.mind.explain(marketState, action);
 
         // 4. Consult the Soul (Thermodynamic)
@@ -263,7 +354,8 @@ export class EidolonGuard {
             // 🛡️ PHISHING/ROUTING CHECK
             // If it's a simple APPROVE, it should only touch the Token and the Spender.
             // Check based on txCandidate data if available
-            if (context.txCandidate?.data?.includes('0x095ea7b3')) { // partial approve sig check
+            // FIX Bug #12: Strict signature check
+            if (context.txCandidate?.data?.startsWith('0x095ea7b3')) { // partial approve sig check
                 // TODO: Parse tx data properly to identify Approve.
                 // For now, relies on context.action which might be coarse.
             }
@@ -322,6 +414,11 @@ export class EidolonGuard {
         if (state.liquidityDepth === 'THIN') score += 20;
         if (state.gasPrice === 'HIGH') score += 10;
         if (state.whaleFlow === 'DUMPING' && action === 'BUY') score += 30;
+
+        // FIX L6: Reward good conditions (Risk Scoring was one-way only)
+        if (state.liquidityDepth === 'DEEP') score -= 10;
+        if (state.gasPrice === 'LOW') score -= 5;
+        if (state.whaleFlow === 'ACCUMULATING' && action === 'BUY') score -= 15;
 
         // Thermodynamic Risks
         if (emoState.arousal > 0.8 && emoState.valence < 0.3) score += 20; // Angry/Anxious

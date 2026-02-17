@@ -32,7 +32,7 @@ export const HolographicDisplay: React.FC<HolographicDisplayProps> = ({
     // Valence 0 = Red (Negative), 1 = Blue (Positive), 0.5 = White/Purple
     const r = Math.floor((1 - emotionalState.valence) * 255);
     const b = Math.floor(emotionalState.valence * 255);
-    const g = Math.floor(emotionalState.attention * 100);
+    const g = Math.floor(emotionalState.attention * 255);
     const color = `rgb(${r},${g},${b})`;
 
     return (
