@@ -34,7 +34,18 @@ describe('EidolonGuard: Rust Integration', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        guard = new EidolonGuard(mockKit);
+        guard = new EidolonGuard(mockKit, {
+            maxRiskScore: 60,
+            minConfidence: 70,
+            enforceRiskySimulation: false,
+            intrusivenessThreshold: 0.5,
+            riskParameters: {
+                maxPositionSize: 1000,
+                maxDrawdown: 10,
+                minConfidence: 70,
+                cooldownPeriod: 0
+            }
+        });
         // Bypass private property access for testing if needed or use public API
     });
 
@@ -47,7 +58,12 @@ describe('EidolonGuard: Rust Integration', () => {
 
         // Mock Mind & Soul to pass
         (guard as any).mind = { explain: vi.fn().mockResolvedValue({ confidence: 90 }) };
-        (guard as any).soul = { getCurrentState: () => ({ cortisol: 0 }), getRiskMultiplier: () => 1 };
+        (guard as any).soul = {
+            getCurrentState: () => ({ cortisol: 0 }),
+            getRiskMultiplier: () => 1,
+            getMode: () => 'ZEN',
+            getModeConfig: () => ({ riskLevel: 0.5, maxLeverage: 1, maxPositionPct: 1.0 })
+        };
         (guard as any).senseMarket = vi.fn().mockResolvedValue({});
         (guard as any).calculateRisk = vi.fn().mockReturnValue(10);
 
@@ -63,7 +79,12 @@ describe('EidolonGuard: Rust Integration', () => {
         mockValueInvariant.check_invariant.mockReturnValue({ safe: true, circuit_broken: false });
         // Mock Mind & Soul to pass
         (guard as any).mind = { explain: vi.fn().mockResolvedValue({ confidence: 90 }) };
-        (guard as any).soul = { getCurrentState: () => ({ cortisol: 0 }), getRiskMultiplier: () => 1 };
+        (guard as any).soul = {
+            getCurrentState: () => ({ cortisol: 0 }),
+            getRiskMultiplier: () => 1,
+            getMode: () => 'ZEN',
+            getModeConfig: () => ({ riskLevel: 0.5, maxLeverage: 1, maxPositionPct: 1.0 })
+        };
         (guard as any).senseMarket = vi.fn().mockResolvedValue({});
         (guard as any).calculateRisk = vi.fn().mockReturnValue(10);
 
@@ -96,4 +117,3 @@ describe('EidolonGuard: Rust Integration', () => {
 
     });
 });
-

@@ -1,4 +1,4 @@
-import { IOracle, MarketContext } from './IOracle';
+import { IOracle, MarketContext, OracleInsight } from './IOracle';
 import { DEFAULT_WEIGHTS, ReasoningWeights } from '../EidolonTypes';
 
 export interface DeepSeekConfig {
@@ -24,7 +24,7 @@ export class DeepSeekOracle implements IOracle {
         return `DeepSeekOracle (${this.config.model})`;
     }
 
-    public async analyze(context: MarketContext): Promise<ReasoningWeights> {
+    public async analyze(context: MarketContext): Promise<OracleInsight> {
         try {
             const prompt = this.buildPrompt(context);
             const response = await this.callLLM(prompt);
@@ -32,7 +32,10 @@ export class DeepSeekOracle implements IOracle {
         } catch (error) {
             console.error('🔮 Oracle Vision Failed:', error);
             console.warn('⚠️ Falling back to static instincts.');
-            return DEFAULT_WEIGHTS; // Fallback to hardcoded weights
+            return {
+                weights: DEFAULT_WEIGHTS,
+                narrative: '🔮 Oracle offline. Using instinctive weights.'
+            };
         }
     }
 
@@ -56,7 +59,8 @@ Expected JSON Structure (matches this exact schema, values between -50 and +50):
     "gasPrice": { "LOW": number, "MEDIUM": number, "HIGH": number },
     "liquidityDepth": { "THIN": number, "DEEP": number },
     "sentiment": { "EUPHORIC": number, "FEAR": number, "NEUTRAL": number },
-    "priceAction": { "PUMPING": number, "DUMPING": number, "RANGING": number }
+    "priceAction": { "PUMPING": number, "DUMPING": number, "RANGING": number },
+    "explanation": "One sentence explaining WHY you set these weights."
 }
 
 Provide ONLY raw JSON. No markdown formatting.
@@ -101,7 +105,7 @@ Provide ONLY raw JSON. No markdown formatting.
         }
     }
 
-    private parseResponse(raw: string): ReasoningWeights {
+    private parseResponse(raw: string): OracleInsight {
         try {
             // Clean markdown code blocks if present
             const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -112,7 +116,10 @@ Provide ONLY raw JSON. No markdown formatting.
                 throw new Error('Invalid JSON structure from Oracle');
             }
 
-            return json as ReasoningWeights;
+            return {
+                weights: json as ReasoningWeights,
+                narrative: json.explanation || 'No explanation provided.'
+            };
         } catch (e) {
             console.error('Failed to parse Oracle response:', raw);
             throw e;

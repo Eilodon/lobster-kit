@@ -2,6 +2,8 @@ import { WalletClient, PublicClient, parseEther, parseUnits, formatEther, encode
 import { ClawKitConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, ClawKitWalletClient, OPBNB_CONFIG, toAddress, getTokenDecimals } from './types';
 import axios from 'axios';
 import { withRetry } from './utils/Resilience';
+import { BigMath, WAD } from './utils/BigMath';
+import { TokenAmount } from './math/TokenAmount';
 
 const PANCAKE_V3_ROUTER_ABI = [
   {
@@ -119,13 +121,23 @@ export class DeFiModule {
       // for native token swaps. For ERC20 swaps, amountIn is in token's smallest unit.
       if (value > 0n || amountIn > 0n) {
         const tradeValue = value > 0n ? value : amountIn;
-        const threshold = tradeValue / 10n; // 10% in same unit
 
-        if (gasCost > threshold) {
-          throw new Error(`Thermodynamic Fail: Gas cost (${formatEther(gasCost)} BNB) > 10% of Trade Value (${formatEther(tradeValue)})`);
+        // FIX P2-03: Use BigMath for Zero-Entropy Ratio Check
+        // Calculate ratio: (gasCost / tradeValue) in WAD
+        // if tradeValue < gasCost, ratio > 1.0.
+        // We want ratio <= 0.1 (10%)
+
+        // Converting to WAD for precision: (gasCost * WAD) / tradeValue
+        // BigMath.divWad(a, b) = a * WAD / b.
+        // We want gasCost / tradeValue.
+        // So divWad(gasCost, tradeValue) returns (gasCost * WAD) / tradeValue.
+
+        const ratio = BigMath.divWad(gasCost, tradeValue);
+        const threshold = BigMath.toWad("0.1"); // 10%
+
+        if (ratio > threshold) {
+          throw new Error(`Thermodynamic Fail: Gas Cost Ratio ${BigMath.fromWad(ratio)} > 0.1`);
         }
-        // FIX P1-04: Use BigInt division to avoid Number precision loss on large values
-        const costBps = gasCost * 10000n / tradeValue; // basis points
       }
 
     } catch (error) {
@@ -149,7 +161,8 @@ export class DeFiModule {
 
     // FIX Bug #1: Dynamic Decimal Resolution
     const fromDecimals = getTokenDecimals(from);
-    const amountIn = parseUnits(amount, fromDecimals);
+    const amountInToken = TokenAmount.fromHuman(amount, fromDecimals, from);
+    const amountIn = amountInToken.raw;
 
     // Get real quote from PancakeSwap V3 Quoter
     // We get the best fee tier from the quote result
@@ -166,6 +179,7 @@ export class DeFiModule {
       // 🛡️ Pre-computation: Prepare Data
       let data: `0x${string}`;
       let value = 0n;
+      let approvalGranted = false;
 
       const isNativeIn = fromToken === this.tokens.BNB.address || fromToken === this.tokens.WBNB.address;
 
@@ -176,7 +190,7 @@ export class DeFiModule {
         value = amountIn;
       } else {
         // Token -> Token
-        await this.ensureApproval(fromToken, router, amountIn);
+        approvalGranted = await this.ensureApproval(fromToken, router, amountIn);
         value = 0n;
       }
 
@@ -198,44 +212,35 @@ export class DeFiModule {
         args: [v3Params]
       });
 
-      // ⚡ CHECK 1: FLASH ACCOUNTING (Thermodynamics)
       try {
+        // ⚡ CHECK 1: FLASH ACCOUNTING (Thermodynamics)
         await this.checkThermodynamics(router, data, value, amountIn);
-      } catch (err: any) {
-        console.error('⚡ CRITICAL FAILURE (Thermodynamic):', err.message);
 
-        // FIX Bug #3 (Part 1): Revoke approval on error
-        if (fromToken !== this.tokens.BNB.address) {
-          console.warn('🔄 Revoking approval due to thermodynamic failure...');
-          await this.revokeApproval(fromToken, router);
-        }
-        throw err;
-      }
-
-      // 🛡️ CHECK 2: SIMULATION (The Hunter's Eye)
-      try {
+        // 🛡️ CHECK 2: SIMULATION (The Hunter's Eye)
         await this.simulateTransaction(router, data, value, userAddress);
+
+        // 🚀 EXECUTION (The Strike)
+        const hash = await this.walletClient.sendTransaction({
+          to: toAddress(router),
+          data,
+          value
+        });
+
+        const outDecimals = getTokenDecimals(to);
+        const amountOutToken = TokenAmount.fromRaw(amountOutMin, outDecimals, to);
+
+        return {
+          hash,
+          amountOut: amountOutToken.toHuman(8)
+        };
       } catch (err: any) {
-        console.error('🛡️ Simulation Failed:', err.message);
-        // FIX Bug #3 (Part 2): Revoke approval on simulation failure
-        if (fromToken !== this.tokens.BNB.address) {
-          console.warn('🔄 Revoking approval due to simulation failure...');
+        console.error('Swap pipeline failed:', err.message || err);
+        if (approvalGranted && fromToken !== this.tokens.BNB.address) {
+          console.warn('🔄 Revoking approval due to swap pipeline failure...');
           await this.revokeApproval(fromToken, router);
         }
         throw err;
       }
-
-      // 🚀 EXECUTION (The Strike)
-      const hash = await this.walletClient.sendTransaction({
-        to: toAddress(router),
-        data,
-        value
-      });
-
-      return {
-        hash,
-        amountOut: formatEther(amountOutMin) // Display purpose
-      };
 
     } catch (error: any) {
       console.error('Swap error:', error);
@@ -262,7 +267,7 @@ export class DeFiModule {
     tokenAddress: string,
     spender: string,
     amount: bigint
-  ): Promise<void> {
+  ): Promise<boolean> {
     const owner = await this.getAddress();
 
     // Check current allowance
@@ -275,15 +280,12 @@ export class DeFiModule {
 
     // If allowance is sufficient, return
     if (allowance >= amount) {
-      return;
+      return false;
     }
 
+    const approvalAmount = this.getApprovalAmount(amount);
     if (allowance < amount) {
-      console.info(`🔓 Approving ${tokenAddress} for ${spender}...`);
-
-      // FIX U3: Optimize Approval Strategy (Approve MAX_UINT)
-      // Saves gas on repeated swaps
-      const MAX_UINT = 2n ** 256n - 1n;
+      console.info(`🔓 Approving ${tokenAddress} for ${spender} (mode=${this.config.approvalMode || 'BUFFERED'})...`);
 
       // ERC20_ABI is not defined in the provided context, assuming it's available globally or imported.
       // For a complete solution, it would need to be defined, e.g., `const ERC20_ABI = parseAbi(['function approve(address spender, uint256 amount) returns (bool)']);`
@@ -291,7 +293,7 @@ export class DeFiModule {
         address: tokenAddress as `0x${string}`,
         abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']), // Using parseAbi directly for ERC20 approve
         functionName: 'approve',
-        args: [toAddress(spender), MAX_UINT],
+        args: [toAddress(spender), approvalAmount],
         account: toAddress(this.walletClient.account.address), // Ensure account is `Address` type
       });
 
@@ -299,7 +301,28 @@ export class DeFiModule {
       console.info(`⏳ Approval Tx Sent: ${hash}`);
       await this.publicClient.waitForTransactionReceipt({ hash });
       console.info(`✅ Approval Confirmed.`);
+      return true;
     }
+
+    return false;
+  }
+
+  private getApprovalAmount(amount: bigint): bigint {
+    const mode = this.config.approvalMode || 'BUFFERED';
+    const MAX_UINT = 2n ** 256n - 1n;
+
+    if (mode === 'EXACT') {
+      return amount;
+    }
+
+    if (mode === 'MAX') {
+      return MAX_UINT;
+    }
+
+    // BUFFERED mode (default): reduce approval blast radius while limiting re-approvals.
+    const rawBps = this.config.approvalBufferBps ?? 12000; // 1.2x default
+    const bps = Math.max(10000, Math.min(50000, rawBps));
+    return (amount * BigInt(bps) + 9999n) / 10000n;
   }
 
   /**
@@ -385,7 +408,7 @@ export class DeFiModule {
     // Filter successful quotes and sort by best output (High to Low)
     const validQuotes = results
       .filter(r => r.amountOut > 0n)
-      .sort((a, b) => Number(b.amountOut - a.amountOut)); // bigint sort
+      .sort((a, b) => (a.amountOut === b.amountOut ? 0 : a.amountOut > b.amountOut ? -1 : 1));
 
     if (validQuotes.length === 0) {
       throw new Error(
@@ -395,12 +418,22 @@ export class DeFiModule {
     }
 
     const bestQuote = validQuotes[0];
-    const amountOutMin = bestQuote.amountOut - (bestQuote.amountOut * BigInt(Math.floor(slippage * 100)) / 10000n);
+
+    // FIX P2-03: Use BigMath for High-Precision Slippage Calculation
+    // AmountOutMin = AmountOut * (1 - slippage)
+    // Slippage 0.5% = 0.005.
+
+    const boundedSlippage = Number.isFinite(slippage) && slippage >= 0 ? slippage : 0;
+    const rawBps = BigMath.percentToBps(boundedSlippage.toString());
+    const slippageBps = BigMath.max(0n, BigMath.min(rawBps, 10000n)); // clamp [0, 100%]
+    const slippageWad = (slippageBps * WAD) / 10000n;
+    const slippageAmount = BigMath.mulWad(bestQuote.amountOut, slippageWad);
+    const amountOutMin = bestQuote.amountOut - slippageAmount;
 
     // Helper to format output based on target token decimals for logging
     // We don't have target token decimals easily here without lookup, so using formatEther as approx or generic
     // But since this is just logging, it's fine.
-    console.info(`✅ Hyper-Routing Winner: ${bestQuote.name} (Out: ${bestQuote.amountOut})`);
+    console.info(`✅ Hyper-Routing Winner: ${bestQuote.name} (Out: ${bestQuote.amountOut}, Min: ${amountOutMin})`);
 
     return {
       amountOutMin,
@@ -951,4 +984,3 @@ export class DeFiModule {
 }
 
 // Simplified PancakeSwap Router ABI
-

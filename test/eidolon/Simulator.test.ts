@@ -108,4 +108,25 @@ describe('EidolonSimulator: Hardening Body', () => {
         expect(result.success).toBe(true);
         expect(result.touchedAddresses).toEqual([]);
     });
+
+    it('should produce risk matrix with worst-case gas projection', async () => {
+        const tx: ShadowTransaction = {
+            to: '0xTarget',
+            data: '0xData',
+            account: '0xSender'
+        };
+
+        mockCall.mockResolvedValue({ data: '0x' });
+        mockEstimateGas.mockResolvedValue(100000n);
+        mockCreateAccessList.mockResolvedValue({
+            accessList: [{ address: '0xContractA', storageKeys: [] }]
+        });
+
+        const matrix = await simulator.simulateRiskMatrix(tx);
+
+        expect(matrix.allPassed).toBe(true);
+        expect(matrix.base.success).toBe(true);
+        expect(matrix.footprint.touchedCount).toBe(1);
+        expect(matrix.gasWorstCase.estimatedGas).toBe(130000n); // +30% buffer
+    });
 });

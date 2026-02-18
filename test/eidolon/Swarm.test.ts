@@ -97,6 +97,8 @@ describe('EidolonSwarm (The Hive)', () => {
         const msg = await messageReceived;
         expect(msg.sourceAgentId).toBe('AGENT_A');
         expect(msg.payload.data).toBe('Secret Intel');
+        expect(agentB.getPeerHandles().some((p) => p.peerId === 'AGENT_A')).toBe(true);
+        expect(agentA.getBandwidthSnapshot().samples).toBeGreaterThan(0);
 
         agentA.close();
         agentB.close();

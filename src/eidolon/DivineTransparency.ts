@@ -40,13 +40,17 @@ export class DivineTransparency {
   public async explain(state: MarketState, action: ActionType): Promise<DecisionLog> {
 
     // FIX L1: Connect DeepSeek Oracle (Neural)
+    // FIX L1: Connect DeepSeek Oracle (Neural)
+    let neuralNarrative = '';
+
     if (this.oracle) {
       try {
-        const dynamicWeights = await this.oracle.analyze({
+        const insight = await this.oracle.analyze({
           marketState: state
         });
         // Override weights with neural context
-        this.weights = { ...this.weights, ...dynamicWeights };
+        this.weights = { ...this.weights, ...insight.weights };
+        neuralNarrative = insight.narrative;
       } catch (e) {
         console.warn('🔮 Oracle connection failed, using instinct (Symbolic)', e);
       }
@@ -128,7 +132,12 @@ export class DivineTransparency {
     confidence = Math.min(100, Math.max(0, confidence));
 
     // 4. Generate narrative
-    const reasoning = this.generateNarrative(action, factors, confidence);
+    let reasoning = this.generateNarrative(action, factors, confidence);
+
+    // Inject Neural Voice if available
+    if (neuralNarrative) {
+      reasoning = `[ORACLE]: "${neuralNarrative}" | [SYSTEM]: ${reasoning}`;
+    }
 
     const log: DecisionLog = {
       timestamp: Date.now(),

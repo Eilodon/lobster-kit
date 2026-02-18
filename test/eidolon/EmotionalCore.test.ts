@@ -124,11 +124,14 @@ describe('EmotionalCore (Biological)', () => {
     });
 
     describe('Persistence (Eternal Recurrence)', () => {
-        it('should SAVE snapshot on tick (instead of append)', async () => {
+        it('should buffer writes and flush snapshot on schedule', async () => {
             await soul.tick(0.5, 1.0);
 
-            // Should call save with snapshot key
-            // Should call save with snapshot key
+            // Debounced persistence: no immediate disk write.
+            expect(mockStorage.save).not.toHaveBeenCalled();
+
+            await vi.advanceTimersByTimeAsync(15000);
+
             expect(mockStorage.save).toHaveBeenCalledWith(
                 'emotional_core_snapshot.json',
                 expect.objectContaining({
@@ -137,9 +140,25 @@ describe('EmotionalCore (Biological)', () => {
                     })
                 })
             );
-            // Should NOT call append (unless for trauma, which this is not)
-            // Actually implementation calls appendState which calls save. 
-            // We removed append in favor of save.
+        });
+    });
+    describe('Sentinel Mode', () => {
+        it('should enter EMERGENCY mode on extreme cortisol', () => {
+            // Massive trauma - verify stim logic or force state
+            // stimulate(100, DANGER) adds +18 cortisol per call (scaled). 
+            // Need > 80.
+            for (let i = 0; i < 5; i++) soul.stimulate(100, 'DANGER');
+
+            const state = soul.getCurrentState();
+            expect(state.cortisol).toBeGreaterThan(80);
+            expect(soul.getMode()).toBe('EMERGENCY'); // SentinelMode.EMERGENCY
+        });
+
+        it('should enter BERSERK mode on high arousal and valence', () => {
+            // Hack state for test since biometrics are complex to drive naturally in one tick
+            (soul as any).state.arousal = 0.9;
+            (soul as any).state.valence = 0.8;
+            expect(soul.getMode()).toBe('BERSERK'); // SentinelMode.BERSERK
         });
     });
 });

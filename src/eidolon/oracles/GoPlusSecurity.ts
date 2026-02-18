@@ -24,6 +24,7 @@ export interface TokenSecurityData {
     owner_address: string;
     creator_address: string;
     dex: unknown[]; // List of DEXs where it is traded
+    liquidity_locked?: boolean;
 }
 
 export class GoPlusSecurity {
@@ -42,6 +43,14 @@ export class GoPlusSecurity {
 
             if (response.data?.result?.[tokenAddress.toLowerCase()]) {
                 const raw = response.data.result[tokenAddress.toLowerCase()];
+                let liquidityLocked: boolean | undefined = undefined;
+                if (raw.is_locked !== undefined && raw.is_locked !== null) {
+                    liquidityLocked = raw.is_locked === '1' || raw.is_locked === 1 || raw.is_locked === true;
+                } else if (Array.isArray(raw.lp_holders) && raw.lp_holders.length > 0) {
+                    liquidityLocked = raw.lp_holders.some((h: any) =>
+                        h?.is_locked === '1' || h?.is_locked === 1 || h?.is_locked === true
+                    );
+                }
 
                 // Map raw API response to our typed interface
                 // GoPlus returns strings "1"/"0" for booleans often
@@ -60,7 +69,8 @@ export class GoPlusSecurity {
                     owner_change_balance: raw.owner_change_balance === '1',
                     owner_address: raw.owner_address || '',
                     creator_address: raw.creator_address || '',
-                    dex: raw.dex || []
+                    dex: raw.dex || [],
+                    liquidity_locked: liquidityLocked
                 };
             }
             return null;

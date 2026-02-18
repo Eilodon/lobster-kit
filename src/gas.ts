@@ -45,6 +45,8 @@ export class GasModule {
    * Added: Caching, multiple fallbacks, rate limit handling
    */
   async getBNBPrice(): Promise<number> {
+    const strictPrivacy = this.config.privacyMode === 'strict';
+
     // 👻 GHOST PROTOCOL: Use Internal Oracle if available
     // Does not leak IP to CoinGecko/Binance
     if (this.oracle) {
@@ -61,6 +63,15 @@ export class GasModule {
     if (this.priceCache && Date.now() - this.priceCache.timestamp < this.CACHE_DURATION) {
       console.log(`💰 Using cached BNB price: $${this.priceCache.value.toFixed(2)}`);
       return this.priceCache.value;
+    }
+
+    // Strict privacy: never call centralized HTTP feeds directly.
+    if (strictPrivacy) {
+      if (this.priceCache) {
+        console.warn(`⚠️ Strict privacy mode active. Using stale cached BNB price: $${this.priceCache.value.toFixed(2)}`);
+        return this.priceCache.value;
+      }
+      throw new Error('PRIVACY_STRICT_MODE: Missing internal oracle/cached price. External HTTP feeds are disabled.');
     }
 
     // ... (Legacy External APIs omitted/kept as fallback if strictly needed, but we prefer Oracle)

@@ -1,7 +1,8 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EidolonGuard } from '../../src/eidolon/EidolonGuard';
 import { PublicClient, WalletClient } from 'viem';
+import { EidolonBus, EidolonEventType } from '../../src/eidolon/events/EidolonBus';
 
 // Mock WasmAdapter
 vi.mock('../../src/eidolon/WasmAdapter', () => {
@@ -97,10 +98,11 @@ vi.mock('../../src/eidolon/DivineTransparency', () => ({
 
 
 // Mock ActiveLearning
+const learnFromOutcomeMock = vi.fn();
 vi.mock('../../src/eidolon/ActiveLearning', () => ({
     ActiveLearning: class {
         async init() { }
-        async learnFromOutcome() { }
+        async learnFromOutcome(...args: any[]) { return learnFromOutcomeMock(...args); }
         getWeights() { return {}; }
     }
 }));
@@ -108,6 +110,7 @@ vi.mock('../../src/eidolon/ActiveLearning', () => ({
 
 
 // Mock EmotionalCore
+const stimulateMock = vi.fn();
 vi.mock('../../src/eidolon/EmotionalCore', () => ({
     EmotionalCore: class {
         async init() { }
@@ -129,7 +132,7 @@ vi.mock('../../src/eidolon/EmotionalCore', () => ({
         }
         shouldTrade() { return true; }
         processOutcome() { }
-        stimulate() { }
+        stimulate(...args: any[]) { return stimulateMock(...args); }
         getRiskMultiplier() { return 1.0; }
         async tick() { return { cortisol: 0, arousal: 0, valence: 0, momentum: 0 }; }
         getCurrentState() {
@@ -138,8 +141,16 @@ vi.mock('../../src/eidolon/EmotionalCore', () => ({
                 arousal: 0,
                 valence: 0,
                 momentum: 0,
-                glucose: 50,
                 dopamine: 50
+            };
+        }
+        getMode() { return 'ZEN'; }
+        getModeConfig() {
+            return {
+                riskLevel: 0.2,
+                maxLeverage: 1,
+                maxPositionPct: 0.1,
+                cooldownMs: 0
             };
         }
     }
@@ -190,6 +201,12 @@ describe('EidolonGuard', () => {
 
     beforeEach(() => {
         vi.resetAllMocks();
+        learnFromOutcomeMock.mockReset();
+        stimulateMock.mockReset();
+    });
+
+    afterEach(() => {
+        EidolonBus.getInstance().removeAllListeners();
     });
 
     describe('Initialization', () => {
@@ -223,7 +240,15 @@ describe('EidolonGuard', () => {
 
             await guard.init();
 
-            const result = await guard.validateAction('BUY', { amountUSD: 100 });
+            const result = await guard.validateAction('BUY', {
+                amountUSD: 100,
+                txCandidate: {
+                    to: '0xTarget',
+                    data: '0x',
+                    value: 0n,
+                    account: '0xSender'
+                }
+            });
 
             expect(result.approved).toBe(true);
             expect(result.riskScore).toBeLessThan(80);
@@ -252,7 +277,15 @@ describe('EidolonGuard', () => {
             await guard.init();
 
             // Buying into a dump with thin liquidity should be high risk
-            const result = await guard.validateAction('BUY', { amountUSD: 100 });
+            const result = await guard.validateAction('BUY', {
+                amountUSD: 100,
+                txCandidate: {
+                    to: '0xTarget',
+                    data: '0x',
+                    value: 0n,
+                    account: '0xSender'
+                }
+            });
 
             expect(result.approved).toBe(false);
             expect(result.riskScore).toBeGreaterThan(30);
@@ -288,6 +321,30 @@ describe('EidolonGuard', () => {
             expect(result.reason).toContain("Missing or invalid 'amountUSD'");
         });
 
+        it('should require txCandidate when risky simulation enforcement is enabled', async () => {
+            const guard = new EidolonGuard(mockKit, {
+                maxRiskScore: 100,
+                minConfidence: 0,
+                enforceRiskySimulation: true,
+                intrusivenessThreshold: 0.5,
+                riskParameters: {
+                    maxPositionSize: 1000,
+                    maxDrawdown: 100,
+                    minConfidence: 0,
+                    cooldownPeriod: 0
+                }
+            });
+            await guard.init();
+
+            const result = await guard.validateAction('BUY', {
+                amountUSD: 100,
+                tokenAddress: '0xToken'
+            });
+
+            expect(result.approved).toBe(false);
+            expect(result.reason).toContain('SIMULATION_REQUIRED');
+        });
+
         it('should BLOCK transaction if BLAST RADIUS is exceeded (>10 contracts)', async () => {
             const guard = new EidolonGuard(mockKit, {
                 maxRiskScore: 100,
@@ -318,7 +375,15 @@ describe('EidolonGuard', () => {
 
             // Inject Mock Simulator
             const mockSim = {
-                simulate: vi.fn().mockResolvedValue(mockShadowResult)
+                simulateRiskMatrix: vi.fn().mockResolvedValue({
+                    base: mockShadowResult,
+                    gasWorstCase: { estimatedGas: 65000n, bufferPct: 30 },
+                    footprint: {
+                        touchedCount: 15,
+                        touchedAddresses: Array(15).fill('0xContract')
+                    },
+                    allPassed: true
+                })
             };
             (guard as any).simulator = mockSim;
 
@@ -331,5 +396,68 @@ describe('EidolonGuard', () => {
             expect(result.approved).toBe(false);
             expect(result.reason).toContain('BLAST RADIUS EXCEEDED');
         });
+
+        it('should BLOCK action if TraumaRegistry has inhibited it', async () => {
+            const guard = new EidolonGuard(mockKit);
+            await guard.init();
+
+            // 1. Report Trauma
+            // Mode defaults to 'ZEN' in mock soul
+            guard.reportTrauma('ZEN', 'BUY', 1.0);
+
+            // 2. Attempt Action
+            const result = await guard.validateAction('BUY', {
+                amountUSD: 100,
+                tokenAddress: '0xToken'
+            });
+
+            // 3. Verify Block
+            expect(result.approved).toBe(false);
+            expect(result.riskScore).toBe(100);
+            expect(result.reason).toContain('TRAUMA INHIBITION');
+        });
+    });
+
+    it('should learn and stimulate on TRADE_EXECUTED events', async () => {
+        const guard = new EidolonGuard(mockKit);
+        await guard.init();
+
+        const bus = EidolonBus.getInstance();
+        bus.emitEvent({
+            type: EidolonEventType.TRADE_EXECUTED,
+            timestamp: Date.now(),
+            payload: {
+                action: 'BUY',
+                decisionLog: {
+                    timestamp: Date.now(),
+                    action: 'BUY',
+                    confidence: 88,
+                    reasoning: 'test',
+                    marketState: {
+                        gasPrice: 'LOW',
+                        whaleFlow: 'ACCUMULATING',
+                        sentiment: 'NEUTRAL',
+                        liquidityDepth: 'DEEP',
+                        priceAction: 'RANGING'
+                    },
+                    causalFactors: []
+                },
+                outcome: {
+                    decisionId: Date.now(),
+                    profitLoss: 12,
+                    capitalAtRisk: 100,
+                    slippage: 0.4,
+                    gasUsed: 1,
+                    success: true
+                }
+            }
+        });
+
+        // Event callbacks are async fire-and-forget.
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(learnFromOutcomeMock).toHaveBeenCalledTimes(1);
+        expect(stimulateMock).toHaveBeenCalledTimes(1);
     });
 });

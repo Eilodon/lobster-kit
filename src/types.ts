@@ -106,9 +106,17 @@ export interface ClawKitConfig {
   chainId?: number; // default: 204 (opBNB)
   rpcUrl?: string;
   gasMultiplier?: number;
+  privacyMode?: 'strict' | 'balanced'; // strict => no direct external price feeds
+  approvalMode?: 'EXACT' | 'BUFFERED' | 'MAX';
+  approvalBufferBps?: number; // Used when approvalMode=BUFFERED (default 12000 = 1.2x)
   contracts?: Partial<typeof CLAWKIT_CONTRACTS>;
   chainConfig?: ChainConfig; // Inject chain specific config
   pythConfig?: PythConfig; // [NEW] Pyth Network Configuration
+  configIntegrity?: {
+    expectedHash: string;
+    algorithm?: 'sha256';
+    strict?: boolean; // default true
+  };
   deepSeekConfig?: {
     apiKey: string;
     model?: string;

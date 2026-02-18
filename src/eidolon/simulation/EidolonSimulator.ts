@@ -20,6 +20,19 @@ export interface ShadowTransaction {
     stateOverride?: any; // 🛠️ GOD MODE: Alter reality (Users balance, Nonce, Code)
 }
 
+export interface RiskMatrixResult {
+    base: SimulationResult;
+    gasWorstCase: {
+        estimatedGas: bigint;
+        bufferPct: number;
+    };
+    footprint: {
+        touchedCount: number;
+        touchedAddresses: string[];
+    };
+    allPassed: boolean;
+}
+
 /**
  * 🔮 EIDOLON SIMULATOR (Shadow Clones)
  * 
@@ -115,6 +128,32 @@ export class EidolonSimulator {
                 logs: []
             };
         }
+    }
+
+    /**
+     * Runs a deterministic multi-check simulation matrix:
+     * - Base success path (eth_call + gas estimation)
+     * - Gas worst-case buffer projection
+     * - Access-list footprint summary
+     */
+    public async simulateRiskMatrix(tx: ShadowTransaction): Promise<RiskMatrixResult> {
+        const base = await this.simulate(tx);
+        const touched = base.touchedAddresses || [];
+        const bufferPct = 30;
+        const gasWorstCase = {
+            estimatedGas: base.success ? (base.gasUsed * BigInt(100 + bufferPct)) / 100n : 0n,
+            bufferPct
+        };
+
+        return {
+            base,
+            gasWorstCase,
+            footprint: {
+                touchedCount: touched.length,
+                touchedAddresses: touched
+            },
+            allPassed: base.success
+        };
     }
 
     /**

@@ -3,7 +3,7 @@ set -e
 
 # Build the WASM package
 echo "🏗️ Building WASM package..."
-wasm-pack build --target web --release --out-dir ../pkg core-rust
+wasm-pack build --target nodejs --release --out-dir ../pkg core-rust
 
 # Clean up
 echo "🧹 Cleaning up..."

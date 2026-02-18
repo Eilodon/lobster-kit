@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SecurityModule } from '../src/security';
 import { ClawKitConfig, OPBNB_CONFIG, CLAWKIT_CONTRACTS } from '../src/types';
 import { parseAbi, encodeFunctionData } from 'viem';
+import { computeConfigHash } from '../src/utils/ConfigIntegrity';
 
 // Mock dependencies
 const mockPublic = {
@@ -68,5 +69,35 @@ describe('SecurityModule', () => {
         // 4. Should clear flags at end
         const clearCall = mockWallet.sendTransaction.mock.calls[3][0];
         // Decoding data check roughly or trust flow order
+    });
+
+    it('should fail fast on config checksum mismatch when strict integrity is enabled', () => {
+        const baseConfig: ClawKitConfig = {
+            chainConfig: OPBNB_CONFIG,
+            rpcUrl: 'https://opbnb.rpc.url',
+        };
+        const tamperedConfig: ClawKitConfig = {
+            ...baseConfig,
+            configIntegrity: {
+                expectedHash: 'deadbeef',
+                strict: true
+            }
+        };
+
+        expect(() => new SecurityModule(mockWallet as any, mockPublic as any, tamperedConfig)).toThrow(/CHECKSUM MISMATCH/);
+    });
+
+    it('should allow boot when config checksum matches', () => {
+        const baseConfig: ClawKitConfig = {
+            chainConfig: OPBNB_CONFIG,
+            rpcUrl: 'https://opbnb.rpc.url',
+            configIntegrity: {
+                expectedHash: '',
+                strict: true
+            }
+        };
+        baseConfig.configIntegrity!.expectedHash = computeConfigHash(baseConfig);
+
+        expect(() => new SecurityModule(mockWallet as any, mockPublic as any, baseConfig)).not.toThrow();
     });
 });

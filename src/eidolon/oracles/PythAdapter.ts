@@ -11,6 +11,23 @@ export class PythAdapter {
         return this.config?.endpoint || this.DEFAULT_ENDPOINT;
     }
 
+    private toDecimalString(value: bigint, expo: number): string {
+        const negative = value < 0n;
+        const abs = negative ? -value : value;
+        const raw = abs.toString();
+
+        if (expo >= 0) {
+            return `${negative ? '-' : ''}${raw}${'0'.repeat(expo)}`;
+        }
+
+        const fracLen = -expo;
+        const padded = raw.padStart(fracLen + 1, '0');
+        const intPart = padded.slice(0, -fracLen);
+        const fracPart = padded.slice(-fracLen).replace(/0+$/, '');
+        const decimal = fracPart ? `${intPart}.${fracPart}` : intPart;
+        return `${negative ? '-' : ''}${decimal}`;
+    }
+
     /**
      * Get latest price for a symbol
      * @param symbol 'BNB' | 'USDT'
@@ -31,18 +48,18 @@ export class PythAdapter {
 
             if (response.data?.parsed?.[0]) {
                 const priceData = response.data.parsed[0].price;
-                const price = Number(priceData.price);
-                const expo = Number(priceData.expo);
-
-                // precise calculation: price * 10^expo using BigInt to avoid float issues
                 const priceBig = BigInt(priceData.price);
                 const expoNum = Number(priceData.expo);
-
-                if (expoNum >= 0) {
-                    return Number(priceBig * 10n ** BigInt(expoNum));
-                } else {
-                    return Number(priceBig) / Math.pow(10, -expoNum);
+                if (!Number.isInteger(expoNum)) {
+                    throw new Error('Invalid Pyth exponent');
                 }
+
+                const decimalPrice = this.toDecimalString(priceBig, expoNum);
+                const parsed = Number(decimalPrice);
+                if (!Number.isFinite(parsed)) {
+                    throw new Error('Pyth price overflow');
+                }
+                return parsed;
             }
 
             throw new Error('Invalid Pyth response format');

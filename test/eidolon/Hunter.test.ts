@@ -48,7 +48,7 @@ describe('DeFiModule: Hunter Upgrade', () => {
             fee: 2500
         });
         // Mock ensureApproval
-        (defi as any).ensureApproval = vi.fn().mockResolvedValue(undefined);
+        (defi as any).ensureApproval = vi.fn().mockResolvedValue(true);
     });
 
     it('should ABORT and REVOKE APPROVAL if Gas Cost > 10% (Flash Accounting)', async () => {

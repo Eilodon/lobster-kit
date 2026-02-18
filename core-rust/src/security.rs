@@ -128,6 +128,8 @@ pub struct TokenSecurityData {
     pub owner_change_balance: bool,
     pub owner_address: String,
     pub creator_address: String,
+    #[serde(default)]
+    pub liquidity_locked: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -135,6 +137,7 @@ pub struct SecurityScore {
     pub score: u8, // 0-100
     pub is_honeypot: bool,
     pub liquidity_locked: bool,
+    pub liquidity_unknown: bool,
     pub contract_verified: bool,
     pub owner_renounced: bool,
     pub status: String, // SAFE, CAUTION, DANGER, CRITICAL
@@ -199,9 +202,10 @@ impl AntiRug {
             score: 0,
             is_honeypot: false,
             liquidity_locked: false,
+            liquidity_unknown: true,
             contract_verified: false,
             owner_renounced: false,
-            status: "DANGER".to_string(),
+            status: "UNKNOWN".to_string(),
         }).map_err(|e| JsValue::from_str(&e.to_string()))?)
     }
 
@@ -214,10 +218,10 @@ impl AntiRug {
         
         // 0. Manual Override
         if self.blacklist.contains(&addr_lower) {
-            return self.create_score(0, true, false, false, false, "BLACKLISTED");
+            return self.create_score(0, true, false, false, false, false, "BLACKLISTED");
         }
         if self.whitelist.contains(&addr_lower) {
-            return self.create_score(100, false, true, true, true, "WHITELISTED");
+            return self.create_score(100, false, true, false, true, true, "WHITELISTED");
         }
 
         let security_data: TokenSecurityData = serde_wasm_bindgen::from_value(data)
@@ -226,10 +230,10 @@ impl AntiRug {
         let mut score: i16 = 100;
 
         // 1. Critical Failures (Instant Death)
-        if security_data.is_honeypot { return self.create_score(0, true, false, false, false, "HONEYPOT"); }
-        if security_data.owner_change_balance { return self.create_score(0, true, false, false, false, "OWNER_CONTROLS_BALANCE"); }
-        if security_data.cannot_sell_all { return self.create_score(0, true, false, false, false, "CANNOT_SELL_ALL"); }
-        if security_data.is_blacklisted { return self.create_score(0, true, false, false, false, "BLACKLISTED_BY_SOURCE"); }
+        if security_data.is_honeypot { return self.create_score(0, true, false, false, false, false, "HONEYPOT"); }
+        if security_data.owner_change_balance { return self.create_score(0, true, false, false, false, false, "OWNER_CONTROLS_BALANCE"); }
+        if security_data.cannot_sell_all { return self.create_score(0, true, false, false, false, false, "CANNOT_SELL_ALL"); }
+        if security_data.is_blacklisted { return self.create_score(0, true, false, false, false, false, "BLACKLISTED_BY_SOURCE"); }
 
         // 2. Ownership (computed early for accurate reporting in all paths)
         let renounced = security_data.owner_address.is_empty() || security_data.owner_address == "0x0000000000000000000000000000000000000000";
@@ -239,7 +243,7 @@ impl AntiRug {
         let sell_tax: f64 = security_data.sell_tax.parse().unwrap_or(0.0);
 
         if buy_tax > 20.0 || sell_tax > 20.0 { 
-            return self.create_score(10, false, false, security_data.is_open_source, renounced, "HIGH_TAX"); 
+            return self.create_score(10, false, false, true, security_data.is_open_source, renounced, "HIGH_TAX"); 
         }
 
         // 4. Major Risks
@@ -256,6 +260,19 @@ impl AntiRug {
         // 6. Ownership penalty
         if !renounced { score -= 15; }
 
+        // 6.5 Liquidity lock signal
+        let mut liquidity_locked = false;
+        let mut liquidity_unknown = true;
+        if let Some(is_locked) = security_data.liquidity_locked {
+            liquidity_unknown = false;
+            liquidity_locked = is_locked;
+            if !is_locked { score -= 20; }
+            if is_locked { score += 5; }
+        } else {
+            // Unknown lock status is risky, but not fatal.
+            score -= 10;
+        }
+
         // 7. Positive Signals (Bonuses)
         if security_data.is_whitelisted { score += 10; }
         if security_data.is_open_source && renounced { score += 5; } // Verified & Renounced Synergy
@@ -264,16 +281,25 @@ impl AntiRug {
         if score < 0 { score = 0; }
         if score > 100 { score = 100; }
 
-        let status = if score >= 80 { "SAFE" } else if score >= 50 { "CAUTION" } else { "DANGER" };
+        let status = if liquidity_unknown && score >= 60 {
+            "UNKNOWN"
+        } else if score >= 80 {
+            "SAFE"
+        } else if score >= 50 {
+            "CAUTION"
+        } else {
+            "DANGER"
+        };
 
-        self.create_score(score as u8, false, false, security_data.is_open_source, renounced, status)
+        self.create_score(score as u8, false, liquidity_locked, liquidity_unknown, security_data.is_open_source, renounced, status)
     }
 
-    fn create_score(&self, score: u8, is_honeypot: bool, liquidity_locked: bool, contract_verified: bool, owner_renounced: bool, status: &str) -> Result<JsValue, JsValue> {
+    fn create_score(&self, score: u8, is_honeypot: bool, liquidity_locked: bool, liquidity_unknown: bool, contract_verified: bool, owner_renounced: bool, status: &str) -> Result<JsValue, JsValue> {
         Ok(serde_wasm_bindgen::to_value(&SecurityScore {
             score,
             is_honeypot,
             liquidity_locked,
+            liquidity_unknown,
             contract_verified,
             owner_renounced,
             status: status.to_string(),

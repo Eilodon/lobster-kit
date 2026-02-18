@@ -2,6 +2,9 @@ import { WalletClient, PublicClient, parseAbi, encodeFunctionData } from 'viem';
 import { ClawKitConfig, APPROVAL_REVOKER, PANCAKE_ROUTER, CLAWKIT_CONTRACTS, ClawKitWalletClient, toAddress } from './types';
 import axios from 'axios';
 import { withRetry } from './utils/Resilience';
+import { verifyConfigIntegrity } from './utils/ConfigIntegrity';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface SecurityScanResult {
   address: string;
@@ -9,6 +12,8 @@ interface SecurityScanResult {
   riskScore: number;
   risks: string[];
   recommendations: string[];
+  degradedMode?: boolean;
+  maxAllowedTradeUSD?: number;
 }
 
 export class SecurityModule {
@@ -16,6 +21,9 @@ export class SecurityModule {
   private readonly GOPLUS_API = 'https://api.gopluslabs.io/api/v1';
   // Alternative: RugDoc API
   private readonly RUGDOC_API = 'https://api.rugdoc.io/v1';
+  private readonly SCAN_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+  private static readonly SCAN_CACHE_FILE = path.resolve(process.cwd(), '.eidolon', 'security_scan_cache.json');
+  private scanCache: Map<string, { result: SecurityScanResult; timestamp: number }> = new Map();
 
   constructor(
     private walletClient: ClawKitWalletClient,
@@ -23,6 +31,7 @@ export class SecurityModule {
     private config: ClawKitConfig
   ) {
     this.validateConfig();
+    this.loadScanCache();
   }
 
   /**
@@ -32,7 +41,7 @@ export class SecurityModule {
   private validateConfig() {
     if (!this.config.rpcUrl) throw new Error("CRITICAL: Missing RPC URL. Agent cannot see.");
     if (!this.config.chainConfig) throw new Error("CRITICAL: Missing Chain Config. Agent is lost.");
-    // In a real biological system, we would check checksums here
+    verifyConfigIntegrity(this.config, 'SecurityModule');
   }
 
   /**
@@ -41,8 +50,13 @@ export class SecurityModule {
    * const result = await kit.security.scanContract('0x...')
    */
   async scanContract(address: string): Promise<SecurityScanResult> {
+    const cached = this.getCachedScan(address);
+    if (cached) return cached;
+
     const risks: string[] = [];
     let riskScore = 0;
+    let degradedMode = false;
+    let maxAllowedTradeUSD: number | undefined;
 
     try {
       // 1. Check if it's a honeypot
@@ -56,10 +70,10 @@ export class SecurityModule {
         }
       } catch (e: any) {
         if (e.message === 'SECURITY_SCAN_FAILED') {
-          risks.push('⚠️ Security Scan Failed (Network/API Error) - Trading Paused for Safety');
-          riskScore += 100; // Still high risk (Fail Closed), but distinct reason
-          isHoneypot = true; // FIX: Fail Safe - Assume unsafe if check fails
-          // Note: We flag it as high risk to prevent buying, but user knows it's network related.
+          degradedMode = true;
+          maxAllowedTradeUSD = 100;
+          risks.push('⚠️ Security API unavailable - Degraded mode enabled (probe-only).');
+          riskScore += 40;
         } else {
           throw e;
         }
@@ -86,6 +100,13 @@ export class SecurityModule {
         riskScore += tradingRestrictions.length * 15;
       }
 
+      // 4.5 Bytecode sanity fallback (independent of external APIs)
+      const hasHealthyBytecode = await this.checkBytecodeSanity(address);
+      if (!hasHealthyBytecode) {
+        risks.push('⚠️ Bytecode anomaly detected (empty or suspiciously small contract code)');
+        riskScore += 35;
+      }
+
       // 5. Get additional security data from GoPlus
       const goplusData = await this.getGoPlusSecurityData(address);
       if (goplusData) {
@@ -101,30 +122,93 @@ export class SecurityModule {
           risks.push('⚠️ Contract is not open source');
           riskScore += 30;
         }
+        if (goplusData.liquidity_locked === false) {
+          risks.push('⚠️ Liquidity appears unlocked');
+          riskScore += 20;
+        }
+      } else if (degradedMode) {
+        riskScore += 10;
       }
 
       // Generate recommendations
       const recommendations = this.generateRecommendations(riskScore, risks);
+      if (degradedMode) {
+        recommendations.unshift('⚠️ Degraded Security Mode: only allow small liquidity probe before any larger position.');
+      }
 
-      return {
+      const result: SecurityScanResult = {
         address,
         isHoneypot,
         riskScore: Math.min(100, riskScore),
         risks,
-        recommendations
+        recommendations,
+        degradedMode,
+        maxAllowedTradeUSD
       };
+      this.setCachedScan(address, result);
+      return result;
 
     } catch (error) {
       console.error('Error scanning contract:', error);
 
-      // FAIL SAFE: Return MAX RISK on critical failure
-      return {
+      // Failsafe degradation: do not assume honeypot blindly, force small probes.
+      const result: SecurityScanResult = {
         address,
-        isHoneypot: true, // Assume worst case
-        riskScore: 100,
-        risks: ['🚨 CRITICAL SYSTEM FAILURE: Security scan could not complete. ASSUMING HOSTILE.'],
-        recommendations: ['DO NOT INTERACT. Agent is blind.']
+        isHoneypot: false,
+        riskScore: 85,
+        risks: ['🚨 CRITICAL SYSTEM FAILURE: Security scan could not complete. Degraded mode active.'],
+        recommendations: [
+          'Execute probe-only mode ($100 max) until security sensors recover.',
+          'Require shadow simulation success before any action.'
+        ],
+        degradedMode: true,
+        maxAllowedTradeUSD: 100
       };
+      this.setCachedScan(address, result);
+      return result;
+    }
+  }
+
+  private getCachedScan(address: string): SecurityScanResult | null {
+    const key = address.toLowerCase();
+    const cached = this.scanCache.get(key);
+    if (!cached) return null;
+    if (Date.now() - cached.timestamp > this.SCAN_CACHE_TTL_MS) {
+      this.scanCache.delete(key);
+      return null;
+    }
+    return cached.result;
+  }
+
+  private setCachedScan(address: string, result: SecurityScanResult) {
+    const key = address.toLowerCase();
+    this.scanCache.set(key, { result, timestamp: Date.now() });
+    this.persistScanCache();
+  }
+
+  private loadScanCache() {
+    try {
+      if (!fs.existsSync(SecurityModule.SCAN_CACHE_FILE)) return;
+      const raw = fs.readFileSync(SecurityModule.SCAN_CACHE_FILE, 'utf-8');
+      const parsed = JSON.parse(raw) as Record<string, { result: SecurityScanResult; timestamp: number }>;
+      for (const [address, entry] of Object.entries(parsed || {})) {
+        if (entry?.result && Number.isFinite(entry?.timestamp)) {
+          this.scanCache.set(address, entry);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load security cache, starting fresh.', e);
+    }
+  }
+
+  private persistScanCache() {
+    try {
+      const dir = path.dirname(SecurityModule.SCAN_CACHE_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const obj = Object.fromEntries(this.scanCache.entries());
+      fs.writeFileSync(SecurityModule.SCAN_CACHE_FILE, JSON.stringify(obj, null, 2));
+    } catch (e) {
+      console.warn('Failed to persist security cache:', e);
     }
   }
 
@@ -183,6 +267,7 @@ export class SecurityModule {
         is_high_tax: (parseFloat(data.buy_tax) > 10 || parseFloat(data.sell_tax) > 10),
         is_blacklisted: data.is_blacklisted === '1',
         is_open_source: data.is_open_source === '1',
+        liquidity_locked: data.is_locked === '1' || data.is_locked === 1 || data.is_locked === true,
         buy_tax: parseFloat(data.buy_tax || 0),
         sell_tax: parseFloat(data.sell_tax || 0),
         holder_count: parseInt(data.holder_count || 0),
@@ -314,6 +399,19 @@ export class SecurityModule {
     }
 
     return restrictions;
+  }
+
+  private async checkBytecodeSanity(address: string): Promise<boolean> {
+    try {
+      const getBytecode = (this.publicClient as any).getBytecode;
+      if (typeof getBytecode !== 'function') return true;
+      const code = await getBytecode({ address: toAddress(address) });
+      if (!code || code === '0x') return false;
+      return code.length > 200;
+    } catch {
+      // If bytecode probing itself fails, don't hard-fail scan.
+      return true;
+    }
   }
 
   /**

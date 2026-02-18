@@ -7,8 +7,11 @@ import { WalletModule } from './wallet';
 import { GasModule } from './gas';
 import { AnalyticsModule } from './analytics';
 import { EidolonSwarm } from './eidolon/swarm/EidolonSwarm';
+import { MarketStream } from './eidolon/sensors/MarketStream';
+import { EidolonBus, EidolonEventType } from './eidolon/events/EidolonBus';
 
 import { ClawKitConfig, ClawKitWalletClient, OPBNB_CONFIG } from './types';
+import { verifyConfigIntegrity } from './utils/ConfigIntegrity';
 
 export class ClawKit {
   public readonly defi: DeFiModule;
@@ -18,6 +21,7 @@ export class ClawKit {
   public readonly gas: GasModule;
   public readonly analytics: AnalyticsModule;
   public readonly swarm: EidolonSwarm;
+  public readonly marketStream: MarketStream;
 
   public readonly walletClient: ClawKitWalletClient;
   public readonly publicClient: PublicClient;
@@ -45,6 +49,29 @@ export class ClawKit {
 
     // Initialize Hive Mind
     this.swarm = new EidolonSwarm();
+
+    // Initialize Sensory System (Market Stream)
+    this.marketStream = new MarketStream();
+    this.setupSensoryLinks();
+  }
+
+  private setupSensoryLinks() {
+    // 🧠 Wire Reflexes: Market Stream -> Nervous System (Bus)
+    this.marketStream.on('price', (data) => {
+      EidolonBus.getInstance().emitEvent({
+        type: EidolonEventType.PRICE_UPDATE,
+        timestamp: data.time,
+        payload: {
+          symbol: data.symbol,
+          price: data.price,
+          source: 'BINANCE_WS'
+        }
+      });
+    });
+
+    // Start listening if configured (or default auto-start?)
+    // For now, let's auto-start to ensure aliveness.
+    this.marketStream.start();
   }
 
   /**
@@ -52,6 +79,8 @@ export class ClawKit {
    * Prevents runtime failures by ensuring rigorous config integrity at boot.
    */
   private validateConfig(config: ClawKitConfig) {
+    verifyConfigIntegrity(config, 'ClawKit');
+
     if (!config.chainConfig) {
       console.warn("⚠️ ChainConfig missing - Defaulting to opBNB (Standard Mode)");
       config.chainConfig = OPBNB_CONFIG; // FIX U8: Apply defaults instead of skipping validation
@@ -107,6 +136,8 @@ export * from './analytics';
 
 // Export types
 export * from './types';
+export * from './math/TokenAmount';
+export * from './math/Q64x96';
 
 export * from './eidolon';
 export * from './connectors';

@@ -1,6 +1,7 @@
 import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS, QTable, Q_CONFIG, MarketState, ActionType, QStateHash } from './EidolonTypes';
 import { IStorageProvider } from './memory/IStorageProvider';
 import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
+import { CausalBrain, SentinelVariable } from './ai/CausalBrain';
 
 /**
  * 🧠 ACTIVE LEARNING MODULE
@@ -56,7 +57,9 @@ export const LEARNING_CONFIG: LearningConfig = {
 export class ActiveLearning {
   private weights = { ...REASONING_WEIGHTS }; // @deprecated: Keeping for backward compatibility
   private qTable: QTable = {}; // 🧠 The Brain 2.0
+  private cognitiveBrain: CausalBrain; // 🧠 The Brain 3.0 (Bayesian)
   private learningRate = Q_CONFIG.ALPHA;
+  private config: LearningConfig; // Fixed: Added property
 
   private tradeHistory: TradeOutcome[] = [];
   private adjustmentCount = 0;
@@ -65,8 +68,19 @@ export class ActiveLearning {
   private storage: AppendOnlyAdapter;
   private readonly WEIGHTS_KEY = 'active_learning_weights.json';
   private readonly Q_TABLE_KEY = 'active_learning_q_table.json'; // New Brain Memory
+  private readonly CAUSAL_KEY = 'active_learning_causal.json'; // Synaptic Map
+  private readonly Q_DELTA_KEY = 'active_learning_q_delta.log';
   private readonly HISTORY_KEY = 'active_learning_history.log';
   private autoSaveEnabled = true;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private saveInFlight: Promise<void> | null = null;
+  private pendingUpdates = 0;
+  private dirtyQStates = new Set<string>();
+  private updatesSinceSnapshot = 0;
+  private readonly SAVE_DEBOUNCE_MS = 30000;
+  private readonly SAVE_BATCH_SIZE = 50;
+  private readonly SNAPSHOT_EVERY_UPDATES = 500;
+  private readonly debugEnabled = process.env.EIDOLON_DEBUG === '1';
 
   // FIX A4: Q-Table Versioning to handle state space evolution
   // v1: gas:whale:sentiment:liq:price (Current)
@@ -74,15 +88,17 @@ export class ActiveLearning {
 
   constructor(
     initialWeights?: typeof REASONING_WEIGHTS,
-    private config: LearningConfig = LEARNING_CONFIG,
+    config: LearningConfig = LEARNING_CONFIG,
     storage?: IStorageProvider
   ) {
     if (initialWeights) {
       this.weights = { ...initialWeights };
     }
+    this.config = config;
 
     // Default to AppendOnly (Local) for Phase 1
     this.storage = (storage as AppendOnlyAdapter) || new AppendOnlyAdapter();
+    this.cognitiveBrain = new CausalBrain();
   }
 
   /**
@@ -92,7 +108,7 @@ export class ActiveLearning {
   public async init(): Promise<void> {
     // FIXED: Load saved weights on startup (awaited)
     await this.loadFromDisk().catch(() => {
-      console.log('🆕 No saved weights found, starting with fresh brain');
+      this.debug('🆕 No saved weights found, starting with fresh brain');
     });
   }
 
@@ -106,9 +122,9 @@ export class ActiveLearning {
    * @param outcome The actual result of that decision
    */
   public async learnFromOutcome(decision: DecisionLog, outcome: TradeOutcome): Promise<void> {
-    console.log('\n╔════════════════════════════════════════════════════════════╗');
-    console.log('║   🧠 ACTIVE LEARNING - PROCESSING OUTCOME                  ║');
-    console.log('╠════════════════════════════════════════════════════════════╣');
+    this.debug('\n╔════════════════════════════════════════════════════════════╗');
+    this.debug('║   🧠 ACTIVE LEARNING - PROCESSING OUTCOME                  ║');
+    this.debug('╠════════════════════════════════════════════════════════════╣');
 
     this.tradeHistory.push(outcome);
 
@@ -129,8 +145,8 @@ export class ActiveLearning {
     const reward = this.calculateReward(outcome);
 
     const rewardEmoji = reward > 0 ? '✅' : '❌';
-    console.log(`║ ${rewardEmoji} Outcome: ${reward > 0 ? 'PROFIT' : 'LOSS'} | P & L: $${outcome.profitLoss.toFixed(2)} `.padEnd(61) + '║');
-    console.log(`║    Reward Signal: ${reward.toFixed(4)} `.padEnd(61) + '║');
+    this.debug(`║ ${rewardEmoji} Outcome: ${reward > 0 ? 'PROFIT' : 'LOSS'} | P & L: $${outcome.profitLoss.toFixed(2)} `.padEnd(61) + '║');
+    this.debug(`║    Reward Signal: ${reward.toFixed(4)} `.padEnd(61) + '║');
 
     // Update Q-Values (The Brain 2.0)
     // For continuous Q-learning, we SHOULD use the current market state as 'nextState'
@@ -139,27 +155,61 @@ export class ActiveLearning {
     // FIX Bug #16: Allow passing nextState for Temporal Difference learning
     this.updateQValue(decision.marketState, decision.action, reward, decision.marketState); // Using current state as next state approximate
 
+    // 🧠 THE BRAIN 3.0: Bayesian Causal Learning
+    // We verify if our "Priors" held true.
+    // 1. Whale Flow -> Price Delta
+    if (decision.marketState.whaleFlow === 'ACCUMULATING') {
+      // If Whales bought, did we profit? (Proxy for Price went up)
+      this.cognitiveBrain.learn('WhaleNetFlow', 'PriceDelta', outcome.profitLoss > 0);
+    } else if (decision.marketState.whaleFlow === 'DUMPING') {
+      // If Whales sold, did we lose? (Proxy for Price went down)
+      // Actually, if we SOLD, we profited if price went down.
+      // If we BOUGHT and Whales Dumped, we likely lost.
+      // Causal Link: Whale Dumping -> Price Down.
+      // If we BOUGHT, profit < 0 means Price Down.
+      // So if Whale=Dumping AND Profit < 0 (Price Down), then Whale->PriceDelta check passes (Price did go down).
+      // Wait, 'PriceDelta' usually means Positive Delta.
+      // If Price Down, PriceDelta is False?
+      // Let's assume PriceDelta = "Price Increased".
+      // CAUSE: Whale Dumping. EFFECT: Price Increased?
+      // we expect this to be FALSE.
+      // If we have Profit < 0 (on Buy), then Price Decreased. So Effect (Price Increase) did NOT happen.
+      // So OutcomePositive = false.
+      // this.cognitiveBrain.learn('WhaleNetFlow', 'PriceDelta', false);
+      // Correct.
+      if (decision.action === 'BUY') {
+        this.cognitiveBrain.learn('WhaleNetFlow', 'PriceDelta', outcome.profitLoss > 0);
+      }
+    }
+
+    // 2. Sentiment -> Price Delta
+    // If Sentiment is Greed, did price go up?
+    if (decision.marketState.sentiment === 'EUPHORIC' && decision.action === 'BUY') {
+      this.cognitiveBrain.learn('Sentiment', 'PriceDelta', outcome.profitLoss > 0);
+    }
+
     // Legacy Weight Update (Keep for compatibility until full migration)
     if (outcome.success) {
       this.updateWeights(decision, reward);
     } else {
-      console.log('║    ⚠️ Transaction failed - no weight update               ║');
+      this.debug('║    ⚠️ Transaction failed - no weight update               ║');
     }
 
     // Decay learning rate over time
     this.decayLearningRate();
 
-    console.log(`║    Current Learning Rate: ${this.learningRate.toFixed(4)} `.padEnd(61) + '║');
-    console.log(`║    Total Adjustments: ${this.adjustmentCount} `.padEnd(61) + '║');
-    console.log('╚════════════════════════════════════════════════════════════╝\n');
+    this.debug(`║    Current Learning Rate: ${this.learningRate.toFixed(4)} `.padEnd(61) + '║');
+    this.debug(`║    Total Adjustments: ${this.adjustmentCount} `.padEnd(61) + '║');
+    this.debug('╚════════════════════════════════════════════════════════════╝\n');
 
-    // FIXED: Auto-save after learning
     if (this.autoSaveEnabled) {
-      await this.saveToDisk().catch(err => {
-        console.error('⚠️ Failed to save weights:', err.message);
-      });
+      this.scheduleAutoSave();
     }
   }
+
+  // ... (keeping intervening methods unchanged) ...
+
+
 
   /**
    * 🧠 QUANTUM BRAIN: State Quantization
@@ -205,7 +255,9 @@ export class ActiveLearning {
     const newQ = currentQ + this.learningRate * (reward + gamma * maxNextQ - currentQ);
 
     this.qTable[stateHash][action] = newQ;
-    console.log(`    🧠 Q - UPDATE[${stateHash}][${action}]: ${currentQ.toFixed(4)} -> ${newQ.toFixed(4)} (R: ${reward.toFixed(4)}, MaxNext: ${maxNextQ.toFixed(4)})`);
+    this.dirtyQStates.add(stateHash);
+    this.pendingUpdates++;
+    this.debug(`    🧠 Q - UPDATE[${stateHash}][${action}]: ${currentQ.toFixed(4)} -> ${newQ.toFixed(4)} (R: ${reward.toFixed(4)}, MaxNext: ${maxNextQ.toFixed(4)})`);
   }
 
   /**
@@ -276,7 +328,7 @@ export class ActiveLearning {
    * Reinforcement Learning: Strengthen pathways that led to profit
    */
   private updateWeights(decision: DecisionLog, reward: number): void {
-    console.log('    🔄 Updating neural pathways...');
+    this.debug('    🔄 Updating neural pathways...');
 
     const adjustment = this.learningRate * reward;
     const multiplier = reward > 0
@@ -313,7 +365,7 @@ export class ActiveLearning {
     // Try exact match first
     if (key in categoryWeights) {
       (categoryWeights as any)[key] += delta;
-      console.log(`       ${category} [${key}]: ${(categoryWeights as any)[key].toFixed(2)} (Δ ${delta.toFixed(4)})`);
+      this.debug(`       ${category} [${key}]: ${(categoryWeights as any)[key].toFixed(2)} (Δ ${delta.toFixed(4)})`);
       return;
     }
 
@@ -321,7 +373,7 @@ export class ActiveLearning {
     const upperKey = key.toUpperCase();
     if (upperKey in categoryWeights) {
       (categoryWeights as any)[upperKey] += delta;
-      console.log(`       ${category} [${upperKey}]: ${(categoryWeights as any)[upperKey].toFixed(2)} (Δ ${delta.toFixed(4)})`);
+      this.debug(`       ${category} [${upperKey}]: ${(categoryWeights as any)[upperKey].toFixed(2)} (Δ ${delta.toFixed(4)})`);
       return;
     }
 
@@ -434,7 +486,7 @@ export class ActiveLearning {
    * FIXED: Save weights and history to disk
    * Enables "Living Organism" - agent remembers what it learned!
    */
-  public async saveToDisk(): Promise<void> {
+  public async saveToDisk(forceSnapshot: boolean = false): Promise<void> {
     try {
       // Save weights
       const weightsData = {
@@ -447,19 +499,38 @@ export class ActiveLearning {
 
       await this.storage.save(this.WEIGHTS_KEY, weightsData);
 
-      // Save Q-Table
-      const qData = {
-        qTable: this.qTable,
-        version: '2.0',
-        savedAt: new Date().toISOString()
-      };
-      await this.storage.save(this.Q_TABLE_KEY, qData);
+      // Save Causal Brain (Synaptic Map)
+      await this.cognitiveBrain.saveSynapticMap(this.storage, this.CAUSAL_KEY);
+
+      const shouldSnapshot = forceSnapshot || this.updatesSinceSnapshot >= this.SNAPSHOT_EVERY_UPDATES;
+      if (shouldSnapshot) {
+        const qData = {
+          qTable: this.qTable,
+          version: '2.0',
+          savedAt: new Date().toISOString()
+        };
+        await this.storage.save(this.Q_TABLE_KEY, qData);
+        this.updatesSinceSnapshot = 0;
+      } else if (this.dirtyQStates.size > 0) {
+        const updates: Record<string, Record<ActionType, number>> = {};
+        for (const stateHash of this.dirtyQStates) {
+          updates[stateHash] = { ...this.qTable[stateHash] };
+        }
+        await this.storage.append(this.Q_DELTA_KEY, {
+          version: '2.1-delta',
+          savedAt: new Date().toISOString(),
+          updates
+        });
+        this.updatesSinceSnapshot += this.dirtyQStates.size;
+      }
+      this.dirtyQStates.clear();
+      this.pendingUpdates = 0;
 
       // Save history (last 1000 trades to limit file size)
       const recentHistory = this.tradeHistory.slice(-1000);
       // await this.storage.save(this.HISTORY_KEY, recentHistory); // Log is already appended
 
-      console.log('💾 Brain State (Weights + Q-Table) saved to local memory');
+      this.debug('💾 Brain State (Weights + Q-Table) saved to local memory');
     } catch (error: any) {
       console.error('❌ Failed to save weights:', error.message);
       throw error;
@@ -480,15 +551,35 @@ export class ActiveLearning {
         this.learningRate = saved.learningRate;
         this.adjustmentCount = saved.adjustmentCount;
 
-        console.log(`🧠 Loaded learned weights from ${saved.savedAt} `);
-        console.log(`   Adjustments made: ${saved.adjustmentCount} `);
+        this.debug(`🧠 Loaded learned weights from ${saved.savedAt} `);
+        this.debug(`   Adjustments made: ${saved.adjustmentCount} `);
       }
 
       // Load Q-Table
       const savedQ = await this.storage.load<any>(this.Q_TABLE_KEY);
       if (savedQ) {
         this.qTable = savedQ.qTable;
-        console.log(`🧠 Loaded Q - Table(Size: ${Object.keys(this.qTable).length} states)`);
+        this.debug(`🧠 Loaded Q - Table(Size: ${Object.keys(this.qTable).length} states)`);
+      }
+
+      // Load Causal Brain
+      await this.cognitiveBrain.loadSynapticMap(this.storage, this.CAUSAL_KEY);
+
+      // Replay Q-Delta log on top of snapshot.
+      const qDeltas = await this.storage.readLog(this.Q_DELTA_KEY);
+      if (qDeltas.length > 0) {
+        for (const delta of qDeltas) {
+          if (!delta?.updates || typeof delta.updates !== 'object') continue;
+          for (const [stateHash, actions] of Object.entries(delta.updates)) {
+            const next = actions as Record<ActionType, number>;
+            this.qTable[stateHash] = {
+              BUY: Number.isFinite(next.BUY) ? next.BUY : 0,
+              SELL: Number.isFinite(next.SELL) ? next.SELL : 0,
+              HOLD: Number.isFinite(next.HOLD) ? next.HOLD : 0,
+              EMERGENCY_EXIT: Number.isFinite(next.EMERGENCY_EXIT) ? next.EMERGENCY_EXIT : 0
+            };
+          }
+        }
       }
 
       // Load history from AppendLog
@@ -496,9 +587,9 @@ export class ActiveLearning {
       if (logs.length > 0) {
         // Keep bounded working-set in memory even if log file is large.
         this.tradeHistory = logs.slice(-1000); // Each log entry is a TradeOutcome
-        console.log(`📊 Loaded ${this.tradeHistory.length} historical trades from AppendLog`);
+        this.debug(`📊 Loaded ${this.tradeHistory.length} historical trades from AppendLog`);
       } else {
-        console.log('📊 No trade history found (starting fresh)');
+        this.debug('📊 No trade history found (starting fresh)');
       }
     } catch (error: any) {
       // Not an error - just means no saved weights yet
@@ -511,14 +602,26 @@ export class ActiveLearning {
    */
   public setAutoSave(enabled: boolean): void {
     this.autoSaveEnabled = enabled;
-    console.log(`Auto - save ${enabled ? 'enabled' : 'disabled'} `);
+    this.debug(`Auto - save ${enabled ? 'enabled' : 'disabled'} `);
+    if (!enabled && this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
   }
 
   /**
    * Manually trigger save (if auto-save is disabled)
    */
   public async manualSave(): Promise<void> {
-    await this.saveToDisk();
+    await this.saveToDisk(true);
+  }
+
+  public async flush(): Promise<void> {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    await this.flushAutoSave(true);
   }
 
   /**
@@ -527,7 +630,7 @@ export class ActiveLearning {
    */
   private async archiveHistory(): Promise<void> {
     const archiveKey = `archive_history_${Date.now()}.json`;
-    console.log(`📦 Archiving ${this.tradeHistory.length} trades to ${archiveKey} `);
+    this.debug(`📦 Archiving ${this.tradeHistory.length} trades to ${archiveKey} `);
 
     // Save all current history to archive file
     await this.storage.save(archiveKey, this.tradeHistory);
@@ -538,5 +641,108 @@ export class ActiveLearning {
     // When we loadFromDisk, we only read the log, which might be huge. 
     // Ideally we should rotate the log, but for now this archival saves a snapshot.
     this.tradeHistory = this.tradeHistory.slice(-1000);
+  }
+
+  private scheduleAutoSave() {
+    if (this.pendingUpdates >= this.SAVE_BATCH_SIZE) {
+      void this.flushAutoSave(false);
+      return;
+    }
+
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      void this.flushAutoSave(false);
+    }, this.SAVE_DEBOUNCE_MS);
+  }
+
+  private async flushAutoSave(forceSnapshot: boolean): Promise<void> {
+    if (this.saveInFlight) {
+      await this.saveInFlight;
+      return;
+    }
+
+    this.saveInFlight = this.saveToDisk(forceSnapshot)
+      .catch((err: any) => {
+        console.error('⚠️ Failed to save weights:', err.message);
+      })
+      .finally(() => {
+        this.saveInFlight = null;
+      });
+
+    await this.saveInFlight;
+  }
+
+  private debug(...args: unknown[]): void {
+    if (!this.debugEnabled) return;
+    console.log(...args);
+  }
+
+  /**
+   * Runtime causal bias for decision confidence.
+   * Converts synaptic probabilities into action-specific confidence deltas.
+   */
+  public getCausalSignal(
+    state: MarketState,
+    action: ActionType
+  ): { confidenceDelta: number; explanations: string[] } {
+    if (action === 'HOLD') {
+      return { confidenceDelta: 0, explanations: [] };
+    }
+
+    const activeSignals: Array<{
+      cause: SentinelVariable;
+      effect: SentinelVariable;
+      direction: number;
+      label: string;
+      weight: number;
+    }> = [];
+
+    if (state.whaleFlow === 'ACCUMULATING') {
+      activeSignals.push({ cause: 'WhaleNetFlow', effect: 'PriceDelta', direction: 1, label: 'Whale accumulation', weight: 1.2 });
+    } else if (state.whaleFlow === 'DUMPING') {
+      activeSignals.push({ cause: 'WhaleNetFlow', effect: 'PriceDelta', direction: -1, label: 'Whale dumping', weight: 1.2 });
+    }
+
+    if (state.sentiment === 'EUPHORIC') {
+      activeSignals.push({ cause: 'Sentiment', effect: 'PriceDelta', direction: 1, label: 'Euphoric sentiment', weight: 0.8 });
+    } else if (state.sentiment === 'FEAR') {
+      activeSignals.push({ cause: 'Sentiment', effect: 'PriceDelta', direction: -1, label: 'Fear sentiment', weight: 0.8 });
+    }
+
+    if (state.gasPrice === 'HIGH') {
+      activeSignals.push({ cause: 'GasPriceGwei', effect: 'Volatility', direction: -1, label: 'High gas volatility pressure', weight: 0.6 });
+    }
+
+    if (activeSignals.length === 0) {
+      return { confidenceDelta: 0, explanations: [] };
+    }
+
+    let weightedScore = 0;
+    let weightTotal = 0;
+    const explanations: string[] = [];
+
+    for (const signal of activeSignals) {
+      const prediction = this.cognitiveBrain.getPrediction(signal.cause, signal.effect);
+      const centeredProb = (prediction.prob - 0.5) * 2; // [-1, +1]
+      const signed = centeredProb * signal.direction * prediction.confidence * signal.weight;
+      weightedScore += signed;
+      weightTotal += Math.abs(signal.weight);
+      explanations.push(
+        `${signal.label}: P=${(prediction.prob * 100).toFixed(0)}% C=${(prediction.confidence * 100).toFixed(0)}%`
+      );
+    }
+
+    if (weightTotal <= 0) {
+      return { confidenceDelta: 0, explanations };
+    }
+
+    let normalized = weightedScore / weightTotal;
+    if (action === 'SELL' || action === 'EMERGENCY_EXIT') {
+      normalized = -normalized;
+    }
+
+    const confidenceDelta = Math.round(Math.max(-1, Math.min(1, normalized)) * 20);
+    return { confidenceDelta, explanations };
   }
 }

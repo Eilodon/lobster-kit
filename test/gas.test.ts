@@ -89,4 +89,15 @@ describe('GasModule', () => {
 
         expect(callArgs.data).toBe(expectedData);
     });
+
+    it('should block external price feeds in strict privacy mode without oracle/cache', async () => {
+        const strictConfig: ClawKitConfig = {
+            chainConfig: OPBNB_CONFIG,
+            rpcUrl: 'https://opbnb.rpc.url',
+            privacyMode: 'strict'
+        };
+        const strictGas = new GasModule(mockWallet as any, mockPublic, strictConfig);
+
+        await expect(strictGas.getBNBPrice()).rejects.toThrow(/PRIVACY_STRICT_MODE/);
+    });
 });

@@ -48,10 +48,11 @@ describe('DeepSeekOracle', () => {
             })
         });
 
-        const weights = await oracle.analyze(mockContext);
+        const insight = await oracle.analyze(mockContext);
 
         // Verify result
-        expect(weights.whaleFlow.ACCUMULATING).toBe(30);
+        expect(insight.weights.whaleFlow.ACCUMULATING).toBe(30);
+        expect(typeof insight.narrative).toBe('string');
 
         // Verify fetch call
         expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -70,17 +71,11 @@ describe('DeepSeekOracle', () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
         vi.spyOn(console, 'warn').mockImplementation(() => { });
 
-        const weights = await oracle.analyze(mockContext);
+        const insight = await oracle.analyze(mockContext);
 
         // Should be default structural weights (we check a key existence)
-        expect(weights.whaleFlow).toBeDefined();
-        // Check a known default value from REASONING_WEIGHTS (imported inside DeepSeek via DivineTransparency consts)
-        // Actually DeepSeek imports REASONING_WEIGHTS from DivineTransparency, which we refactored.
-        // Wait, did we export REASONING_WEIGHTS from refactored DivineTransparency?
-        // Yes, as DEFAULT_WEIGHTS now, let's check input file content... 
-        // In the refactor, I renamed it `DEFAULT_WEIGHTS`. 
-        // `DeepSeekOracle.ts` imported `REASONING_WEIGHTS`.
-        // I might have introduced a compilation error if `REASONING_WEIGHTS` is no longer exported.
+        expect(insight.weights.whaleFlow).toBeDefined();
+        expect(insight.narrative).toContain('Oracle offline');
 
         consoleSpy.mockRestore();
     });

@@ -12,13 +12,16 @@ describe('DeFiModule', () => {
     beforeEach(() => {
         mockWallet = {
             getAddresses: vi.fn().mockResolvedValue([MOCK_USER]),
-            sendTransaction: vi.fn().mockResolvedValue('0xHash')
+            sendTransaction: vi.fn().mockResolvedValue('0xHash'),
+            writeContract: vi.fn().mockResolvedValue('0xApproveHash'),
+            account: { address: MOCK_USER }
         };
         mockPublic = {
             call: vi.fn().mockResolvedValue('0x'),
             estimateGas: vi.fn().mockResolvedValue(100000n),
             getGasPrice: vi.fn().mockResolvedValue(1000000000n),
             readContract: vi.fn().mockResolvedValue(1000000000000000000n),
+            simulateContract: vi.fn().mockResolvedValue({ request: {} }),
             waitForTransactionReceipt: vi.fn().mockResolvedValue({}),
         };
 
@@ -64,6 +67,48 @@ describe('DeFiModule', () => {
             })).rejects.toThrow('Simulation Reverted');
 
             expect(mockWallet.sendTransaction).not.toHaveBeenCalled();
+        });
+
+        it('should use EXACT approval mode when configured', async () => {
+            mockPublic.readContract.mockResolvedValueOnce(0n); // allowance
+            mockPublic.estimateGas.mockResolvedValue(1n);
+            mockPublic.getGasPrice.mockResolvedValue(1n);
+            const config: ClawKitConfig = {
+                chainConfig: OPBNB_CONFIG,
+                approvalMode: 'EXACT'
+            };
+            const exactDefi = new DeFiModule(mockWallet, mockPublic, config);
+            vi.spyOn(exactDefi, 'getRealQuote').mockResolvedValue({
+                amountOutMin: 900000n,
+                fee: 2500
+            });
+
+            await exactDefi.swap({
+                from: 'USDT',
+                to: 'WBNB',
+                amount: '1'
+            });
+
+            const approveCall = mockPublic.simulateContract.mock.calls[0][0];
+            expect(approveCall.args[1]).toBe(1000000n); // 1 USDT (6 decimals)
+        });
+
+        it('should revoke approval if swap execution fails after approval', async () => {
+            mockPublic.readContract.mockResolvedValueOnce(0n); // allowance
+            mockPublic.estimateGas.mockResolvedValue(1n);
+            mockPublic.getGasPrice.mockResolvedValue(1n);
+            mockWallet.sendTransaction
+                .mockRejectedValueOnce(new Error('send failed'))
+                .mockResolvedValueOnce('0xRevoke');
+
+            await expect(defi.swap({
+                from: 'USDT',
+                to: 'WBNB',
+                amount: '1'
+            })).rejects.toThrow('send failed');
+
+            // 1st: swap send fails, 2nd: revoke approval attempt
+            expect(mockWallet.sendTransaction).toHaveBeenCalledTimes(2);
         });
     });
 

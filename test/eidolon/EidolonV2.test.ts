@@ -69,6 +69,26 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
             // Expect best result (120n) to be chosen
             expect(result.amountOutMin).toBe(120n);
         });
+
+        it('should sort very large bigint quotes without Number overflow', async () => {
+            const defi = new DeFiModule(mockWalletClient as any, mockPublicClient as any, mockConfig as any);
+            const huge = 2n ** 255n;
+
+            mockPublicClient.readContract.mockImplementation(async (params) => {
+                const fee = Number(params.args[0].fee);
+                if (fee === 2500) return huge - 1n;
+                if (fee === 500) return huge;
+                if (fee === 10000) return huge - 2n;
+                return 0n;
+            });
+
+            const WBNB = mockConfig.chainConfig.tokens.WBNB.address;
+            const USDT = mockConfig.chainConfig.tokens.USDT.address;
+            const result = await defi.getRealQuote(WBNB, USDT, 1000n, 0);
+
+            expect(result.amountOutMin).toBe(huge);
+            expect(result.fee).toBe(500);
+        });
     });
 
     describe('👁️ OMNISCIENT ORACLE (Liquidity Probing)', () => {

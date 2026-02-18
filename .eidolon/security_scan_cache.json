@@ -1,0 +1,22 @@
+{
+  "0xtargetcontract": {
+    "result": {
+      "address": "0xTargetContract",
+      "isHoneypot": false,
+      "riskScore": 95,
+      "risks": [
+        "⚠️ Security API unavailable - Degraded mode enabled (probe-only).",
+        "⚠️ Contract source code not verified",
+        "⚠️ Trading is currently disabled"
+      ],
+      "recommendations": [
+        "⚠️ Degraded Security Mode: only allow small liquidity probe before any larger position.",
+        "🚨 DO NOT INTERACT - Extremely high risk",
+        "Consider this a scam until proven otherwise"
+      ],
+      "degradedMode": true,
+      "maxAllowedTradeUSD": 100
+    },
+    "timestamp": 1771375396140
+  }
+}

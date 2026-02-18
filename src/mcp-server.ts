@@ -21,7 +21,7 @@ import { ClawKit } from "./index";
 import { ClawOracle } from "./eidolon/sensors/ClawOracle"; // Import Oracle
 import { ClawKitConfig, getTokenDecimals } from "./types";
 import { OPBNB_CONFIG } from "./types";
-import { createWalletClient, http, custom } from 'viem';
+import { createWalletClient, formatUnits, http, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { opBNB } from 'viem/chains';
 
@@ -203,13 +203,14 @@ class EidolonServer {
                         // But we can instantiate Oracle directly if needed or use exposed method
                         // For now, let's simulate a sense call or use a direct one if available
                         const quoteResult = await this.kit.defi.getRealQuote('WBNB', 'USDT', 1000000000000000000n, 1);
+                        const usdtDecimals = getTokenDecimals('USDT');
                         return {
                             content: [
                                 {
                                     type: "text",
                                     text: JSON.stringify({
                                         symbol: "WBNB",
-                                        priceUSD: Number(quoteResult.amountOutMin) / Math.pow(10, getTokenDecimals('USDT')), // FIX Bug #25: Destructure quote result
+                                        priceUSD: formatUnits(quoteResult.amountOutMin, usdtDecimals),
                                         marketCondition: "VOLATILE",
                                         liquidityDepth: "DEEP" // Would call probeLiquidity here
                                     }, null, 2),
@@ -221,14 +222,12 @@ class EidolonServer {
                     case "eidolon_defi_quote": {
                         const args = request.params.arguments as { tokenIn: string; tokenOut: string; amount: string };
                         const { tokenIn, tokenOut, amount } = args;
-                        // FIX Bug #26: Use correct decimals for input token
                         const decimals = getTokenDecimals(tokenIn);
-                        const amountBn = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, decimals)));
+                        const amountBn = parseUnits(amount, decimals);
                         const quote = await this.kit.defi.getRealQuote(tokenIn, tokenOut, amountBn, 0.5);
 
-                        // Calculate output human readable
                         const outDecimals = getTokenDecimals(tokenOut);
-                        const outAmount = Number(quote.amountOutMin) / Math.pow(10, outDecimals);
+                        const outAmount = formatUnits(quote.amountOutMin, outDecimals);
 
                         return {
                             content: [

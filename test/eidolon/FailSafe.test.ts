@@ -24,17 +24,16 @@ describe('SecurityModule: Immune Boost (Fail Safe)', () => {
         expect(() => new SecurityModule(mockWalletClient, mockPublicClient, {} as any)).toThrowError(/CRITICAL/);
     });
 
-    it('should return MAX RISK (isHoneypot=true) when GoPlus API fails (Fail Safe)', async () => {
+    it('should enter degraded probe-only mode when GoPlus API fails', async () => {
         // Mock API failure
         (axios.get as any).mockRejectedValue(new Error('Network Error / API Down'));
 
         const result = await security.scanContract('0xTargetContract');
 
-        // Assert Fail Safe behavior
-        // Assert Fail Safe behavior
-        expect(result.isHoneypot).toBe(true);
-        expect(result.riskScore).toBe(100);
-        expect(result.risks).toContain('⚠️ Security Scan Failed (Network/API Error) - Trading Paused for Safety');
+        expect(result.isHoneypot).toBe(false);
+        expect(result.degradedMode).toBe(true);
+        expect(result.maxAllowedTradeUSD).toBe(100);
+        expect(result.risks.some((r: string) => r.includes('Degraded mode'))).toBe(true);
     });
 
     it('should return safe result when API succeeds and returns clean data', async () => {

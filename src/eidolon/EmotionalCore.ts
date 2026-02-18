@@ -4,6 +4,7 @@ import { Vector } from './ai/LinearAlgebra';
 import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
 import { EidolonBus, EidolonEventType } from './events/EidolonBus';
 import BioParams from '../config/BioParameters.json';
+import { SentinelMode, ModeConfig, MODE_CONFIGS } from './EidolonTypes';
 
 export interface EmotionalState {
   glucose: number;   // Energy (0-100)
@@ -35,6 +36,13 @@ export class EmotionalCore {
   private readonly LOG_KEY = 'emotional_core.log'; // Keep for audit trail if needed
   private unsubs: Array<() => void> = [];
   private disposed = false;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private persistInFlight: Promise<void> | null = null;
+  private lastPersistedAt = 0;
+  private lastPersistedState: EmotionalState;
+  private readonly SNAPSHOT_FLUSH_MS = 15000;
+  private readonly SNAPSHOT_MAX_STALENESS_MS = 60000;
+  private readonly debugEnabled = process.env.EIDOLON_DEBUG === '1';
 
   constructor(storage?: AppendOnlyAdapter) {
     this.storage = storage || new AppendOnlyAdapter();
@@ -55,6 +63,8 @@ export class EmotionalCore {
       volatility: 0.1,
       lastUpdate: Date.now()
     };
+    this.lastPersistedState = { ...this.state };
+    this.lastPersistedAt = Date.now();
 
     this.loadState();
     this.setupEventListeners();
@@ -70,11 +80,23 @@ export class EmotionalCore {
     });
     this.unsubs.push(unsubBlock);
 
+    // Reflexes: Market Stream
+    const unsubPrice = this.bus.subscribe(EidolonEventType.PRICE_UPDATE, (event: any) => {
+      if (this.disposed) return;
+      // Calculate instantaneous volatility or just tick?
+      // Ideally we track price history to calc volatility. 
+      // For now, we just tick() to ensure high-frequency metabolic update.
+      // We can pass a volatility proxy if we had one.
+      this.tick(this.state.volatility);
+    });
+    this.unsubs.push(unsubPrice);
+
     // Trauma: Instant Cortisol Spike
     const unsubTrauma = this.bus.subscribe(EidolonEventType.TRAUMA, (event: any) => {
       if (this.disposed) return;
       const severity = event.payload.severity || 10;
       this.stimulate(severity, 'DANGER');
+      this.scheduleSnapshotPersist(true);
     });
     this.unsubs.push(unsubTrauma);
   }
@@ -84,6 +106,7 @@ export class EmotionalCore {
    */
   async tick(marketVolatility: number = 0.1, dt?: number) {
     if (this.disposed) return this.state;
+    const prevState = { ...this.state };
     const now = Date.now();
     const deltaTime = dt ?? (now - this.state.lastUpdate) / 1000; // seconds
     if (deltaTime <= 0) return this.state;
@@ -144,9 +167,7 @@ export class EmotionalCore {
 
     this.state.lastUpdate = now;
 
-    // 🧠 BLIND SPOT FIX: Debounced Save (Max 1 write per 10s) to prevent I/O epilepsy
-    // 🧠 FIXED: Use Append Log instead of Debounced Save
-    this.appendState();
+    this.maybePersistState(prevState);
 
     return this.state;
   }
@@ -235,20 +256,21 @@ export class EmotionalCore {
       case 'PROFIT':
         this.state.dopamine = Math.min(100, this.state.dopamine + impact);
         this.state.cortisol = Math.max(0, this.state.cortisol - (impact * 0.5));
-        console.log(`🧠 STIMULUS: ${type} (+$${safeValue.toFixed(2)} on $${safeCapital}) -> +${impact.toFixed(1)} Dopamine`);
+        this.debug(`🧠 STIMULUS: ${type} (+$${safeValue.toFixed(2)} on $${safeCapital}) -> +${impact.toFixed(1)} Dopamine`);
         break;
       case 'LOSS':
         // Losses hurt 2x more (Prospect Theory)
         this.state.cortisol = Math.min(100, this.state.cortisol + (impact * 2));
         this.state.dopamine = Math.max(0, this.state.dopamine - impact);
-        console.log(`🧠 STIMULUS: ${type} (-$${safeValue.toFixed(2)} on $${safeCapital}) -> +${(impact * 2).toFixed(1)} Cortisol`);
+        this.debug(`🧠 STIMULUS: ${type} (-$${safeValue.toFixed(2)} on $${safeCapital}) -> +${(impact * 2).toFixed(1)} Cortisol`);
         break;
       case 'DANGER': {
         // FIX L5: Scale impact by severity
         const dangerImpact = Math.max(0, Math.min(30, safeValue)); // Cap outcome
         this.state.arousal = Math.min(1.0, this.state.arousal + (dangerImpact / 100)); // Max +0.3 for severity 30
         this.state.cortisol = Math.min(100, this.state.cortisol + (dangerImpact * 0.6)); // +18 for severity 30
-        console.log(`🧠 STIMULUS: DANGER (Severity ${safeValue}) -> Arousal +${(dangerImpact / 100).toFixed(2)}, Cortisol +${(dangerImpact * 0.6).toFixed(1)}`);
+        this.debug(`🧠 STIMULUS: DANGER (Severity ${safeValue}) -> Arousal +${(dangerImpact / 100).toFixed(2)}, Cortisol +${(dangerImpact * 0.6).toFixed(1)}`);
+        this.scheduleSnapshotPersist(true);
         break;
       }
     }
@@ -304,7 +326,9 @@ export class EmotionalCore {
         // (async loadState can resolve after live events have fired)
         if (this.stateModified) return;
         this.state = { ...this.state, ...snapshot.state };
-        console.log('🧠 Emotional State restored from SNAPSHOT (Ethernal Recurrence)');
+        this.lastPersistedState = { ...this.state };
+        this.lastPersistedAt = Date.now();
+        this.debug('🧠 Emotional State restored from SNAPSHOT (Ethernal Recurrence)');
         return;
       }
 
@@ -314,7 +338,9 @@ export class EmotionalCore {
         const lastEntry = logs[logs.length - 1];
         if (lastEntry && lastEntry.state) {
           this.state = { ...this.state, ...lastEntry.state };
-          console.log('🧠 Emotional State restored from LOG (Legacy)');
+          this.lastPersistedState = { ...this.state };
+          this.lastPersistedAt = Date.now();
+          this.debug('🧠 Emotional State restored from LOG (Legacy)');
         }
       }
     } catch (e) {
@@ -327,6 +353,8 @@ export class EmotionalCore {
       // ♾️ ETERNAL RECURRENCE: Overwrite Snapshot (O(1) storage)
       // We save the latest state atomically.
       await this.storage.save(this.SNAPSHOT_KEY, { state: this.state, savedAt: Date.now() });
+      this.lastPersistedState = { ...this.state };
+      this.lastPersistedAt = Date.now();
 
       // We do NOT append to log every tick anymore to prevent memory leak.
       // Logs are reserved for TRAUMA events (handled in stimulate/processOutcome if needed).
@@ -335,12 +363,83 @@ export class EmotionalCore {
     }
   }
 
+  private maybePersistState(prevState: EmotionalState) {
+    const significant = this.hasSignificantChange(prevState, this.state);
+    const stale = Date.now() - this.lastPersistedAt >= this.SNAPSHOT_MAX_STALENESS_MS;
+    if (!significant && !stale) return;
+    this.scheduleSnapshotPersist(false);
+  }
+
+  private hasSignificantChange(prev: EmotionalState, next: EmotionalState): boolean {
+    const hormoneDelta = (
+      Math.abs(prev.glucose - next.glucose) >= 2 ||
+      Math.abs(prev.dopamine - next.dopamine) >= 2 ||
+      Math.abs(prev.cortisol - next.cortisol) >= 2
+    );
+
+    const vectorDelta = (
+      Math.abs(prev.arousal - next.arousal) >= 0.05 ||
+      Math.abs(prev.valence - next.valence) >= 0.05 ||
+      Math.abs(prev.attention - next.attention) >= 0.05 ||
+      Math.abs(prev.rhythm - next.rhythm) >= 0.05 ||
+      Math.abs(prev.momentum - next.momentum) >= 0.05
+    );
+
+    const thermalDelta = Math.abs(prev.volatility - next.volatility) >= 0.1;
+    return hormoneDelta || vectorDelta || thermalDelta;
+  }
+
+  private scheduleSnapshotPersist(force: boolean) {
+    if (this.disposed && !force) return;
+
+    if (force) {
+      void this.flushSnapshotPersist(true);
+      return;
+    }
+
+    if (this.flushTimer) return;
+
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      void this.flushSnapshotPersist(false);
+    }, this.SNAPSHOT_FLUSH_MS);
+  }
+
+  private async flushSnapshotPersist(force: boolean): Promise<void> {
+    if (this.persistInFlight) {
+      await this.persistInFlight;
+      if (!force) return;
+    }
+
+    if (!force) {
+      const stale = Date.now() - this.lastPersistedAt >= this.SNAPSHOT_MAX_STALENESS_MS;
+      const changed = this.hasSignificantChange(this.lastPersistedState, this.state);
+      if (!stale && !changed) return;
+    }
+
+    this.persistInFlight = this.appendState().finally(() => {
+      this.persistInFlight = null;
+    });
+
+    await this.persistInFlight;
+  }
+
+  private debug(...args: unknown[]): void {
+    if (!this.debugEnabled) return;
+    console.log(...args);
+  }
+
   /**
    * 🛑 KILL SWITCH: Stop all internal loops and listeners
    */
   public dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    void this.flushSnapshotPersist(true);
     for (const unsub of this.unsubs) {
       try {
         unsub();
@@ -349,5 +448,43 @@ export class EmotionalCore {
       }
     }
     this.unsubs = [];
+  }
+
+  // --- NERVOUS SYSTEM (Sentinel Mode) ---
+
+  /**
+   * 🧠 SENTINEL MODE: Determine operational mode based on biological state
+   */
+  public getMode(): SentinelMode {
+    // 1. Survival Overrides
+    if (this.state.cortisol > 80 || this.state.glucose < 10) {
+      return SentinelMode.EMERGENCY;
+    }
+
+    // 2. High Energy States
+    if (this.state.arousal > 0.8) {
+      if (this.state.valence > 0.7) return SentinelMode.BERSERK; // Happy + Energetic
+      if (this.state.valence < 0.3) return SentinelMode.LIQUIDATION; // Angry + Energetic
+      if (this.state.attention > 0.9) return SentinelMode.SNIPE; // Focused + Energetic
+    }
+
+    // 3. Strategic States
+    if (this.state.attention > 0.8 && this.state.volatility > 0.5) {
+      return SentinelMode.ARBITRAGE; // Fast calculation needed
+    }
+
+    if (this.state.attention > 0.6 && this.state.arousal < 0.4) {
+      return SentinelMode.STALKING; // Calm observation
+    }
+
+    // 4. Default State
+    return SentinelMode.ZEN;
+  }
+
+  /**
+   * Get configuration for current mode
+   */
+  public getModeConfig(): ModeConfig {
+    return MODE_CONFIGS[this.getMode()];
   }
 }

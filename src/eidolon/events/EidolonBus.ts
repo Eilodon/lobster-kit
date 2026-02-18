@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
-import { MarketState } from '../EidolonTypes';
+import { ActionType, DecisionLog, MarketState } from '../EidolonTypes';
+import { EventRingBuffer } from './EventRingBuffer';
 
 /**
  * ⚡ EIDOLON NERVOUS SYSTEM
@@ -35,7 +36,7 @@ export interface PriceEvent extends EidolonEvent {
         symbol: string;
         price: number;
         change24h?: number;
-        source: 'PYTH' | 'DEX';
+        source: 'PYTH' | 'DEX' | 'BINANCE_WS';
     };
 }
 
@@ -48,12 +49,39 @@ export interface TraumaEvent extends EidolonEvent {
     };
 }
 
+export interface TradeExecutionOutcome {
+    decisionId: number;
+    profitLoss: number;
+    capitalAtRisk: number;
+    slippage: number;
+    gasUsed: number;
+    success: boolean;
+}
+
+export interface TradeExecutedEvent extends EidolonEvent {
+    type: EidolonEventType.TRADE_EXECUTED;
+    payload: {
+        action: ActionType;
+        decisionLog?: DecisionLog;
+        txHash?: string;
+        executionError?: string;
+        outcome: TradeExecutionOutcome;
+    };
+}
+
 export class EidolonBus extends EventEmitter {
     private static instance: EidolonBus;
+    private readonly ring: EventRingBuffer<EidolonEvent>;
+    private droppedEvents = 0;
 
     private constructor() {
         super();
         this.setMaxListeners(20); // Allow multiple modules to listen
+        this.ring = new EventRingBuffer<EidolonEvent>(1024, () => ({
+            type: EidolonEventType.BLOCK_MINED,
+            timestamp: 0,
+            payload: undefined
+        }));
     }
 
     public static getInstance(): EidolonBus {
@@ -64,15 +92,24 @@ export class EidolonBus extends EventEmitter {
     }
 
     public emitEvent(event: EidolonEvent): void {
-        // Log high-priority events
-        if (event.type === EidolonEventType.TRAUMA || event.type === EidolonEventType.OPPORTUNITY) {
-            console.log(`⚡ EVENT [${event.type}]:`, event.payload);
+        if (!this.ring.push(event)) {
+            this.droppedEvents++;
+            return;
         }
-        this.emit(event.type, event);
+        this.ring.drain((queuedEvent) => {
+            if (queuedEvent.type === EidolonEventType.TRAUMA || queuedEvent.type === EidolonEventType.OPPORTUNITY) {
+                console.log(`⚡ EVENT [${queuedEvent.type}]:`, queuedEvent.payload);
+            }
+            this.emit(queuedEvent.type, queuedEvent);
+        });
     }
 
     public subscribe(type: EidolonEventType, callback: (event: any) => void): () => void {
         this.on(type, callback);
         return () => this.off(type, callback);
+    }
+
+    public getDroppedEvents(): number {
+        return this.droppedEvents + this.ring.getOverflowCount();
     }
 }
