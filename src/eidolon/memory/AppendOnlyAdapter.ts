@@ -102,27 +102,47 @@ export class AppendOnlyAdapter implements IStorageProvider {
     }
 
     /**
-     * READ LOG
-     * Replays the log file line by line.
-     * Handles corrupted lines gracefully (skips them).
+     * READ LOG (Memory Safe)
+     * Replays the log file line by line using streams.
+     * @param limit Max number of recent entries to return (0 = all)
      */
-    async readLog(key: string): Promise<any[]> {
+    async readLog(key: string, limit: number = 0): Promise<any[]> {
         const filePath = path.join(this.baseDir, key);
         const entries: any[] = [];
 
         try {
-            const content = await fs.readFile(filePath, 'utf-8');
-            const lines = content.split('\n');
+            const fileHandle = await fs.open(filePath, 'r');
+            const stream = fileHandle.createReadStream({ encoding: 'utf-8' });
 
-            for (const line of lines) {
+            // Basic line reader implementation to avoid external deps
+            // For production robustness with huge files, a specialized library or 'readline' module is better
+            // But 'readline' with Node streams is standard.
+
+            const readline = await import('readline');
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity
+            });
+
+            // If limit > 0, we need a sliding window.
+            // But if we just want "all" but memory safe, we can populate.
+            // If the file is HUGE, "all" will still OOM key[], but avoiding readFile() helps.
+            // For "tail" functionality (last N), a circular buffer is needed.
+
+            for await (const line of rl) {
                 if (!line.trim()) continue;
                 try {
                     const parsed = JSON.parse(line);
                     entries.push(parsed.data);
+                    if (limit > 0 && entries.length > limit) {
+                        entries.shift(); // Remove oldest
+                    }
                 } catch (e) {
-                    console.warn(`⚠️ Corrupted log entry in ${key}, skipping.`);
+                    // skip corrupted
                 }
             }
+
+            await fileHandle.close();
         } catch (e: any) {
             if (e.code !== 'ENOENT') {
                 console.error(`❌ Failed to read log ${key}`, e);
@@ -130,5 +150,17 @@ export class AppendOnlyAdapter implements IStorageProvider {
         }
 
         return entries;
+    }
+
+    /**
+     * READ LOG TAIL (Optimized)
+     * Alias for readLog with limit
+     */
+    async readLogTail(key: string, limit: number = 1000): Promise<any[]> {
+        return this.readLog(key, limit);
+    }
+
+    public getBaseDir(): string {
+        return this.baseDir;
     }
 }

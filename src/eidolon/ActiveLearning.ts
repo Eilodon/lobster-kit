@@ -2,6 +2,8 @@ import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS, QTable, Q_CONFIG, Ma
 import { IStorageProvider } from './memory/IStorageProvider';
 import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
 import { CausalBrain, SentinelVariable } from './ai/CausalBrain';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 /**
  * 🧠 ACTIVE LEARNING MODULE
@@ -107,6 +109,7 @@ export class ActiveLearning {
    */
   public async init(): Promise<void> {
     // FIXED: Load saved weights on startup (awaited)
+    await this.rotateLogFile(); // Check log size before loading
     await this.loadFromDisk().catch(() => {
       this.debug('🆕 No saved weights found, starting with fresh brain');
     });
@@ -130,6 +133,7 @@ export class ActiveLearning {
 
     // 🧠 FIXED: Append to log immediately
     if (this.autoSaveEnabled) {
+      await this.rotateLogFile(); // Ensure file size is managed before append
       await this.storage.append(this.HISTORY_KEY, outcome);
     }
 
@@ -582,11 +586,12 @@ export class ActiveLearning {
         }
       }
 
-      // Load history from AppendLog
-      const logs = await this.storage.readLog(this.HISTORY_KEY);
+      // Load history from AppendLog (Limit to last 1000 to prevent OOM)
+      const logs = await this.storage.readLog(this.HISTORY_KEY, 1000);
       if (logs.length > 0) {
-        // Keep bounded working-set in memory even if log file is large.
-        this.tradeHistory = logs.slice(-1000); // Each log entry is a TradeOutcome
+        // Keep bounded working-set in memory
+        this.tradeHistory = logs;
+        this.debug(`📊 Loaded ${this.tradeHistory.length} historical trades from AppendLog`);
         this.debug(`📊 Loaded ${this.tradeHistory.length} historical trades from AppendLog`);
       } else {
         this.debug('📊 No trade history found (starting fresh)');
@@ -638,9 +643,45 @@ export class ActiveLearning {
     // Reduce in-memory history (Keep last 1000)
     // We treat the active 'tradeHistory' array as the working memory (RAM).
     // The AppendLog on disk contains everything, but we don't want to load it all next time.
-    // When we loadFromDisk, we only read the log, which might be huge. 
-    // Ideally we should rotate the log, but for now this archival saves a snapshot.
     this.tradeHistory = this.tradeHistory.slice(-1000);
+  }
+
+  /**
+   * 🛡️ MEMORY DEFENSE: Log Rotation
+   * Prevents "Memory Bomb" by rotating execution logs when they exceed 5MB.
+   */
+  private async rotateLogFile(): Promise<void> {
+    try {
+      let baseDir = path.resolve(process.cwd(), 'data', 'memory');
+      if (this.storage instanceof AppendOnlyAdapter) {
+        try {
+          baseDir = this.storage.getBaseDir();
+        } catch (e) { /* ignore if method missing */ }
+      }
+
+      const logPath = path.resolve(baseDir, this.HISTORY_KEY);
+
+      try {
+        const stats = await fs.stat(logPath);
+        if (stats.size > 5 * 1024 * 1024) { // 5MB Limit
+          const archiveName = `archive_history_${Date.now()}.log`;
+          const archivePath = path.resolve(baseDir, archiveName);
+          console.log(`DEBUG: Rotating ${logPath} to ${archivePath}`);
+
+          await fs.rename(logPath, archivePath);
+          console.log(`📦 MEMORY DEFENSE: Rotated ${this.HISTORY_KEY} -> ${archiveName} (${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
+
+          // Initialize new empty file
+          await fs.writeFile(logPath, '', 'utf-8');
+        }
+      } catch (e: any) {
+        if (e.code !== 'ENOENT') {
+          console.warn('⚠️ Log rotation check failed:', e.message);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Critical Memory Defense Error:', error);
+    }
   }
 
   private scheduleAutoSave() {

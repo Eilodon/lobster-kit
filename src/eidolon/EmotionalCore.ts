@@ -26,7 +26,7 @@ export class EmotionalCore {
   private state: EmotionalState;
   private storage: AppendOnlyAdapter;
   private bus: EidolonBus;
-  private stateModified = false; // Guards against async loadState overwrite race
+  // private stateModified = false; // REMOVED: Sequenced Init fixes this
 
   // AI Engines
   private thermoEngine: ThermodynamicEngine;
@@ -43,6 +43,7 @@ export class EmotionalCore {
   private readonly SNAPSHOT_FLUSH_MS = 15000;
   private readonly SNAPSHOT_MAX_STALENESS_MS = 60000;
   private readonly debugEnabled = process.env.EIDOLON_DEBUG === '1';
+  private isInitialized = false;
 
   constructor(storage?: AppendOnlyAdapter) {
     this.storage = storage || new AppendOnlyAdapter();
@@ -66,8 +67,12 @@ export class EmotionalCore {
     this.lastPersistedState = { ...this.state };
     this.lastPersistedAt = Date.now();
 
-    this.loadState();
-    this.setupEventListeners();
+    // FIX: Sequential Initialization to prevent Race Condition
+    // Only start listening to world AFTER memory is restored.
+    this.loadState().finally(() => {
+      this.setupEventListeners();
+      this.debug('🧠 EmotionalCore: Cortex Online (Listeners Active)');
+    });
   }
 
   private setupEventListeners() {
@@ -110,7 +115,7 @@ export class EmotionalCore {
     const now = Date.now();
     const deltaTime = dt ?? (now - this.state.lastUpdate) / 1000; // seconds
     if (deltaTime <= 0) return this.state;
-    this.stateModified = true;
+    // this.stateModified = true;
 
     // Fail closed on invalid volatility input.
     if (!Number.isFinite(marketVolatility) || marketVolatility < 0) {
@@ -227,7 +232,7 @@ export class EmotionalCore {
    */
   stimulate(value: number, type: 'PROFIT' | 'LOSS' | 'DANGER', capitalAtRisk: number = 0) {
     if (this.disposed) return;
-    this.stateModified = true;
+    // this.stateModified = true;
     const safeValue = Number.isFinite(value) ? value : (type === 'DANGER' ? 30 : 0);
     const safeCapital = Number.isFinite(capitalAtRisk) && capitalAtRisk > 0 ? capitalAtRisk : 0;
 
@@ -322,13 +327,22 @@ export class EmotionalCore {
       // 1. Try loading from SNAPSHOT (Fast & Recent)
       const snapshot = await this.storage.load<{ state: EmotionalState }>(this.SNAPSHOT_KEY);
       if (snapshot && snapshot.state) {
-        // Guard: Don't overwrite if tick/stimulate already modified state
-        // (async loadState can resolve after live events have fired)
-        if (this.stateModified) return;
-        this.state = { ...this.state, ...snapshot.state };
+        // FIX: Merge with current state (Race Condition Fix)
+        // Keep in-memory updates if they happened while loading
+        this.state = {
+          ...snapshot.state,
+          // Safety: If we burned glucose or spiked cortisol while loading, keep the "worse" (safer) value
+          // or simple merge:
+          glucose: this.state.glucose !== 100 ? Math.min(this.state.glucose, snapshot.state.glucose) : snapshot.state.glucose,
+          cortisol: this.state.cortisol !== 0 ? Math.max(this.state.cortisol, snapshot.state.cortisol) : snapshot.state.cortisol,
+          // Keep recent volatility update
+          volatility: this.state.volatility !== 0.1 ? this.state.volatility : snapshot.state.volatility,
+          lastUpdate: Date.now() // Reset time to now
+        };
         this.lastPersistedState = { ...this.state };
         this.lastPersistedAt = Date.now();
-        this.debug('🧠 Emotional State restored from SNAPSHOT (Ethernal Recurrence)');
+        this.isInitialized = true;
+        this.debug('🧠 Emotional State restored & merged from SNAPSHOT (Ethernal Recurrence)');
         return;
       }
 
@@ -337,12 +351,22 @@ export class EmotionalCore {
       if (logs.length > 0) {
         const lastEntry = logs[logs.length - 1];
         if (lastEntry && lastEntry.state) {
-          this.state = { ...this.state, ...lastEntry.state };
+          // Merge logic for legacy Load too
+          this.state = {
+            ...this.state,
+            ...lastEntry.state,
+            // Apply same merge priority
+            glucose: this.state.glucose !== 100 ? Math.min(this.state.glucose, lastEntry.state.glucose) : lastEntry.state.glucose,
+            cortisol: this.state.cortisol !== 0 ? Math.max(this.state.cortisol, lastEntry.state.cortisol) : lastEntry.state.cortisol,
+            lastUpdate: Date.now()
+          };
           this.lastPersistedState = { ...this.state };
           this.lastPersistedAt = Date.now();
-          this.debug('🧠 Emotional State restored from LOG (Legacy)');
+          this.isInitialized = true;
+          this.debug('🧠 Emotional State restored & merged from LOG (Legacy)');
         }
       }
+      this.isInitialized = true; // Mark initialized even if no load (default state)
     } catch (e) {
       console.warn("Failed to load emotional state", e);
     }
