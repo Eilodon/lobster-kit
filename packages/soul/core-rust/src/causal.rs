@@ -47,15 +47,8 @@ impl CausalGraph {
         graph.load_priors();
         graph
     }
-}
 
-impl Default for CausalGraph {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
-impl CausalGraph {
     pub fn learn(&mut self, cause: u8, effect: u8, outcome_positive: bool) {
         let edge = self
             .edges
@@ -187,5 +180,11 @@ impl CausalGraph {
         self.set_prior(12, 2, 80, 20); // MacroFactor -> Volatility
         self.set_prior(7, 0, 75, 25); // LiquidityImbalance -> PriceDelta
         self.set_prior(8, 6, 65, 35); // SmartMoneyActivity -> WhaleNetFlow
+    }
+}
+
+impl Default for CausalGraph {
+    fn default() -> Self {
+        Self::new()
     }
 }

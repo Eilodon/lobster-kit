@@ -42,9 +42,10 @@ export class ClawKit {
     });
 
     // Initialize DeFi modules
-    this.defi = new DeFiModule(walletClient, this.publicClient, config);
-    this.nft = new NFTModule(walletClient, this.publicClient, config);
+    // Initialize DeFi modules
     this.security = new SecurityModule(walletClient, this.publicClient, config);
+    this.defi = new DeFiModule(walletClient, this.publicClient, config, this.security);
+    this.nft = new NFTModule(walletClient, this.publicClient, config);
     this.wallet = new WalletModule(walletClient, this.publicClient, config);
     this.gas = new GasModule(walletClient, this.publicClient, config);
     this.analytics = new AnalyticsModule(walletClient, this.publicClient, config);
@@ -109,5 +110,8 @@ export * from './analytics';
 export * from './types';
 export * from './math/TokenAmount';
 export * from './math/Q64x96';
+export * from './services/PriceService';
+export * from './utils/ApiGateway';
+export * from './adapters/OpBnbDefiAdapter';
 
 export default ClawKit;

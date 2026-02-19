@@ -4,6 +4,7 @@
     "description": "Integration and System Tests for ClawKit Monorepo",
     "private": true,
     "scripts": {
+        "pretest": "node ../../scripts/sync-integration-mirrors.mjs",
         "test": "vitest run",
         "lint": "eslint src/**/*.ts \"test/**/*.test.ts\""
     },

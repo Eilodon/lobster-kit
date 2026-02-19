@@ -29,7 +29,11 @@ describe('DeFiModule', () => {
             chainConfig: OPBNB_CONFIG
         };
 
-        defi = new DeFiModule(mockWallet, mockPublic, config);
+        const mockSecurity = {
+            scanContract: vi.fn().mockResolvedValue({ riskScore: 0 })
+        } as any;
+
+        defi = new DeFiModule(mockWallet, mockPublic, config, mockSecurity);
 
         // Mock getRealQuote to avoid external calls
         vi.spyOn(defi, 'getRealQuote').mockResolvedValue({
@@ -79,7 +83,10 @@ describe('DeFiModule', () => {
                 chainConfig: OPBNB_CONFIG,
                 approvalMode: 'EXACT'
             };
-            const exactDefi = new DeFiModule(mockWallet, mockPublic, config);
+            const mockSecurity = {
+                scanContract: vi.fn().mockResolvedValue({ riskScore: 0 })
+            } as any;
+            const exactDefi = new DeFiModule(mockWallet, mockPublic, config, mockSecurity);
             vi.spyOn(exactDefi, 'getRealQuote').mockResolvedValue({
                 amountOutMin: 900000n,
                 fee: 2500

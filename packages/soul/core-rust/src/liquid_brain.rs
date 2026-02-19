@@ -1,45 +1,4 @@
-
-use burn::prelude::*;
-use burn::tensor::backend::Backend;
-use burn::module::Module;
-use burn::nn::{Linear, LinearConfig};
 use wasm_bindgen::prelude::*;
-use serde::{Serialize, Deserialize};
-
-// Define the Liquid State Cell (LTC-like)
-#[derive(Module, Debug)]
-pub struct LiquidStateCell<B: Backend> {
-    linear_ih: Linear<B>,
-    linear_hh: Linear<B>,
-    time_constant: f32, // Simplified fixed time constant for v1, or could be learned parameter
-}
-
-impl<B: Backend> LiquidStateCell<B> {
-    pub fn new(input_size: usize, hidden_size: usize, device: &B::Device) -> Self {
-        let linear_ih = LinearConfig::new(input_size, hidden_size).init(device);
-        let linear_hh = LinearConfig::new(hidden_size, hidden_size).init(device);
-        
-        Self {
-            linear_ih,
-            linear_hh,
-            time_constant: 0.1, // Default tau
-        }
-    }
-
-    pub fn forward(&self, input: Tensor<B, 2>, state: Tensor<B, 2>) -> Tensor<B, 2> {
-        // equation: dx/dt = -(x - I)/tau
-        // discretized: x_t = x_{t-1} + delta_t * (-(x_{t-1} - tanh(W*u + U*x_{t-1})) / tau)
-        
-        let gate = self.linear_ih.forward(input) + self.linear_hh.forward(state.clone());
-        let update = gate.tanh();
-        
-        // Simple Euler integration step
-        let delta_t = 1.0; 
-        let dx = (update - state.clone()) / self.time_constant;
-        
-        state + dx * delta_t
-    }
-}
 
 // WASM-compatible wrapper
 #[wasm_bindgen]

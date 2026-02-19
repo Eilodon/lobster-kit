@@ -2,10 +2,14 @@
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
         "outDir": "./dist",
-        "rootDir": "./src",
+        "rootDir": ".",
         "composite": true,
         "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+        "typeRoots": [
+            "../../node_modules/@types"
+        ],
         "types": [
+            "node",
             "vitest/globals"
         ]
     },

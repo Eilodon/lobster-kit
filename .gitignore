@@ -44,6 +44,11 @@ data/
 
 # Rust
 core-rust/target/
+**/core-rust/target/
+**/core-rust/pkg/
+
+# TypeScript build cache
+**/*.tsbuildinfo
 
 # Test Outputs
 test_output*.txt

@@ -1,10 +1,14 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { KpiTracker } from '../src/eidolon/metrics/KpiTracker';
-import { CausalBrain, CausalEdge } from '../src/eidolon/ai/CausalBrain';
-import { DeepSeekOracle } from '../src/eidolon/ai/DeepSeekOracle';
-import { ThermodynamicEngine, DEFAULT_THERMO_CONFIG } from '../src/eidolon/ai/ThermodynamicEngine';
-import { Vector } from '../src/eidolon/ai/LinearAlgebra';
+import {
+    KpiTracker,
+    CausalBrain,
+    CausalEdge,
+    DeepSeekOracle,
+    ThermodynamicEngine,
+    DEFAULT_THERMO_CONFIG,
+    Vector
+} from '@clawkit/soul';
 
 // Mock Zod to ensure it's working (though real zod imports work fine in tests usually)
 // We rely on integration test for Logic.

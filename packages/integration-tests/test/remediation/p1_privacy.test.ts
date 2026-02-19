@@ -15,25 +15,32 @@ const mockConfig: any = {
     }
 };
 
-// Mock MarketStream
 const mockStart = vi.fn();
-vi.mock('../src/eidolon/sensors/MarketStream', () => {
+vi.mock('@clawkit/soul', async (importOriginal) => {
+    const actual = await importOriginal() as Record<string, unknown>;
     return {
+        ...actual,
         MarketStream: vi.fn().mockImplementation(() => ({
             on: vi.fn(),
             start: mockStart
-        }))
+        })),
+        EidolonSwarm: vi.fn()
     };
 });
 
 // Mock modules to avoid complex init
 vi.mock('../src/defi', () => ({ DeFiModule: vi.fn().mockReturnValue({ setPriceOracle: vi.fn() }) }));
 vi.mock('../src/nft', () => ({ NFTModule: vi.fn() }));
-vi.mock('../src/security', () => ({ SecurityModule: vi.fn() }));
-vi.mock('../src/wallet', () => ({ WalletModule: vi.fn() }));
-vi.mock('../src/gas', () => ({ GasModule: vi.fn() }));
+vi.mock('@clawkit/defi-bnb', async (importOriginal) => {
+    const actual = await importOriginal() as Record<string, unknown>;
+    return {
+        ...actual,
+        SecurityModule: vi.fn(),
+        WalletModule: vi.fn(),
+        GasModule: vi.fn()
+    };
+});
 vi.mock('../src/analytics', () => ({ AnalyticsModule: vi.fn() }));
-vi.mock('../src/eidolon/swarm/EidolonSwarm', () => ({ EidolonSwarm: vi.fn() }));
 
 describe('ClawKit Usage P1 Fixes', () => {
     beforeEach(() => {

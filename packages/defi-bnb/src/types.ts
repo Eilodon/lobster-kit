@@ -7,6 +7,7 @@ export interface SwapParams {
   deadline?: number; // Transaction deadline in minutes, default 20
   emergencyMode?: boolean; // Bypass thermodynamic checks (Gas/Slippage)
   amountUSD?: number; // Estimated USD value of trade for safety checks
+  force?: boolean; // Bypass security checks (Risk Score)
 }
 
 export interface StakeParams {

@@ -6,9 +6,15 @@
 
 // Interfaces
 export { IClawKit } from './interfaces/IClawKit';
+export type { ISensorHub } from './interfaces/ISensorHub';
+export type { IActuatorHub } from './interfaces/IActuatorHub';
+export type { IMemoryHub } from './interfaces/IMemoryHub';
 
 // Types
 export * from './types/EidolonTypes';
+export * from './types/WorldState';
+export * from './types/CapabilityAction';
+
 
 // Events
 export { EidolonBus, EidolonEventType } from './events/EidolonBus';
@@ -31,15 +37,15 @@ export { KpiTracker, type KpiSnapshot } from './metrics/KpiTracker';
 export { ChaosHarness, type ChaosHarnessDeps, type ChaosHarnessConfig, type ChaosAlarm, type ChaosReport, type ChaosScenario } from './testing/ChaosHarness';
 
 // Consciousness Modules
-export { ActiveLearning } from './ActiveLearning';
-export type { TradeOutcome } from './ActiveLearning';
-export { DivineTransparency } from './DivineTransparency';
+// Moved to @clawkit/soul
+
 
 // Utilities
 export { AsyncLock } from './utils/AsyncLock';
 export { Logger } from './utils/Logger';
 export { withRetry, withTimeout, type RetryConfig } from './utils/Resilience';
-export { BigMath } from './utils/BigMath';
+export { BigMath, WAD, RAY, HALF_WAD, HALF_RAY } from './utils/BigMath';
+export { BioParametersConfig, RiskConfigPreset, type BioParameters, type RiskConfig } from './config';
 
 // Token helpers (minimal stub — full implementation in @clawkit/defi-bnb)
 export function getTokenDecimals(tokenOrSymbol: string): number {

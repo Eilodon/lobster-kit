@@ -30,22 +30,21 @@ vi.mock('viem', async (importOriginal) => {
         createPublicClient: vi.fn().mockReturnValue(mockPublicClient)
     };
 });
-// Mock MarketStream
-vi.mock('../src/eidolon/sensors/MarketStream', () => ({
-    MarketStream: class {
-        on() { }
-        start() { }
-        stop() { }
-    }
-}));
-
-// Mock EidolonSwarm
-vi.mock('../src/eidolon/swarm/EidolonSwarm', () => ({
-    EidolonSwarm: class {
-        join() { }
-        leave() { }
-    }
-}));
+vi.mock('@clawkit/soul', async (importOriginal) => {
+    const actual = await importOriginal() as Record<string, unknown>;
+    return {
+        ...actual,
+        MarketStream: class {
+            on() { }
+            start() { }
+            stop() { }
+        },
+        EidolonSwarm: class {
+            join() { }
+            leave() { }
+        }
+    };
+});
 
 
 

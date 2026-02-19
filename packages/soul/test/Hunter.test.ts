@@ -41,7 +41,8 @@ describe('DeFiModule: Hunter Upgrade', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        defi = new DeFiModule(mockWalletClient, mockPublicClient, mockConfig);
+        const mockSecurity = { scanContract: vi.fn().mockResolvedValue({ riskScore: 0 }) } as any;
+        defi = new DeFiModule(mockWalletClient, mockPublicClient, mockConfig, mockSecurity);
         // Mock getRealQuote to return a valid amount
         defi.getRealQuote = vi.fn().mockResolvedValue({
             amountOutMin: parseEther('1.0'),

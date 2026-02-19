@@ -10,16 +10,29 @@ import {
     ListResourcesRequestSchema,
     ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 
 // Import ClawKit Core Modules
-import { ClawKit, ClawKitConfig, getTokenDecimals, resolveTokenAddress, OPBNB_CONFIG } from "@clawkit/toolkit";
+import { ClawKit, ClawKitConfig, resolveTokenAddress, OPBNB_CONFIG } from "@clawkit/toolkit";
 
-import { createWalletClient, formatUnits, http, parseUnits } from 'viem';
+import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { opBNB } from 'viem/chains';
 
-import { EidolonGuard, GuardConfig, ClawOracle } from "@clawkit/soul";
+import { EidolonGuard, ClawOracle } from "@clawkit/soul";
+import { McpToolRegistry } from './tools/McpToolRegistry';
+import {
+    OracleSenseTool,
+    DefiQuoteTool,
+    SecurityScanTool,
+    PortfolioTool,
+    ExecuteSwapTool,
+    PanicTool,
+    RecallTool,
+    IntuitionTool,
+    DreamTool,
+} from './tools/tools';
+import { ClawKit as DeFiClawKit, OpBnbDefiAdapter } from '@clawkit/defi-bnb';
+
 
 /**
  * 🔌 EIDOLON-V MCP SERVER
@@ -28,7 +41,9 @@ import { EidolonGuard, GuardConfig, ClawOracle } from "@clawkit/soul";
 class EidolonServer {
     private server: Server;
     private kit: ClawKit;
-    private guard: EidolonGuard; // 🛡️ The Exocortex Defender
+    private defiKit: DeFiClawKit;
+    private guard: EidolonGuard;       // 🛡️ The Exocortex Defender
+    private toolRegistry!: McpToolRegistry; // 🔌 Dynamic Tool Dispatcher
 
     constructor() {
         this.server = new Server(
@@ -71,15 +86,25 @@ class EidolonServer {
 
         const config: ClawKitConfig = {
             rpcUrl: "https://opbnb-mainnet-rpc.bnbchain.org",
-            chainConfig: OPBNB_CONFIG
+            chainConfig: OPBNB_CONFIG,
+            chainId: opBNB.id
         };
 
         try {
             this.kit = new ClawKit(walletClient, config);
+            this.defiKit = new DeFiClawKit(walletClient, config as any);
+            this.kit.registerAdapter(new OpBnbDefiAdapter(this.defiKit), { override: true });
 
-            // 👻 GHOST PROTOCOL: Inject Internal Oracle for Privacy
+            const registeredDefiActions = this.kit.adapters.listActions('defi');
+            if (registeredDefiActions.length === 0) {
+                throw new Error('DeFi adapter registration failed: no actions exposed under domain "defi".');
+            }
+
+            // 👻 GHOST PROTOCOL: ClawOracle constructed for internal use
             const oracle = new ClawOracle(this.kit);
-            this.kit.gas.setOracle(oracle);
+            // NOTE: gas.setOracle removed — gas module pruned in Phase 1.
+            void oracle; // reserved for future sensor integration
+
 
             // 🛡️ INITIALIZE GUARD
             this.guard = new EidolonGuard(this.kit);
@@ -106,6 +131,39 @@ class EidolonServer {
         this.setupResources();
         this.setupTools();
     }
+
+
+    /**
+     * 🔌 Build MCP tool registry and wire all tools.
+     * Replaces the old switch-case dispatcher.
+     */
+    private buildToolRegistry(): McpToolRegistry {
+        if (this.kit.adapters.listActions('defi').length === 0) {
+            throw new Error('Missing domain adapter: expected a registered "defi" adapter before MCP tool setup.');
+        }
+
+        // Shared DeFi adapter caller — routes through DomainAdapterRegistry
+        const callDefi = <T = unknown>(action: string, params: Record<string, unknown> = {}): Promise<T> =>
+            this.kit.executeAdapterAction<T>({
+                domain: 'defi',
+                action,
+                params,
+                context: { actor: 'mcp', requestedAt: Date.now() },
+            }).then((r) => r.data);
+
+        return new McpToolRegistry().registerAll([
+            new OracleSenseTool(callDefi),
+            new DefiQuoteTool(callDefi),
+            new SecurityScanTool(callDefi),
+            new PortfolioTool(callDefi),
+            new ExecuteSwapTool(callDefi, this.guard),
+            new PanicTool(callDefi, this.guard),
+            new RecallTool(this.guard),
+            new IntuitionTool(this.guard),
+            new DreamTool(this.guard),
+        ]);
+    }
+
 
     private setupResources() {
         this.server.setRequestHandler(ListResourcesRequestSchema, async () => ({
@@ -158,231 +216,25 @@ class EidolonServer {
     }
 
     private setupTools() {
+        // 🔄 Build registry once — all 9 tools registered dynamically
+        this.toolRegistry = this.buildToolRegistry();
+
+        // List available tools (was a 90-line hardcoded array)
         this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-            tools: [
-                {
-                    name: "eidolon_oracle_sense",
-                    description: "Consult the Omniscient Oracle for market depth, price, and gas.",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            symbol: { type: "string", description: "Symbol to check (e.g. WBNB)" },
-                        },
-                    },
-                },
-                {
-                    name: "eidolon_defi_quote",
-                    description: "Get a Hyper-Routed swap quote (Best price across all fee tiers).",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            tokenIn: { type: "string", description: "Token symbol to sell" },
-                            tokenOut: { type: "string", description: "Token symbol to buy" },
-                            amount: { type: "string", description: "Amount in logic units (e.g. 1.5)" },
-                        },
-                        required: ["tokenIn", "tokenOut", "amount"],
-                    },
-                },
-                {
-                    name: "eidolon_security_scan",
-                    description: "Scan a token for risks (Honeypot, Owner, Liquidity).",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            address: { type: "string", description: "Contract address to scan" },
-                        },
-                        required: ["address"],
-                    },
-                },
-                {
-                    name: "eidolon_get_portfolio",
-                    description: "Get current portfolio health and positions.",
-                    inputSchema: {
-                        type: "object",
-                        properties: {},
-                    },
-                },
-                {
-                    name: "eidolon_execute_swap",
-                    description: "Execute a swap securely via EidolonGuard.",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            tokenIn: { type: "string" },
-                            tokenOut: { type: "string" },
-                            amount: { type: "string" },
-                            slippage: { type: "number", description: "Slippage % (default 0.5)" }
-                        },
-                        required: ["tokenIn", "tokenOut", "amount"]
-                    }
-                },
-                {
-                    name: "eidolon_panic_button",
-                    description: "TRIGGER EMERGENCY EXIT. Sells everything to safe assets.",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            confirmation: { type: "string", description: "Must be 'CONFIRM_PANIC'" }
-                        },
-                        required: ["confirmation"]
-                    }
-                }
-            ],
+            tools: this.toolRegistry.listDefinitions(),
         }));
 
-        this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-            try {
-                switch (request.params.name) {
-                    case "eidolon_oracle_sense": {
-                        // FIX P4-F2: Use dynamic symbol param instead of hardcoded WBNB-USDT
-                        const symbol = (request.params.arguments as any)?.symbol || 'WBNB';
-                        const senseDecimals = getTokenDecimals(symbol);
-                        const oneUnit = parseUnits('1', senseDecimals);
-                        const quoteResult = await this.kit.defi.getRealQuote(symbol, 'USDT', oneUnit, 1);
-                        const usdtDecimals = getTokenDecimals('USDT');
-                        return {
-                            content: [
-                                {
-                                    type: "text",
-                                    text: JSON.stringify({
-                                        symbol,
-                                        priceUSD: formatUnits(quoteResult.amountOutMin, usdtDecimals),
-                                        marketCondition: "VOLATILE",
-                                        liquidityDepth: "DEEP"
-                                    }, null, 2),
-                                },
-                            ],
-                        };
-                    }
+        // Dispatch tool calls (was a 200-line switch-case)
+        // SDK's ServerResult union requires 'task' in one branch — cast needed.
+        // Our McpToolResult satisfies the CallToolResult branch at runtime.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const callHandler = async (request: any, _extra: any): Promise<any> => {
+            const args = (request.params?.arguments ?? {}) as Record<string, unknown>;
+            return this.toolRegistry.dispatch(request.params.name, args);
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        this.server.setRequestHandler(CallToolRequestSchema, callHandler as any);
 
-                    case "eidolon_defi_quote": {
-                        const args = request.params.arguments as { tokenIn: string; tokenOut: string; amount: string };
-                        const { tokenIn, tokenOut, amount } = args;
-                        const decimals = getTokenDecimals(tokenIn);
-                        const amountBn = parseUnits(amount, decimals);
-                        const quote = await this.kit.defi.getRealQuote(tokenIn, tokenOut, amountBn, 0.5);
-
-                        const outDecimals = getTokenDecimals(tokenOut);
-                        const outAmount = formatUnits(quote.amountOutMin, outDecimals);
-
-                        return {
-                            content: [{
-                                type: "text",
-                                text: `⚡ HYPER-ROUTE FOUND:\nInput: ${amount} ${tokenIn}\nOutput: ${outAmount} ${tokenOut}\nExecution: PARALLEL`,
-                            }],
-                        };
-                    }
-
-                    case "eidolon_security_scan": {
-                        const args = request.params.arguments as { address: string };
-                        const { address } = args;
-                        const report = await this.kit.security.scanContract(address);
-                        return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
-                    }
-
-                    case "eidolon_get_portfolio": {
-                        const health = await this.kit.analytics.portfolioHealth();
-                        return { content: [{ type: "text", text: JSON.stringify(health, null, 2) }] };
-                    }
-
-                    case "eidolon_execute_swap": {
-                        const args = request.params.arguments as { tokenIn: string; tokenOut: string; amount: string; slippage?: number };
-                        Logger.warn(`🛡️ EIDOLON GUARD: Intercepting Swap Request: ${args.amount} ${args.tokenIn} -> ${args.tokenOut}`);
-
-                        // FIX: Use centralized token resolution
-                        // We use the imported helper which relies on config
-                        const safeResolve = (symbol: string) => {
-                            const addr = resolveTokenAddress(symbol);
-                            if (addr === symbol && !addr.startsWith('0x')) {
-                                // Failed to resolve and not an address
-                                throw new Error(`Unknown token symbol: ${symbol}`);
-                            }
-                            return addr;
-                        };
-
-                        const decimals = getTokenDecimals(args.tokenIn);
-                        const amountBn = parseUnits(args.amount, decimals);
-                        // Get quote in USDT to determine USD value (using 1% slippage for valuation)
-                        const quote = await this.kit.defi.getRealQuote(args.tokenIn, 'USDT', amountBn, 1);
-                        const usdtDecimals = getTokenDecimals('USDT');
-                        // Fix for P0: Calculate real USD value for thermodynamics check
-                        const amountUSD = parseFloat(formatUnits(quote.amountOutMin, usdtDecimals));
-
-                        const context = {
-                            tokenAddress: safeResolve(args.tokenOut),
-                            amountUSD
-                        };
-
-                        // FIX P4-F3: Determine action type based on swap direction
-                        // Selling a stablecoin = buying crypto = BUY
-                        // Selling crypto for stablecoin = SELL
-                        const STABLECOINS = new Set(['USDT', 'USDC', 'BUSD']);
-                        const actionType = STABLECOINS.has(args.tokenIn.toUpperCase()) ? 'BUY' : 'SELL';
-                        const validation = await this.guard.validateAction(actionType as any, context);
-
-                        if (!validation.approved) {
-                            return {
-                                content: [{
-                                    type: "text",
-                                    text: `🛑 BLOCKED BY EIDOLON GUARD\nReason: ${validation.reason}\nRisk Score: ${validation.riskScore}\nConfidence: ${validation.confidence}%`
-                                }],
-                                isError: true
-                            };
-                        }
-
-                        // 2. EXECUTE IF APPROVED
-                        Logger.info("✅ GUARD APPROVED. Executing...");
-                        const tx = await this.kit.defi.swap({
-                            from: args.tokenIn,
-                            to: args.tokenOut,
-                            amount: args.amount,
-                            slippage: args.slippage || 0.5
-                        });
-
-                        return {
-                            content: [{
-                                type: "text",
-                                text: `✅ SWAP EXECUTED\nTX Hash: ${tx.hash}\nGuard Risk Score: ${validation.riskScore}`
-                            }]
-                        };
-                    }
-
-                    case "eidolon_panic_button": {
-                        const args = request.params.arguments as { confirmation: string };
-                        if (args.confirmation !== 'CONFIRM_PANIC') {
-                            throw new Error("Invalid confirmation code");
-                        }
-
-                        Logger.warn("🚨 PANIC BUTTON TRIGGERED VIA MCP");
-                        // Trigger emotional panic
-                        (this.guard as any).soul?.inducePanic("User Manual Trigger");
-
-                        // Execute emergency exit logic
-                        const results = await this.kit.defi.dumpAllPositions();
-
-                        return {
-                            content: [{
-                                type: "text",
-                                text: `🚨 PANIC PROTOCOL EXECUTED.\n${results.join('\n')}`
-                            }]
-                        };
-                    }
-
-                    default:
-                        throw new Error("Unknown tool");
-                }
-            } catch (error: any) {
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text: `Error: ${error.message}`,
-                        },
-                    ],
-                    isError: true,
-                };
-            }
-        });
     }
 
     async run() {

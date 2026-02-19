@@ -24,15 +24,8 @@ impl TraumaRegistry {
             records: HashMap::new(),
         }
     }
-}
 
-impl Default for TraumaRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
-impl TraumaRegistry {
     pub fn record_trauma(
         &mut self,
         mode: u8,
@@ -137,4 +130,10 @@ fn parse_hex_key(hex: &str) -> Option<[u8; 32]> {
         out[i] = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok()?;
     }
     Some(out)
+}
+
+impl Default for TraumaRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }

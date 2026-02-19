@@ -1,6 +1,6 @@
 
 import axios from 'axios';
-import { PythConfig } from '@clawkit/core';
+import { PythConfig } from '../config/PythConfig';
 import { withRetry } from '@clawkit/core';
 
 interface PythPricePayload {
@@ -74,13 +74,13 @@ export class PythAdapter {
     private subscribe() {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
         const configuredIds = this.config?.priceFeedIds
-            ? Object.values(this.config.priceFeedIds)
+            ? Object.values(this.config.priceFeedIds).filter((id): id is string => id !== undefined)
             : [];
         const ids = [
             ...configuredIds,
             this.getDefaultFeedId('BNB'),
             this.getDefaultFeedId('USDT')
-        ].map((id: unknown) => this.normalizeFeedId(String(id)));
+        ].map(id => this.normalizeFeedId(id));
 
         const uniqueIds = [...new Set(ids)];
         // Hermes subscribe message

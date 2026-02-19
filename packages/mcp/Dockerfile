@@ -53,6 +53,7 @@ RUN pnpm install --frozen-lockfile --prod && \
 # Copy built artifacts
 COPY --from=builder /app/packages/core/dist packages/core/dist
 COPY --from=builder /app/packages/soul/dist packages/soul/dist
+COPY --from=builder /app/packages/toolkit/dist packages/toolkit/dist
 COPY --from=builder /app/packages/mcp/dist packages/mcp/dist
 COPY --from=builder /app/packages/defi-bnb/dist packages/defi-bnb/dist
 

@@ -39,7 +39,8 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
 
     describe('⚡ HYPER-ROUTING (Parallel Execution)', () => {
         it('should query ALL fee tiers in parallel and pick the best one', async () => {
-            const defi = new DeFiModule(mockWalletClient as any, mockPublicClient as any, mockConfig as any);
+            const mockSecurity = { scanContract: vi.fn().mockResolvedValue({ riskScore: 0 }) } as any;
+            const defi = new DeFiModule(mockWalletClient as any, mockPublicClient as any, mockConfig as any, mockSecurity);
 
             // Mock responses for different fee tiers
             mockPublicClient.readContract.mockImplementation(async (params) => {
@@ -71,7 +72,8 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
         });
 
         it('should sort very large bigint quotes without Number overflow', async () => {
-            const defi = new DeFiModule(mockWalletClient as any, mockPublicClient as any, mockConfig as any);
+            const mockSecurity = { scanContract: vi.fn().mockResolvedValue({ riskScore: 0 }) } as any;
+            const defi = new DeFiModule(mockWalletClient as any, mockPublicClient as any, mockConfig as any, mockSecurity);
             const huge = 2n ** 255n;
 
             mockPublicClient.readContract.mockImplementation(async (params) => {

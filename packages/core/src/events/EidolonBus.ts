@@ -148,6 +148,35 @@ export class EidolonBus extends EventEmitter {
         return () => this.off(type, callback);
     }
 
+    /**
+     * Typed variant of `emitEvent` — accepts any event that extends `EidolonEvent`.
+     * Domain-specific events can define their own payload shapes and use this
+     * overload for full end-to-end type safety.
+     *
+     * @example
+     * bus.emitTyped<MyCustomEvent>({ type: 'MY_EVENT', timestamp: Date.now(), payload: { value: 42 } });
+     */
+    public emitTyped<T extends EidolonEvent>(event: T): void {
+        this.emitEvent(event);
+    }
+
+    /**
+     * Typed variant of `subscribe` — callback receives the exact `T` event shape.
+     *
+     * @example
+     * const unsub = bus.subscribeTyped<PriceEvent>(EidolonEventType.PRICE_UPDATE, (e) => {
+     *     console.log(e.payload.symbol, e.payload.price);
+     * });
+     */
+    public subscribeTyped<T extends EidolonEvent>(
+        type: T['type'],
+        callback: (event: T) => void
+    ): () => void {
+        const handler = (event: EidolonEvent) => callback(event as T);
+        this.on(type, handler);
+        return () => this.off(type, handler);
+    }
+
     public getDroppedEvents(): number {
         return this.droppedEvents + this.ring.getOverflowCount();
     }

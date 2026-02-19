@@ -1,6 +1,6 @@
 
 import { expect } from "vitest";
-import { ActiveLearning, TradeOutcome } from "../src/eidolon/ActiveLearning";
+import { ActiveLearning, TradeOutcome } from "@clawkit/soul";
 
 describe("CRITICAL AUDIT: ActiveLearning Memory Leak", function () {
     let learner: ActiveLearning;

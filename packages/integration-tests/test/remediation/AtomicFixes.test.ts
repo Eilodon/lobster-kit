@@ -1,10 +1,8 @@
 
-import { ActiveLearning } from '../src/eidolon/ActiveLearning';
-import { EmotionalCore } from '../src/eidolon/EmotionalCore';
+import { ActiveLearning, EmotionalCore } from '@clawkit/soul';
 import { AppendOnlyAdapter } from '../src/eidolon/memory/AppendOnlyAdapter';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { IStorageProvider } from '../src/eidolon/memory/IStorageProvider';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
 /*

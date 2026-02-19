@@ -134,9 +134,9 @@ fn u512_sub(a: U512, b: U512) -> U512 {
 
 /// U512 / U256 → U512  (binary long-division, O(512) iterations)
 /// Returns quotient; remainder is discarded.
-fn u512_div_u256(dividend: U512, divisor: U256) -> U512 {
+fn u512_div_u256(dividend: U512, divisor: U256) -> Result<U512, &'static str> {
     if u256_is_zero(divisor) {
-        panic!("u512_div_u256: division by zero");
+        return Err("division by zero");
     }
     // Extend divisor to U512 for comparison
     let divisor512: U512 = [divisor[0], divisor[1], divisor[2], divisor[3], 0, 0, 0, 0];
@@ -160,7 +160,7 @@ fn u512_div_u256(dividend: U512, divisor: U256) -> U512 {
         }
     }
     let _ = dividend; // suppress unused warning
-    quotient
+    Ok(quotient)
 }
 
 /// Convert U512 lower 256 bits to bytes_be (for results that fit in U256)
@@ -195,7 +195,7 @@ pub fn q64_96_div(a_bytes: &[u8], b_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
     // numerator = a << 96  (fits in U512 for any U256 a)
     let a512: U512 = [a[0], a[1], a[2], a[3], 0, 0, 0, 0];
     let numerator = u512_shl(a512, 96);
-    let quotient = u512_div_u256(numerator, b);
+    let quotient = u512_div_u256(numerator, b).map_err(JsValue::from_str)?;
     Ok(u512_low_to_bytes_be(quotient))
 }
 

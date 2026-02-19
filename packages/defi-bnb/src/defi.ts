@@ -6,6 +6,7 @@ import { BigMath, WAD } from './utils/BigMath';
 import { TokenAmount } from './math/TokenAmount';
 import { getPriceService } from './services/PriceService';
 import { ERC20_ALLOWANCE_ABI, ERC20_APPROVE_ABI, ERC20_BALANCE_OF_ABI, ERC20_DECIMALS_ABI } from './abi/erc20';
+import { SecurityModule } from './security';
 
 const PANCAKE_V3_ROUTER_ABI = [
   {
@@ -56,7 +57,8 @@ export class DeFiModule {
   constructor(
     private walletClient: ClawKitWalletClient,
     private publicClient: PublicClient,
-    private config: ClawKitConfig
+    private config: ClawKitConfig,
+    private security: SecurityModule // FIX P2: Security Injection
   ) {
     if (!this.config.chainConfig) {
       console.warn("⚠️ No chain config provided, defaulting to opBNB");
@@ -67,8 +69,9 @@ export class DeFiModule {
   // FIX P1: Inject Price Service
   private priceOracle?: { fetchTokenPrices: () => Promise<Record<string, number>> };
 
-  // FIX Therapy 1: Dynamic Decimals Cache (Thính Giác On-Chain)
+  // FIX Therapy 1: Dynamic Decimals Cache (Thính Giác On-Chain) WITH LRU PROTECTION
   private decimalsCache: Map<string, number> = new Map();
+  private readonly MAX_DECIMALS_CACHE_SIZE = 100; // Prevent memory leak
 
   public setPriceOracle(oracle: { fetchTokenPrices: () => Promise<Record<string, number>> }) {
     this.priceOracle = oracle;
@@ -96,7 +99,7 @@ export class DeFiModule {
     // 2. Check static config (Fast path)
     try {
       const staticDecimals = getTokenDecimals(tokenOrSymbol);
-      this.decimalsCache.set(tokenOrSymbol.toUpperCase(), staticDecimals);
+      this.cacheDecimals(tokenOrSymbol.toUpperCase(), staticDecimals);
       return staticDecimals;
     } catch {
       // Not in config, proceed to on-chain check
@@ -122,13 +125,27 @@ export class DeFiModule {
         functionName: 'decimals'
       }) as number;
 
-      this.decimalsCache.set(tokenOrSymbol.toLowerCase(), decimals);
+      this.cacheDecimals(tokenOrSymbol.toLowerCase(), decimals);
       console.info(`✅ Decimals resolved: ${decimals}`);
       return decimals;
     } catch (e) {
       console.error(`❌ Failed to resolve decimals for ${tokenOrSymbol}`, e);
       throw new Error(`Failed to resolve decimals for ${tokenOrSymbol}`);
     }
+  }
+
+  /**
+   * Helper to cache decimals with LRU eviction
+   */
+  private cacheDecimals(key: string, value: number) {
+    if (this.decimalsCache.size >= this.MAX_DECIMALS_CACHE_SIZE) {
+      // Evict oldest
+      const firstKey = this.decimalsCache.keys().next().value;
+      if (firstKey) this.decimalsCache.delete(firstKey);
+    }
+    // Delete and re-set to mark as recently used
+    this.decimalsCache.delete(key);
+    this.decimalsCache.set(key, value);
   }
 
   /**
@@ -223,7 +240,6 @@ export class DeFiModule {
       // Logic: If Gas Cost > 10% of Trade Value, ABORT.
       // Use checkAmountUSD which is guaranteed defined here
       const thresholdUSD = (checkAmountUSD as number) * 0.10;
-
       if (gasCostUSD > thresholdUSD) {
         throw new Error(`Thermodynamic Fail: Gas Cost ~$${gasCostUSD.toFixed(2)} > 10% of Trade Value $${(checkAmountUSD as number).toFixed(2)}`);
       }
@@ -233,6 +249,52 @@ export class DeFiModule {
       console.warn("Thermodynamic check warning:", error);
       // If we can't estimate gas, we might fail open or closed determined by config?
       // Audit says fail-open was a risk. checking fails...
+    }
+  }
+
+  /**
+   * 📉 PRICE IMPACT GUARD
+   * Protects against high slippage or bad routes by comparing execution price vs market price.
+   */
+  private async checkPriceImpact(
+    fromToken: string,
+    toToken: string,
+    amountIn: bigint,
+    amountOut: bigint,
+    force: boolean = false
+  ): Promise<void> {
+    if (force) return;
+
+    try {
+      const svc = getPriceService(this.config);
+
+      // Get prices (Address-based for precision)
+      const fromPrice = await svc.getTokenPriceByAddress(fromToken);
+      const toPrice = await svc.getTokenPriceByAddress(toToken);
+
+      if (fromPrice <= 0 || toPrice <= 0) {
+        console.warn(`⚠️ Cannot check Price Impact: Missing price data for ${fromPrice <= 0 ? fromToken : toToken}`);
+        return;
+      }
+
+      const fromDecimals = await this.getDynamicTokenDecimals(fromToken);
+      const toDecimals = await this.getDynamicTokenDecimals(toToken);
+
+      const valIn = parseFloat(formatUnits(amountIn, fromDecimals)) * fromPrice;
+      const valOut = parseFloat(formatUnits(amountOut, toDecimals)) * toPrice;
+
+      if (valIn <= 0) return;
+
+      // Calculate loss percentage
+      const loss = (valIn - valOut) / valIn;
+
+      // Threshold: 10% (0.1)
+      if (loss > 0.1) {
+        throw new Error(`Price Impact Too High: -${(loss * 100).toFixed(2)}%. Input: $${valIn.toFixed(2)}, Output: $${valOut.toFixed(2)}. Use 'force: true' to override.`);
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Price Impact Too High')) throw err;
+      console.warn(`Price Impact check failed (open fail): ${err.message}`);
     }
   }
 
@@ -248,6 +310,17 @@ export class DeFiModule {
     // Resolve token addresses
     const fromToken = this.resolveTokenAddress(from);
     const toToken = this.resolveTokenAddress(to);
+
+    // FIX P2: Security Guard (The Immune System)
+    if (params.force !== true) {
+      if (toToken !== this.tokens.BNB.address && toToken !== this.tokens.WBNB.address && toToken !== this.tokens.USDT.address) {
+        // Only scan non-trusted tokens
+        const risk = await this.security.scanContract(toToken);
+        if (risk.riskScore >= 80) {
+          throw new Error(`Security Guard: High Risk Detected (${risk.riskScore}/100) for ${toToken}. Swap blocked. Use 'force: true' to override.`);
+        }
+      }
+    }
 
     // FIX Bug #1 & Therapy 1: Dynamic Decimal Resolution
     const fromDecimals = await this.getDynamicTokenDecimals(from);
@@ -315,6 +388,11 @@ export class DeFiModule {
         // 🛡️ CHECK 2: SIMULATION (The Hunter's Eye)
         await this.simulateTransaction(router, data, value, userAddress);
 
+        // 📉 CHECK 3: PRICE IMPACT (Market Sense)
+        // Check against amountOutMin (worst case) or quoted amount?
+        // Using amountOutMin ensures we are safe even at slippage limit.
+        await this.checkPriceImpact(fromToken, toToken, amountIn, amountOutMin, params.force);
+
         // 🚀 EXECUTION (The Strike)
         const hash = await this.walletClient.sendTransaction({
           to: toAddress(router),
@@ -322,7 +400,7 @@ export class DeFiModule {
           value
         });
 
-        const outDecimals = getTokenDecimals(to);
+        const outDecimals = await this.getDynamicTokenDecimals(to);
         const amountOutToken = TokenAmount.fromRaw(amountOutMin, outDecimals, to);
 
         return {
@@ -1040,9 +1118,9 @@ export class DeFiModule {
       } catch { /* fall through */ }
     }
 
-    // 3. Last-resort stale fallback with loud warning
-    console.warn('⚠️ THERMODYNAMIC BLINDSPOT: All BNB price sources failed. Using stale $600 estimate.');
-    return 600;
+    // 3. Last-resort: FAIL CLOSED (Death before Dishonor)
+    console.error('🚨 THERMODYNAMIC BLINDSPOT: All BNB price sources failed. Agent is flying blind.');
+    throw new Error('Thermodynamic Blindspot: Cannot resolve BNB Price. Aborting to prevent capital loss.');
   }
 
   private async getAddress(): Promise<string> {

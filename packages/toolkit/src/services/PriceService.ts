@@ -167,7 +167,76 @@ export class PriceService {
             return configuredFallback;
         }
 
+        // 🛡️ Pyth Network (Hermes) - Real-time Oracle
+        try {
+            // Price ID for BNB/USD: 2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f
+            const pythPrice = await this.fetchPythPrice('2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f');
+            if (this.isSanePrice(pythPrice)) {
+                this.setCached(key, pythPrice);
+                console.info(`✅ [PriceService] BNB from Pyth Hermes: $${pythPrice.toFixed(2)}`);
+                return pythPrice;
+            }
+        } catch (err: any) {
+            console.warn(`[PriceService] Pyth Hermes failed: ${err.message}`);
+        }
+
         throw new Error('PriceService: All BNB price sources failed');
+    }
+
+    // ── Pyth Network Integration ───────────────────────────────────────────────
+
+    private async fetchPythPrice(priceId: string): Promise<number> {
+        const gateway = getGateway(this.config);
+        const data = await gateway.get<any>(
+            `https://hermes.pyth.network/v2/updates/price/latest?ids[]=${priceId}`
+        );
+
+        // Hermes V2 structure: { parsed: [ { price: { price: "...", expo: -8 } } ] }
+        const priceData = data?.parsed?.[0]?.price;
+        if (!priceData) throw new Error('No price data from Pyth');
+
+        const rawPrice = Number(priceData.price);
+        const expo = priceData.expo;
+        return rawPrice * Math.pow(10, expo);
+    }
+
+    // ── Address-based Price (DexScreener) ──────────────────────────────────────
+
+    /**
+     * Fetch token price by contract address using DexScreener
+     * Essential for long-tail tokens not on CoinGecko.
+     */
+    async getTokenPriceByAddress(address: string): Promise<number> {
+        const key = `addr:${address.toLowerCase()}`;
+        const cached = this.getCached(key);
+        if (cached !== undefined) return cached;
+
+        const isStrict = this.config.privacyMode === 'strict';
+        if (isStrict) return 0; // Strict mode: no external calls
+
+        // Try internal oracle first (stub for now, assuming oracle uses symbols mostly)
+
+        // DexScreener
+        try {
+            const gateway = getGateway(this.config);
+            const data = await gateway.get<{ pairs?: [{ priceUsd?: string }] }>(
+                `https://api.dexscreener.com/latest/dex/tokens/${address}`
+            );
+
+            // Get the first pair (usually highest liquidity)
+            const priceStr = data?.pairs?.[0]?.priceUsd;
+            const price = priceStr ? parseFloat(priceStr) : 0;
+
+            if (this.isSanePrice(price)) {
+                this.setCached(key, price);
+                // Also cache by symbol if possble, but we don't have symbol here easily without parsing
+                return price;
+            }
+        } catch (err) {
+            console.warn(`[PriceService] DexScreener failed for ${address}:`, err);
+        }
+
+        return 0;
     }
 
     // ── Multi-token prices ──────────────────────────────────────────────────────

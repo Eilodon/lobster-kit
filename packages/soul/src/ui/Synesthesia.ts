@@ -1,4 +1,4 @@
-import { EmotionalState } from '../EmotionalCore';
+import { EmotionalState } from '../eidolon/EmotionalCore';
 
 /**
  * 🎹 SYNESTHESIA (THERMODYNAMIC EDITION)

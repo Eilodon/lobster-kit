@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SecurityModule } from '../src/security';
+import { SecurityModule } from '@clawkit/defi-bnb';
 
 const validAddr = (n: number) => `0x${n.toString().padStart(40, '0')}` as `0x${string}`;
 

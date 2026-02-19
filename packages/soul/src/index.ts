@@ -15,9 +15,32 @@ export { type IOracle, type MarketContext, type OracleInsight } from './ai/IOrac
 export { ClawOracle } from './sensors/ClawOracle';
 
 // Emotional Core
-export { EmotionalCore, type EmotionalState } from './EmotionalCore';
-export { TraumaRegistry } from './TraumaRegistry';
-export { EidolonGuard, type ValidationResult, type RiskParameters, type GuardConfig } from './EidolonGuard';
+export { EmotionalCore, type EmotionalState } from './eidolon/EmotionalCore';
+export { TraumaRegistry } from './eidolon/TraumaRegistry';
+export { EidolonGuard, type ValidationResult, type RiskParameters, type GuardConfig } from './eidolon/EidolonGuard';
+
+// Brain & Consciousness
+export { ActiveLearning, type TradeOutcome } from './eidolon/ActiveLearning';
+export { DivineTransparency } from './eidolon/DivineTransparency';
+export * from './eidolon/EidolonTypes';
 
 // WASM
 export { WasmAdapter } from './WasmAdapter';
+
+// Sensors, Oracles, Simulation, Swarm
+export { MarketStream } from './sensors/MarketStream';
+export { PriceAggregator } from './sensors/PriceAggregator';
+export { GoPlusSecurity } from './oracles/GoPlusSecurity';
+export { PythAdapter } from './oracles/PythAdapter';
+export type { PythConfig } from './config/PythConfig';
+export { EidolonSimulator, type ShadowTransaction, type SimulationResult, type RiskMatrixResult } from './simulation/EidolonSimulator';
+export { EidolonSwarm, type SwarmMessage, type SwarmBandwidthSnapshot } from './swarm/EidolonSwarm';
+
+// Events and Metrics
+export {
+    EidolonBus,
+    EidolonEventType,
+    type EidolonEvent,
+    type TradeExecutedEvent
+} from './events/EidolonBus';
+export { KpiTracker, type KpiSnapshot } from './metrics/KpiTracker';

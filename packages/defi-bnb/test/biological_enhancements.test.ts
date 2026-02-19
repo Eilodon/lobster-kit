@@ -42,7 +42,8 @@ describe('Biological Enhancements (Therapies)', () => {
         let defi: DeFiModule;
 
         beforeEach(() => {
-            defi = new DeFiModule(mockWalletClient, mockPublicClient, mockConfig);
+            const mockSecurity = { scanContract: vi.fn() } as any;
+            defi = new DeFiModule(mockWalletClient, mockPublicClient, mockConfig, mockSecurity);
             vi.clearAllMocks();
         });
 
@@ -84,7 +85,8 @@ describe('Biological Enhancements (Therapies)', () => {
             // Mock tokens in config by overriding specific property if possible
             // internal 'tokens' is private, but we can mock 'dumpAllPositions' internals or use a configured instance
             // We will mock the 'tokens' property access via 'any' cast as we can't easily change private/protected in TS test without accessors
-            defi = new DeFiModule(mockWalletClient, mockPublicClient, mockConfig);
+            const mockSecurity = { scanContract: vi.fn().mockResolvedValue({ riskScore: 0 }) } as any;
+            defi = new DeFiModule(mockWalletClient, mockPublicClient, mockConfig, mockSecurity);
 
             // Inject some tokens
             (defi as any).tokens = {

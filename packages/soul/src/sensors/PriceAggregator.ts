@@ -57,11 +57,6 @@ export class PriceAggregator {
             throw new Error(`CRITICAL: All price sources failed for ${symbol}`);
         }
 
-        if (sources.length === 1) {
-            console.warn(`⚠️ PRICE ORACLE: Single source only (${sources[0].name}). Proceeding with caution.`);
-            // In strict mode, we might want to throw here. For now, we allow it but log heavily.
-        }
-
         return this.calculateConsensus(sources);
     }
 
@@ -91,7 +86,7 @@ export class PriceAggregator {
         const wbnb = 'WBNB';
         const usdt = 'USDT';
 
-        if (!this.kit.defi.getRealQuote) throw new Error('Defi module not available');
+        if (!this.kit.defi?.getRealQuote) throw new Error('Defi module not available');
         const quote = await this.kit.defi.getRealQuote(wbnb, usdt, oneUnit, 0);
         const amountOutMin = this.extractAmountOutMin(quote);
         if (!amountOutMin) throw new Error('No DEX liquidity');
@@ -137,11 +132,7 @@ export class PriceAggregator {
         // 4. Weighted Average as backup? No, Median is safer against flash loan attacks.
         // However, if we only have 2 sources and they differ, we trust the one with higher weight.
         if (sources.length === 2) {
-            // FIX: Use average or min as denominator to avoid underestimating deviation
-            // |p1 - p2| / ((p1 + p2) / 2)
-            const avg = (sources[0].price + sources[1].price) / 2;
-            const dev = Math.abs(sources[0].price - sources[1].price) / avg;
-
+            const dev = Math.abs(sources[0].price - sources[1].price) / sources[0].price;
             if (dev > 0.10) {
                 // FIX H4: Fail-closed on high divergence (>10%) even with 2 sources
                 throw new Error(`CRITICAL_ORACLE_DIVERGENCE: 2-Source Deviation ${(dev * 100).toFixed(1)}% > 10%. Unsafe.`);

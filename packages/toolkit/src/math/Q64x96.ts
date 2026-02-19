@@ -1,4 +1,4 @@
-import { WasmAdapter } from '../eidolon/WasmAdapter';
+import { WasmAdapter } from '@clawkit/soul';
 
 /**
  * Q64.96 fixed-point helpers for UniswapV3/PancakeV3 math.

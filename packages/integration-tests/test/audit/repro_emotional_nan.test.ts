@@ -1,6 +1,6 @@
 
 import { expect } from "vitest";
-import { EmotionalCore } from "../src/eidolon/EmotionalCore";
+import { EmotionalCore } from "@clawkit/soul";
 
 describe("CRITICAL AUDIT: EmotionalCore Stability", function () {
     let core: EmotionalCore;

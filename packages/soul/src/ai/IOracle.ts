@@ -1,4 +1,4 @@
-import { MarketState, ReasoningWeights } from '@clawkit/core';
+import { MarketState, ReasoningWeights } from '../eidolon/EidolonTypes';
 
 export interface MarketContext {
     marketState: MarketState;

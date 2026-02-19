@@ -6,7 +6,7 @@
  * Reacts to mouse input and agent emotional state.
  */
 
-import { EmotionalState } from '../EmotionalCore';
+import { EmotionalState } from '../eidolon/EmotionalCore';
 
 export interface FluidConfig {
     SIM_RESOLUTION: number;

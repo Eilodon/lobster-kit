@@ -6,14 +6,18 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "test": "turbo run test",
-    "test:all": "turbo run test",
+    "test": "pnpm sync:integration-mirrors && turbo run test",
+    "test:all": "pnpm sync:integration-mirrors && turbo run test",
     "deploy": "hardhat run scripts/deploy.ts --network opbnb",
     "lint": "turbo run lint",
+    "check:deps": "node scripts/check-workspace-deps.mjs",
+    "audit:duplicates": "node scripts/report-duplicates.mjs",
     "format": "prettier --write 'packages/*/{src,test}/**/*.{ts,tsx}'",
     "mcp": "pnpm --filter @clawkit/mcp dev",
     "start:mcp": "pnpm --filter @clawkit/mcp start",
     "docker:build": "docker build -f packages/mcp/Dockerfile -t clawkit/mcp-server .",
+    "sync:integration-mirrors": "node scripts/sync-integration-mirrors.mjs",
+    "sync:integration-mirrors:check": "node scripts/sync-integration-mirrors.mjs --check",
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "keywords": [

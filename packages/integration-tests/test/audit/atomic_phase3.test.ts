@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EidolonSimulator, ShadowTransaction } from '../src/eidolon/simulation/EidolonSimulator';
+import { EidolonSimulator, ShadowTransaction } from '@clawkit/soul';
 import { GoPlusSecurity } from '../src/eidolon/oracles/GoPlusSecurity';
 import { PythAdapter } from '../src/eidolon/oracles/PythAdapter';
 import axios from 'axios';

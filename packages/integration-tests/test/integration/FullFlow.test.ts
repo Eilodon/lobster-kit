@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EidolonGuard } from '../src/eidolon/EidolonGuard';
-import { EidolonBus, EidolonEventType } from '../src/eidolon/events/EidolonBus';
+import { EidolonBus, EidolonEventType } from '@clawkit/soul';
 import { WasmAdapter } from '../src/eidolon/WasmAdapter';
 import path from 'path';
 

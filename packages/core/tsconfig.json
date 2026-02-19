@@ -4,12 +4,17 @@
         "outDir": "./dist",
         "rootDir": "./src",
         "composite": true,
+        "resolveJsonModule": true,
         "typeRoots": [
             "../../node_modules/@types"
+        ],
+        "types": [
+            "node"
         ]
     },
     "include": [
-        "src/**/*"
+        "src/**/*",
+        "src/**/*.json"
     ],
     "exclude": [
         "node_modules",

@@ -1,8 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Vector, Matrix } from '../src/eidolon/ai/LinearAlgebra';
-import { BreathEngine, BreathPhase } from '../src/eidolon/ai/BreathEngine';
-import { EidolonSwarm } from '../src/eidolon/swarm/EidolonSwarm';
+import { Vector, Matrix, BreathEngine, BreathPhase } from '@clawkit/soul';
+import { EidolonSwarm } from '@clawkit/soul';
 
 describe('Atomic Audit Phase 2 Verification', () => {
 

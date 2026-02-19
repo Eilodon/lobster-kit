@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { IOracle, MarketContext, OracleInsight } from './IOracle';
-import { DEFAULT_WEIGHTS, ReasoningWeights } from '@clawkit/core';
+import { DEFAULT_WEIGHTS, ReasoningWeights } from '../eidolon/EidolonTypes';
 import { withRetry } from '@clawkit/core';
 
 const BoundedNumber = z.number().finite().min(-50).max(50);

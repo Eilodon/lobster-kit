@@ -161,6 +161,130 @@ class CausalGraph {
 if (Symbol.dispose) CausalGraph.prototype[Symbol.dispose] = CausalGraph.prototype.free;
 exports.CausalGraph = CausalGraph;
 
+class HyperMemory {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        HyperMemoryFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_hypermemory_free(ptr, 0);
+    }
+    /**
+     * @returns {number}
+     */
+    count() {
+        const ret = wasm.hypermemory_count(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {any}
+     */
+    export_data() {
+        const ret = wasm.hypermemory_export_data(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {any} data
+     */
+    import_data(data) {
+        const ret = wasm.hypermemory_import_data(this.__wbg_ptr, data);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {string} id
+     * @param {Float32Array} vector
+     */
+    insert(id, vector) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArrayF32ToWasm0(vector, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.hypermemory_insert(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {number} dimension
+     */
+    constructor(dimension) {
+        const ret = wasm.hypermemory_new(dimension);
+        this.__wbg_ptr = ret >>> 0;
+        HyperMemoryFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {Float32Array} query_vector
+     * @param {number} k
+     * @returns {any}
+     */
+    search(query_vector, k) {
+        const ptr0 = passArrayF32ToWasm0(query_vector, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.hypermemory_search(this.__wbg_ptr, ptr0, len0, k);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+}
+if (Symbol.dispose) HyperMemory.prototype[Symbol.dispose] = HyperMemory.prototype.free;
+exports.HyperMemory = HyperMemory;
+
+class LiquidBrain {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        LiquidBrainFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_liquidbrain_free(ptr, 0);
+    }
+    /**
+     * @param {Float32Array} input
+     * @returns {Float32Array}
+     */
+    forward(input) {
+        const ptr0 = passArrayF32ToWasm0(input, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.liquidbrain_forward(this.__wbg_ptr, ptr0, len0);
+        var v2 = getArrayF32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v2;
+    }
+    /**
+     * @param {number} input_size
+     * @param {number} hidden_size
+     */
+    constructor(input_size, hidden_size) {
+        const ret = wasm.liquidbrain_new(input_size, hidden_size);
+        this.__wbg_ptr = ret >>> 0;
+        LiquidBrainFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {number} reward_signal
+     */
+    optimize(reward_signal) {
+        wasm.liquidbrain_optimize(this.__wbg_ptr, reward_signal);
+    }
+    reset() {
+        wasm.liquidbrain_reset(this.__wbg_ptr);
+    }
+}
+if (Symbol.dispose) LiquidBrain.prototype[Symbol.dispose] = LiquidBrain.prototype.free;
+exports.LiquidBrain = LiquidBrain;
+
 class TraumaRegistry {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -202,6 +326,20 @@ class TraumaRegistry {
         const ptr0 = passStringToWasm0(action_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         wasm.traumaregistry_heal(this.__wbg_ptr, mode, ptr0, len0);
+    }
+    /**
+     * Restore a previously exported registry snapshot.
+     * BUG FIX #2: import_records was missing — TraumaRegistry could not survive agent restarts.
+     *
+     * Expects the same format as export_records:
+     * `{ "<hex_hash>": { sev_eff, count, inhibit_until_ts_ms, last_ts_ms }, ... }`
+     * @param {any} data
+     */
+    import_records(data) {
+        const ret = wasm.traumaregistry_import_records(this.__wbg_ptr, data);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
     }
     /**
      * @param {number} mode
@@ -284,88 +422,68 @@ if (Symbol.dispose) ValueInvariant.prototype[Symbol.dispose] = ValueInvariant.pr
 exports.ValueInvariant = ValueInvariant;
 
 /**
- * @param {string} a_raw
- * @param {string} b_raw
- * @returns {string}
+ * Divide two Q64.96 numbers: (a << 96) / b
+ * @param {Uint8Array} a_bytes
+ * @param {Uint8Array} b_bytes
+ * @returns {Uint8Array}
  */
-function q64_96_div(a_raw, b_raw) {
-    let deferred4_0;
-    let deferred4_1;
-    try {
-        const ptr0 = passStringToWasm0(a_raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(b_raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.q64_96_div(ptr0, len0, ptr1, len1);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
-        if (ret[3]) {
-            ptr3 = 0; len3 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
-    } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+function q64_96_div(a_bytes, b_bytes) {
+    const ptr0 = passArray8ToWasm0(a_bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(b_bytes, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.q64_96_div(ptr0, len0, ptr1, len1);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
     }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
 }
 exports.q64_96_div = q64_96_div;
 
 /**
- * @param {string} a_raw
- * @param {string} b_raw
- * @returns {string}
+ * Multiply two Q64.96 numbers and shift right by 96 bits.
+ * a_bytes × b_bytes → (a × b) >> 96
+ * @param {Uint8Array} a_bytes
+ * @param {Uint8Array} b_bytes
+ * @returns {Uint8Array}
  */
-function q64_96_mul(a_raw, b_raw) {
-    let deferred4_0;
-    let deferred4_1;
-    try {
-        const ptr0 = passStringToWasm0(a_raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(b_raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.q64_96_mul(ptr0, len0, ptr1, len1);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
-        if (ret[3]) {
-            ptr3 = 0; len3 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
-    } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+function q64_96_mul(a_bytes, b_bytes) {
+    const ptr0 = passArray8ToWasm0(a_bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(b_bytes, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.q64_96_mul(ptr0, len0, ptr1, len1);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
     }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
 }
 exports.q64_96_mul = q64_96_mul;
 
 /**
- * @param {string} sqrt_price_x96_raw
+ * Convert Uniswap V3 sqrtPriceX96 → price WAD (1e18 scale).
+ *
+ * Formula: price_wad = (sqrt^2 / 2^192) × 10^18 × 10^(d0 - d1)
+ * All arithmetic: stack-allocated U256/U512, zero heap allocation.
+ * @param {Uint8Array} sqrt_price_x96_bytes
  * @param {number} token0_decimals
  * @param {number} token1_decimals
- * @returns {string}
+ * @returns {Uint8Array}
  */
-function sqrt_price_x96_to_price_wad(sqrt_price_x96_raw, token0_decimals, token1_decimals) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(sqrt_price_x96_raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.sqrt_price_x96_to_price_wad(ptr0, len0, token0_decimals, token1_decimals);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+function sqrt_price_x96_to_price_wad(sqrt_price_x96_bytes, token0_decimals, token1_decimals) {
+    const ptr0 = passArray8ToWasm0(sqrt_price_x96_bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.sqrt_price_x96_to_price_wad(ptr0, len0, token0_decimals, token1_decimals);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
     }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
 }
 exports.sqrt_price_x96_to_price_wad = sqrt_price_x96_to_price_wad;
 
@@ -387,6 +505,12 @@ function __wbg_get_imports() {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
+        __wbg___wbindgen_bigint_get_as_i64_8fcf4ce7f1ca72a2: function(arg0, arg1) {
+            const v = arg1;
+            const ret = typeof(v) === 'bigint' ? v : undefined;
+            getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
+        },
         __wbg___wbindgen_boolean_get_bbbb1c18aa2f5e25: function(arg0) {
             const v = arg0;
             const ret = typeof(v) === 'boolean' ? v : undefined;
@@ -401,6 +525,10 @@ function __wbg_get_imports() {
         },
         __wbg___wbindgen_in_47fa6863be6f2f25: function(arg0, arg1) {
             const ret = arg0 in arg1;
+            return ret;
+        },
+        __wbg___wbindgen_is_bigint_31b12575b56f32fc: function(arg0) {
+            const ret = typeof(arg0) === 'bigint';
             return ret;
         },
         __wbg___wbindgen_is_function_0095a73b8b156f76: function(arg0) {
@@ -418,6 +546,10 @@ function __wbg_get_imports() {
         },
         __wbg___wbindgen_is_undefined_9e4d92534c42d778: function(arg0) {
             const ret = arg0 === undefined;
+            return ret;
+        },
+        __wbg___wbindgen_jsval_eq_11888390b0186270: function(arg0, arg1) {
+            const ret = arg0 === arg1;
             return ret;
         },
         __wbg___wbindgen_jsval_loose_eq_9dd77d8cd6671811: function(arg0, arg1) {
@@ -583,6 +715,12 @@ const AntiRugFinalization = (typeof FinalizationRegistry === 'undefined')
 const CausalGraphFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_causalgraph_free(ptr >>> 0, 1));
+const HyperMemoryFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_hypermemory_free(ptr >>> 0, 1));
+const LiquidBrainFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_liquidbrain_free(ptr >>> 0, 1));
 const TraumaRegistryFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_traumaregistry_free(ptr >>> 0, 1));
@@ -661,6 +799,11 @@ function debugString(val) {
     return className;
 }
 
+function getArrayF32FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
+}
+
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
@@ -672,6 +815,14 @@ function getDataViewMemory0() {
         cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
     }
     return cachedDataViewMemory0;
+}
+
+let cachedFloat32ArrayMemory0 = null;
+function getFloat32ArrayMemory0() {
+    if (cachedFloat32ArrayMemory0 === null || cachedFloat32ArrayMemory0.byteLength === 0) {
+        cachedFloat32ArrayMemory0 = new Float32Array(wasm.memory.buffer);
+    }
+    return cachedFloat32ArrayMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
@@ -698,6 +849,20 @@ function handleError(f, args) {
 
 function isLikeNone(x) {
     return x === undefined || x === null;
+}
+
+function passArray8ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 1, 1) >>> 0;
+    getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passArrayF32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getFloat32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {

@@ -194,15 +194,8 @@ impl AntiRug {
             blacklist: HashSet::new(),
         }
     }
-}
 
-impl Default for AntiRug {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
-impl AntiRug {
     pub fn add_to_whitelist(&mut self, address: &str) {
         self.whitelist.insert(address.to_lowercase());
     }
@@ -343,5 +336,11 @@ impl AntiRug {
             owner_renounced,
             status: status.to_string(),
         }).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+}
+
+impl Default for AntiRug {
+    fn default() -> Self {
+        Self::new()
     }
 }
