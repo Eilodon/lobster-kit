@@ -1,0 +1,11 @@
+{
+  "name": "core-rust",
+  "version": "0.1.0",
+  "files": [
+    "core_rust_bg.wasm",
+    "core_rust.js",
+    "core_rust.d.ts"
+  ],
+  "main": "core_rust.js",
+  "types": "core_rust.d.ts"
+}

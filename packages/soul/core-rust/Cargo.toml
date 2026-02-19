@@ -1,0 +1,24 @@
+[package]
+name = "core-rust"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+getrandom = { version = "0.2", features = ["js"] }
+wee_alloc = { version = "0.4", optional = true }
+blake3 = "1.8"
+
+[features]
+default = []
+wee_alloc = ["dep:wee_alloc"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1

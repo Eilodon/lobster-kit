@@ -1,0 +1,298 @@
+warning: function `u512_to_bytes_be` is never used
+  --> src/q64_96.rs:42:4
+   |
+42 | fn u512_to_bytes_be(v: U512) -> Vec<u8> {
+   |    ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: function `u256_mul_u64` is never used
+  --> src/q64_96.rs:76:4
+   |
+76 | fn u256_mul_u64(a: U256, scalar: u64) -> ...
+   |    ^^^^^^^^^^^^
+
+warning: function `u256_shr` is never used
+   --> src/q64_96.rs:101:4
+    |
+101 | fn u256_shr(v: U256, n: usize) -> U256 {
+    |    ^^^^^^^^
+
+warning: enclosing `Ok` and `?` operator are unneeded
+   --> src/security.rs:117:9
+    |
+117 | /         Ok(serde_wasm_bindgen::to_value(&InvariantCheckResult {
+118 | |             safe: true,
+119 | |             reason: None,
+120 | |             circuit_broken: false,
+121 | |         }).map_err(|e| JsValue::from_str(&e.to_string()))?)
+    | |___________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+    = note: `#[warn(clippy::needless_question_mark)]` on by default
+help: remove the enclosing `Ok` and `?` operator
+    |
+117 ~         serde_wasm_bindgen::to_value(&InvariantCheckResult {
+118 |             safe: true,
+119 |             reason: None,
+120 |             circuit_broken: false,
+121 ~         }).map_err(|e| JsValue::from_str(&e.to_string()))
+    |
+
+warning: enclosing `Ok` and `?` operator are unneeded
+  --> src/security.rs:58:20
+   |
+58 |               return Ok(serde_wasm_bindgen::to_value(&InvariantCheck...
+   |  ____________________^
+59 | |                 safe: false,
+60 | |                 reason: Some("INVALID_INPUT: Trade value is NaN, I...
+61 | |                 circuit_broken: false,
+62 | |             }).map_err(|e| JsValue::from_str(&e.to_string()))?);
+   | |_______________________________________________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+help: remove the enclosing `Ok` and `?` operator
+   |
+58 ~             return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+59 |                 safe: false,
+60 |                 reason: Some("INVALID_INPUT: Trade value is NaN, Inf, or negative".to_string()),
+61 |                 circuit_broken: false,
+62 ~             }).map_err(|e| JsValue::from_str(&e.to_string()));
+   |
+
+warning: enclosing `Ok` and `?` operator are unneeded
+  --> src/security.rs:67:20
+   |
+67 |               return Ok(serde_wasm_bindgen::to_value(&InvariantCheck...
+   |  ____________________^
+68 | |                 safe: false,
+69 | |                 reason: Some("INVALID_INPUT: Predicted impact is N...
+70 | |                 circuit_broken: true, // Treat as circuit breaker:...
+71 | |             }).map_err(|e| JsValue::from_str(&e.to_string()))?);
+   | |_______________________________________________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+help: remove the enclosing `Ok` and `?` operator
+   |
+67 ~             return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+68 |                 safe: false,
+69 |                 reason: Some("INVALID_INPUT: Predicted impact is NaN or Inf — failing safe".to_string()),
+70 |                 circuit_broken: true, // Treat as circuit breaker: unknown impact = maximum risk
+71 ~             }).map_err(|e| JsValue::from_str(&e.to_string()));
+   |
+
+warning: enclosing `Ok` and `?` operator are unneeded
+  --> src/security.rs:76:20
+   |
+76 |               return Ok(serde_wasm_bindgen::to_value(&InvariantCheck...
+   |  ____________________^
+77 | |                 safe: false,
+78 | |                 reason: Some(format!(
+79 | |                     "INVARIANT_BREACH: Trade size ${:.2} > Max ${:...
+...  |
+82 | |                 circuit_broken: false,
+83 | |             }).map_err(|e| JsValue::from_str(&e.to_string()))?);
+   | |_______________________________________________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+help: remove the enclosing `Ok` and `?` operator
+   |
+76 ~             return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+77 |                 safe: false,
+...
+82 |                 circuit_broken: false,
+83 ~             }).map_err(|e| JsValue::from_str(&e.to_string()));
+   |
+
+warning: enclosing `Ok` and `?` operator are unneeded
+   --> src/security.rs:95:21
+    |
+95  |                return Ok(serde_wasm_bindgen::to_value(&InvariantChec...
+    |  _____________________^
+96  | |                 safe: false,
+97  | |                 reason: Some(format!(
+98  | |                     "💥 CIRCUIT BREAKER TRIGGERED: Drawdown {:.2}% >...
+...   |
+101 | |                 circuit_broken: true, 
+102 | |             }).map_err(|e| JsValue::from_str(&e.to_string()))?);
+    | |_______________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+help: remove the enclosing `Ok` and `?` operator
+    |
+95  ~              return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+96  |                 safe: false,
+...
+101 |                 circuit_broken: true, 
+102 ~             }).map_err(|e| JsValue::from_str(&e.to_string()));
+    |
+
+warning: enclosing `Ok` and `?` operator are unneeded
+   --> src/security.rs:107:21
+    |
+107 |                return Ok(serde_wasm_bindgen::to_value(&InvariantChec...
+    |  _____________________^
+108 | |                 safe: false,
+109 | |                 reason: Some(format!(
+110 | |                     "RISK_WARNING: Predicted drawdown {:.2}% > Max...
+...   |
+113 | |                 circuit_broken: false,
+114 | |             }).map_err(|e| JsValue::from_str(&e.to_string()))?);
+    | |_______________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+help: remove the enclosing `Ok` and `?` operator
+    |
+107 ~              return serde_wasm_bindgen::to_value(&InvariantCheckResult {
+108 |                 safe: false,
+...
+113 |                 circuit_broken: false,
+114 ~             }).map_err(|e| JsValue::from_str(&e.to_string()));
+    |
+
+warning: you should consider adding a `Default` implementation for `AntiRug`
+   --> src/security.rs:191:5
+    |
+191 | /     pub fn new() -> AntiRug {
+192 | |         AntiRug {
+193 | |             whitelist: HashSet::new(),
+194 | |             blacklist: HashSet::new(),
+195 | |         }
+196 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#new_without_default
+    = note: `#[warn(clippy::new_without_default)]` on by default
+help: try adding this
+    |
+189 + impl Default for AntiRug {
+190 +     fn default() -> Self {
+191 +         Self::new()
+192 +     }
+193 + }
+    |
+
+warning: enclosing `Ok` and `?` operator are unneeded
+   --> src/security.rs:212:9
+    |
+212 | ...   Ok(serde_w...&e.to_string()))?)
+    |       ^^^^^^^^^^...^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+help: remove the enclosing `Ok` and `?` operator
+    |
+212 -         Ok(serde_wasm_bindgen::to_value(&data).map_err(|e| JsValue::from_str(&e.to_string()))?)
+212 +         serde_wasm_bindgen::to_value(&data).map_err(|e| JsValue::from_str(&e.to_string()))
+    |
+
+warning: enclosing `Ok` and `?` operator are unneeded
+   --> src/security.rs:231:9
+    |
+231 | /         Ok(serde_wasm_bindgen::to_value(&SecurityScore {
+232 | |             score: 0,
+233 | |             is_honeypot: false,
+234 | |             liquidity_locked: false,
+...   |
+238 | |             status: "UNKNOWN".to_string(),
+239 | |         }).map_err(|e| JsValue::from_str(&e.to_string()))?)
+    | |___________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+help: remove the enclosing `Ok` and `?` operator
+    |
+231 ~         serde_wasm_bindgen::to_value(&SecurityScore {
+232 |             score: 0,
+...
+238 |             status: "UNKNOWN".to_string(),
+239 ~         }).map_err(|e| JsValue::from_str(&e.to_string()))
+    |
+
+warning: this function has too many arguments (8/7)
+   --> src/security.rs:327:5
+    |
+327 |     fn creat...lt<JsValue, JsValue> {
+    |     ^^^^^^^^...^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#too_many_arguments
+    = note: `#[warn(clippy::too_many_arguments)]` on by default
+
+warning: enclosing `Ok` and `?` operator are unneeded
+   --> src/security.rs:328:9
+    |
+328 | /         Ok(serde_wasm_bindgen::to_value(&SecurityScore {
+329 | |             score,
+330 | |             is_honeypot,
+331 | |             liquidity_locked,
+...   |
+335 | |             status: status.to_string(),
+336 | |         }).map_err(|e| JsValue::from_str(&e.to_string()))?)
+    | |___________________________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_question_mark
+help: remove the enclosing `Ok` and `?` operator
+    |
+328 ~         serde_wasm_bindgen::to_value(&SecurityScore {
+329 |             score,
+...
+335 |             status: status.to_string(),
+336 ~         }).map_err(|e| JsValue::from_str(&e.to_string()))
+    |
+
+warning: you should consider adding a `Default` implementation for `CausalGraph`
+  --> src/causal.rs:43:5
+   |
+43 | /     pub fn new() -> CausalGraph {
+44 | |         let mut graph = CausalGraph {
+45 | |             edges: HashMap::new(),
+46 | |         };
+47 | |         graph.load_priors();
+48 | |         graph
+49 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#new_without_default
+help: try adding this
+   |
+41 + impl Default for CausalGraph {
+42 +     fn default() -> Self {
+43 +         Self::new()
+44 +     }
+45 + }
+   |
+
+warning: you should consider adding a `Default` implementation for `TraumaRegistry`
+  --> src/trauma.rs:22:5
+   |
+22 | /     pub fn new() -> TraumaRegistry {
+23 | |         TraumaRegistry {
+24 | |             records: HashMap::new(),
+25 | |         }
+26 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#new_without_default
+help: try adding this
+   |
+20 + impl Default for TraumaRegistry {
+21 +     fn default() -> Self {
+22 +         Self::new()
+23 +     }
+24 + }
+   |
+
+warning: the loop variable `j` is used to index `b`
+  --> src/q64_96.rs:62:18
+   |
+62 |         for j in 0..4 {
+   |                  ^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#needless_range_loop
+   = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+   |
+62 -         for j in 0..4 {
+62 +         for (j, <item>) in b.iter().enumerate() {
+   |
+
+warning: `core-rust` (lib) generated 17 warnings (run `cargo clippy --fix --lib -p core-rust` to apply 12 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s

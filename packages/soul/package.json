@@ -1,0 +1,28 @@
+{
+    "name": "@clawkit/soul",
+    "version": "1.0.0",
+    "description": "ClawKit Soul — AI consciousness, emotional core, WASM engine",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "build:wasm": "bash ../../scripts/build_wasm.sh",
+        "lint": "eslint src/**/*.ts",
+        "clean": "rm -rf dist"
+    },
+    "license": "SEE LICENSE IN LICENSE.md",
+    "dependencies": {
+        "@clawkit/core": "workspace:*",
+        "react": "^19.2.4",
+        "react-dom": "^19.2.4",
+        "ws": "^8.19.0",
+        "zod": "^3.25.76"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.5",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "@types/ws": "^8.18.1",
+        "typescript": "^5.3.3"
+    }
+}

@@ -1,19 +1,20 @@
 {
-  "name": "@clawkit/bnb",
+  "name": "@clawkit/monorepo",
   "version": "1.0.0",
-  "description": "Complete BNB Chain toolkit for OpenClaw AI agents",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "private": true,
+  "description": "ClawKit Monorepo — BNB Chain toolkit for AI agents",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "test": "vitest",
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "test:all": "turbo run test",
     "deploy": "hardhat run scripts/deploy.ts --network opbnb",
-    "lint": "eslint src/**/*.ts",
-    "format": "prettier --write src/**/*.ts",
-    "mcp": "npx tsx src/mcp-server.ts",
-    "start:mcp": "node dist/mcp-server.js",
-    "docker:build": "docker build -f Dockerfile.mcp -t clawkit/mcp-server ."
+    "lint": "turbo run lint",
+    "format": "prettier --write 'packages/*/{src,test}/**/*.{ts,tsx}'",
+    "mcp": "pnpm --filter @clawkit/mcp dev",
+    "start:mcp": "pnpm --filter @clawkit/mcp start",
+    "docker:build": "docker build -f packages/mcp/Dockerfile -t clawkit/mcp-server .",
+    "clean": "turbo run clean && rm -rf node_modules"
   },
   "keywords": [
     "openclaw",
@@ -36,6 +37,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "axios": "^1.6.5",
+    "better-sqlite3": "^9.4.0",
     "dotenv": "^16.4.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -43,6 +45,9 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@clawkit/core": "workspace:^",
+    "@clawkit/soul": "workspace:^",
+    "@clawkit/toolkit": "workspace:^",
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@openzeppelin/contracts": "^5.0.1",
     "@types/minimatch": "^6.0.0",
@@ -53,6 +58,7 @@
     "hardhat": "^2.19.4",
     "prettier": "^3.2.4",
     "tsx": "^4.21.0",
+    "turbo": "^2.4.0",
     "typescript": "^5.3.3",
     "vitest": "^1.2.0"
   },
@@ -66,5 +72,6 @@
   "homepage": "https://clawkit-bnb.dev",
   "engines": {
     "node": ">=20.0.0"
-  }
+  },
+  "packageManager": "pnpm@9.15.0"
 }

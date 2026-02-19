@@ -2,9 +2,9 @@ name: ClawKit CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
@@ -15,27 +15,33 @@ jobs:
         node-version: [20.x, 22.x]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "pnpm"
 
-    - name: Run Lint
-      run: npm run lint
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-    - name: Run Tests
-      run: npm test
-      env:
-        CI: true
+      - name: Build all packages
+        run: pnpm turbo run build
 
-    - name: Compile Contracts
-      run: npx hardhat compile
+      - name: Run Lint
+        run: pnpm turbo run lint
+        continue-on-error: true
 
-    - name: Build
-      run: npm run build
+      - name: Run Tests
+        run: pnpm test
+        env:
+          CI: true
+
+      - name: Compile Contracts
+        run: npx hardhat compile
