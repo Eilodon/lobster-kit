@@ -46,6 +46,7 @@ data/
 core-rust/target/
 **/core-rust/target/
 **/core-rust/pkg/
+**/*.tar.xz
 
 # TypeScript build cache
 **/*.tsbuildinfo
@@ -53,3 +54,5 @@ core-rust/target/
 # Test Outputs
 test_output*.txt
 test_debug.txt
+packages/soul/core-rust/pkg/
+packages/soul/core-rust/pkg
