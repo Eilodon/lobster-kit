@@ -123,11 +123,18 @@ export class PriceAggregator {
 
         // 4. Weighted Average as backup? No, Median is safer against flash loan attacks.
         // However, if we only have 2 sources and they differ, we trust the one with higher weight.
-        if (sources.length === 2 && Math.abs(sources[0].price - sources[1].price) / sources[0].price > MAX_DEV) {
-            // Trust higher weight
-            const winner = sources.reduce((prev, current) => (prev.weight > current.weight) ? prev : current);
-            console.warn(`⚠️ Trusting ${winner.name} due to divergence`);
-            return winner.price;
+        if (sources.length === 2) {
+            const dev = Math.abs(sources[0].price - sources[1].price) / sources[0].price;
+            if (dev > 0.10) {
+                // FIX H4: Fail-closed on high divergence (>10%) even with 2 sources
+                throw new Error(`CRITICAL_ORACLE_DIVERGENCE: 2-Source Deviation ${(dev * 100).toFixed(1)}% > 10%. Unsafe.`);
+            }
+            if (dev > MAX_DEV) {
+                // Trust higher weight if deviation is 5-10%
+                const winner = sources.reduce((prev, current) => (prev.weight > current.weight) ? prev : current);
+                console.warn(`⚠️ Trusting ${winner.name} due to divergence ${(dev * 100).toFixed(1)}%`);
+                return winner.price;
+            }
         }
 
         return medianPrice;

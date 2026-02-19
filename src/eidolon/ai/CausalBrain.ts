@@ -139,12 +139,14 @@ export class CausalBrain {
             return;
         }
         try {
-            const createGraph = (this.wasmAdapter as unknown as { createCausalGraph?: () => unknown }).createCausalGraph;
-            if (typeof createGraph !== 'function') {
+            // FIX H3: Bind method to instance to preserve 'this' context, or call directly
+            const adapter = this.wasmAdapter as unknown as { createCausalGraph?: () => unknown };
+            if (typeof adapter.createCausalGraph !== 'function') {
                 this.wasmGraph = null;
                 return;
             }
-            const graph = createGraph() as RustCausalGraph | null;
+            // Direct call preserves context
+            const graph = adapter.createCausalGraph() as RustCausalGraph | null;
             if (graph && typeof graph.learn === 'function') {
                 this.wasmGraph = graph;
             }

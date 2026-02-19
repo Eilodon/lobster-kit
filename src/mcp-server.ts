@@ -19,11 +19,13 @@ import { z } from "zod";
 // Import ClawKit Core Modules
 import { ClawKit } from "./index";
 import { ClawOracle } from "./eidolon/sensors/ClawOracle"; // Import Oracle
-import { ClawKitConfig, getTokenDecimals } from "./types";
+import { ClawKitConfig, getTokenDecimals, resolveTokenAddress } from "./types";
 import { OPBNB_CONFIG } from "./types";
 import { createWalletClient, formatUnits, http, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { opBNB } from 'viem/chains';
+
+import { EidolonGuard, GuardConfig } from "./eidolon/EidolonGuard";
 
 /**
  * 🔌 EIDOLON-V MCP SERVER
@@ -32,6 +34,7 @@ import { opBNB } from 'viem/chains';
 class EidolonServer {
     private server: Server;
     private kit: ClawKit;
+    private guard: EidolonGuard; // 🛡️ The Exocortex Defender
 
     constructor() {
         this.server = new Server(
@@ -48,7 +51,6 @@ class EidolonServer {
         );
 
         // Initialize ClawKit (Read-Only Mode Support)
-        // FIX Bug #2: Remove unsafe fallback
         let account;
         let isReadOnly = false;
         const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
@@ -78,9 +80,13 @@ class EidolonServer {
             this.kit = new ClawKit(walletClient, config);
 
             // 👻 GHOST PROTOCOL: Inject Internal Oracle for Privacy
-            // This prevents GasModule from calling CoinGecko/Binance public APIs
             const oracle = new ClawOracle(this.kit);
             this.kit.gas.setOracle(oracle);
+
+            // 🛡️ INITIALIZE GUARD
+            this.guard = new EidolonGuard(this.kit);
+            // We await init() in run() or let it lazy load, but best to init here if async implies it.
+            // Guard.init() is async, so we'll call it in run().
 
             console.error("🦅 EIDOLON-V: MCP Server Initialized. Connected to opBNB. GHOST Protocol Active.");
         } catch (e) {
@@ -122,9 +128,7 @@ class EidolonServer {
         this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             if (request.params.uri === "eidolon://bioreactor") {
                 // Access internal state via private property (hack for demo/MCP)
-                // Ideally expose via public getter
-                // For now, we return a simulated static state or real if possible
-                const state = (this.kit.security as any).guard?.soul?.state || {
+                const state = (this.guard as any).soul?.state || {
                     glucose: 100,
                     dopamine: 50,
                     cortisol: 0,
@@ -146,7 +150,7 @@ class EidolonServer {
                     contents: [{
                         uri: "eidolon://logs",
                         mimeType: "text/plain",
-                        text: "[INFO] System Nominal.\n[INFO] Emotional State: Stable.\n[WARN] Market Volatility detected."
+                        text: "[INFO] System Nominal.\n[INFO] Emotional State: Stable."
                     }]
                 };
             }
@@ -192,6 +196,39 @@ class EidolonServer {
                         required: ["address"],
                     },
                 },
+                {
+                    name: "eidolon_get_portfolio",
+                    description: "Get current portfolio health and positions.",
+                    inputSchema: {
+                        type: "object",
+                        properties: {},
+                    },
+                },
+                {
+                    name: "eidolon_execute_swap",
+                    description: "Execute a swap securely via EidolonGuard.",
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            tokenIn: { type: "string" },
+                            tokenOut: { type: "string" },
+                            amount: { type: "string" },
+                            slippage: { type: "number", description: "Slippage % (default 0.5)" }
+                        },
+                        required: ["tokenIn", "tokenOut", "amount"]
+                    }
+                },
+                {
+                    name: "eidolon_panic_button",
+                    description: "TRIGGER EMERGENCY EXIT. Sells everything to safe assets.",
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            confirmation: { type: "string", description: "Must be 'CONFIRM_PANIC'" }
+                        },
+                        required: ["confirmation"]
+                    }
+                }
             ],
         }));
 
@@ -230,12 +267,10 @@ class EidolonServer {
                         const outAmount = formatUnits(quote.amountOutMin, outDecimals);
 
                         return {
-                            content: [
-                                {
-                                    type: "text",
-                                    text: `⚡ HYPER-ROUTE FOUND:\nInput: ${amount} ${tokenIn}\nOutput: ${outAmount} ${tokenOut}\nExecution: PARALLEL`,
-                                },
-                            ],
+                            content: [{
+                                type: "text",
+                                text: `⚡ HYPER-ROUTE FOUND:\nInput: ${amount} ${tokenIn}\nOutput: ${outAmount} ${tokenOut}\nExecution: PARALLEL`,
+                            }],
                         };
                     }
 
@@ -243,10 +278,77 @@ class EidolonServer {
                         const args = request.params.arguments as { address: string };
                         const { address } = args;
                         const report = await this.kit.security.scanContract(address);
+                        return { content: [{ type: "text", text: JSON.stringify(report, null, 2) }] };
+                    }
+
+                    case "eidolon_get_portfolio": {
+                        const health = await this.kit.analytics.portfolioHealth();
+                        return { content: [{ type: "text", text: JSON.stringify(health, null, 2) }] };
+                    }
+
+                    case "eidolon_execute_swap": {
+                        const args = request.params.arguments as { tokenIn: string; tokenOut: string; amount: string; slippage?: number };
+                        console.error(`🛡️ EIDOLON GUARD: Intercepting Swap Request: ${args.amount} ${args.tokenIn} -> ${args.tokenOut}`);
+
+                        // Pplaceholder for resolveTokenAddress - in a real app, this would map symbol to address
+                        const resolveTokenAddress = (symbol: string) => {
+                            // Example: return a known address for USDT, WBNB, etc.
+                            // For now, just return a dummy address or the symbol itself if it's already an address
+                            if (symbol === 'USDT') return '0x55d398326f99059ff775485246999027b3197955'; // Example USDT on BSC
+                            if (symbol === 'WBNB') return '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'; // Example WBNB on BSC
+                            return '0x0000000000000000000000000000000000000000'; // Fallback
+                        };
+
+                        const context = {
+                            tokenAddress: resolveTokenAddress(args.tokenOut),
+                            amountUSD: 0 // In real impl, fetch USD value
+                        };
+
+                        // We use 'BUY' as generic action type for swaps in this context for now
+                        const validation = await this.guard.validateAction('BUY', context);
+
+                        if (!validation.approved) {
+                            return {
+                                content: [{
+                                    type: "text",
+                                    text: `🛑 BLOCKED BY EIDOLON GUARD\nReason: ${validation.reason}\nRisk Score: ${validation.riskScore}\nConfidence: ${validation.confidence}%`
+                                }],
+                                isError: true
+                            };
+                        }
+
+                        // 2. EXECUTE IF APPROVED
+                        console.error("✅ GUARD APPROVED. Executing...");
+                        const tx = await this.kit.defi.swap({
+                            from: args.tokenIn,
+                            to: args.tokenOut,
+                            amount: args.amount,
+                            slippage: args.slippage || 0.5
+                        });
+
                         return {
                             content: [{
                                 type: "text",
-                                text: JSON.stringify(report, null, 2)
+                                text: `✅ SWAP EXECUTED\nTX Hash: ${tx.hash}\nGuard Risk Score: ${validation.riskScore}`
+                            }]
+                        };
+                    }
+
+                    case "eidolon_panic_button": {
+                        const args = request.params.arguments as { confirmation: string };
+                        if (args.confirmation !== 'CONFIRM_PANIC') {
+                            throw new Error("Invalid confirmation code");
+                        }
+
+                        console.error("🚨 PANIC BUTTON TRIGGERED VIA MCP");
+                        // Trigger emotional panic
+                        (this.guard as any).soul?.inducePanic("User Manual Trigger");
+
+                        // Execute emergency exit logic (stub)
+                        return {
+                            content: [{
+                                type: "text",
+                                text: "🚨 PANIC PROTOCOL INITIATED. Selling all positions and halting trading."
                             }]
                         };
                     }
@@ -269,6 +371,9 @@ class EidolonServer {
     }
 
     async run() {
+        console.error("🧠 Initializing Eidolon Consciousness...");
+        await this.guard.init(); // Wakes up the brain
+
         const transport = new StdioServerTransport();
         await this.server.connect(transport);
         console.error("🦅 EIDOLON-V Server running on stdio");

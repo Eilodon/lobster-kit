@@ -39,8 +39,8 @@ export class DivineTransparency {
    */
   public async explain(state: MarketState, action: ActionType): Promise<DecisionLog> {
 
-    // FIX L1: Connect DeepSeek Oracle (Neural)
-    // FIX L1: Connect DeepSeek Oracle (Neural)
+    // FIX C3: Use local variable to prevent permanent mutation of base weights
+    let effectiveWeights = { ...this.weights };
     let neuralNarrative = '';
 
     if (this.oracle) {
@@ -48,8 +48,8 @@ export class DivineTransparency {
         const insight = await this.oracle.analyze({
           marketState: state
         });
-        // Override weights with neural context
-        this.weights = { ...this.weights, ...insight.weights };
+        // Override local weights with neural context
+        effectiveWeights = { ...effectiveWeights, ...insight.weights };
         neuralNarrative = insight.narrative;
       } catch (e) {
         console.warn('🔮 Oracle connection failed, using instinct (Symbolic)', e);
@@ -62,7 +62,7 @@ export class DivineTransparency {
     // 1. Causal Inference - Analyze each factor
 
     // Whale Flow Analysis
-    const whaleImpact = this.weights.whaleFlow[state.whaleFlow];
+    const whaleImpact = effectiveWeights.whaleFlow[state.whaleFlow];
     if (whaleImpact !== 0) {
       factors.push({
         name: 'Whale Activity',
@@ -73,7 +73,7 @@ export class DivineTransparency {
     }
 
     // Gas Price Analysis
-    const gasImpact = this.weights.gasPrice[state.gasPrice];
+    const gasImpact = effectiveWeights.gasPrice[state.gasPrice];
     if (gasImpact !== 0) {
       factors.push({
         name: 'Network Cost',
@@ -84,7 +84,7 @@ export class DivineTransparency {
     }
 
     // Liquidity Analysis (especially important for SELL actions)
-    const liquidityImpact = this.weights.liquidityDepth[state.liquidityDepth];
+    const liquidityImpact = effectiveWeights.liquidityDepth[state.liquidityDepth];
     if (state.liquidityDepth === 'THIN' && action === 'SELL') {
       factors.push({
         name: 'Liquidity Risk',
@@ -102,7 +102,7 @@ export class DivineTransparency {
     }
 
     // Sentiment Analysis (contrarian)
-    const sentimentImpact = this.weights.sentiment[state.sentiment];
+    const sentimentImpact = effectiveWeights.sentiment[state.sentiment];
     if (sentimentImpact !== 0) {
       factors.push({
         name: 'Market Sentiment',
@@ -113,7 +113,7 @@ export class DivineTransparency {
     }
 
     // Price Action Analysis
-    const priceImpact = this.weights.priceAction[state.priceAction];
+    const priceImpact = effectiveWeights.priceAction[state.priceAction];
     if (priceImpact !== 0) {
       factors.push({
         name: 'Price Momentum',

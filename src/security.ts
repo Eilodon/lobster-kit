@@ -1,5 +1,5 @@
 import { WalletClient, PublicClient, parseAbi, encodeFunctionData } from 'viem';
-import { ClawKitConfig, APPROVAL_REVOKER, PANCAKE_ROUTER, CLAWKIT_CONTRACTS, ClawKitWalletClient, toAddress } from './types';
+import { ClawKitConfig, PANCAKE_ROUTER, CLAWKIT_CONTRACTS, ClawKitWalletClient, toAddress } from './types';
 import axios from 'axios';
 import { withRetry } from './utils/Resilience';
 import { verifyConfigIntegrity } from './utils/ConfigIntegrity';
@@ -451,10 +451,8 @@ export class SecurityModule {
     spender: string,
     tokenAddress: string
   ): Promise<{ hash: string }> {
-    const owner = await this.getAddress();
-
     try {
-      // Call approve with amount = 0
+      // 🛡️ SPINAL REFLEX: Direct approve(0) — no external contract dependency
       const data = encodeFunctionData({
         abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
         functionName: 'approve',
@@ -466,7 +464,7 @@ export class SecurityModule {
         data
       });
 
-      console.error(`✅ Revoked approval for ${spender}`);
+      console.info(`✅ Revoked approval for ${spender} on token ${tokenAddress}`);
       return { hash };
 
     } catch (error) {
@@ -520,7 +518,9 @@ export class SecurityModule {
   }
 
   /**
-   * Batch revoke multiple approvals using ApprovalRevoker contract
+   * 🛡️ SPINAL REFLEX: Batch revoke approvals via direct approve(0) calls.
+   * No external contract dependency — trustless and atomic.
+   * Each revoke is a direct ERC20 call from the user's wallet.
    */
   async batchRevokeApprovals(
     tokens: string[],
@@ -529,61 +529,44 @@ export class SecurityModule {
     if (tokens.length !== spenders.length) {
       throw new Error('Tokens and spenders arrays must have same length');
     }
+    if (tokens.length === 0) {
+      return { hash: '', count: 0 };
+    }
 
-    try {
-      // ApprovalRevoker is a registry — cannot directly revoke on user's behalf.
-      // Step 1: Flag approvals for revocation via the agent
-      const flagData = encodeFunctionData({
-        abi: parseAbi(['function flagApprovalsBatch(address user, address[] tokens, address[] spenders)']),
-        functionName: 'flagApprovalsBatch',
-        args: [
-          toAddress(await this.getAddress()),
-          tokens as `0x${string}`[],
-          spenders as `0x${string}`[]
-        ]
-      });
+    const revokeAbi = parseAbi(['function approve(address spender, uint256 amount) returns (bool)']);
+    const hashes: string[] = [];
+    const errors: string[] = [];
 
-      await this.walletClient.sendTransaction({
-        to: toAddress(APPROVAL_REVOKER),
-        data: flagData
-      });
+    for (let i = 0; i < tokens.length; i++) {
+      try {
+        const data = encodeFunctionData({
+          abi: revokeAbi,
+          functionName: 'approve',
+          args: [toAddress(spenders[i]), 0n]
+        });
 
-      // Step 2: Get revocation calldata and execute each from user's context
-      const [revokeTokens, revokeCalldatas] = await this.publicClient.readContract({
-        address: toAddress(APPROVAL_REVOKER),
-        abi: parseAbi(['function getRevocationCalldata(address user) view returns (address[] tokens, bytes[] calldatas)']),
-        functionName: 'getRevocationCalldata',
-        args: [toAddress(await this.getAddress())]
-      }) as [readonly `0x${string}`[], readonly `0x${string}`[]];
-
-      const hashes: string[] = [];
-      for (let i = 0; i < revokeTokens.length; i++) {
         const hash = await this.walletClient.sendTransaction({
-          to: revokeTokens[i],
-          data: revokeCalldatas[i]
+          to: toAddress(tokens[i]),
+          data
         });
         hashes.push(hash);
+        console.info(`✅ Revoked [${i + 1}/${tokens.length}]: token=${tokens[i]} spender=${spenders[i]}`);
+      } catch (err: any) {
+        // Non-fatal: log and continue. One bad token should not block others.
+        const msg = `Failed to revoke token=${tokens[i]} spender=${spenders[i]}: ${err.message}`;
+        console.error(`❌ ${msg}`);
+        errors.push(msg);
       }
-
-      // Step 3: Clear flagged approvals
-      const clearData = encodeFunctionData({
-        abi: parseAbi(['function clearFlaggedApprovals(uint256 limit)']),
-        functionName: 'clearFlaggedApprovals',
-        args: [0n] // 0 = clear all
-      });
-
-      await this.walletClient.sendTransaction({
-        to: toAddress(APPROVAL_REVOKER),
-        data: clearData
-      });
-
-      console.error(`✅ Batch revoked ${tokens.length} approvals`);
-      return { hash: hashes[0] || '', count: tokens.length };
-
-    } catch (error) {
-      console.error('Error batch revoking approvals:', error);
-      throw new Error('Failed to batch revoke approvals');
     }
+
+    const revokedCount = hashes.length;
+    console.info(`✅ Batch revoke complete: ${revokedCount}/${tokens.length} succeeded.`);
+
+    if (revokedCount === 0 && errors.length > 0) {
+      throw new Error(`Batch revoke failed for all tokens: ${errors[0]}`);
+    }
+
+    return { hash: hashes[0] || '', count: revokedCount };
   }
 
   /**

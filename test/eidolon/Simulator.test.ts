@@ -23,28 +23,21 @@ describe('EidolonSimulator: Hardening Body', () => {
         simulator = new EidolonSimulator(mockKit);
     });
 
-    it('should AUTO-FUND account with Infinite BNB if no overrides provided', async () => {
-        const tx: ShadowTransaction = {
+    it('should NOT auto-fund account (Secure Default)', async () => {
+        const tx = {
             to: '0xTarget',
             data: '0xData',
             value: 100n,
             account: '0xSender'
         };
+        const mockCall = vi.spyOn((simulator as any).client, 'call').mockResolvedValue({ data: '0x' });
+        const mockEst = vi.spyOn((simulator as any).client, 'estimateGas').mockResolvedValue(21000n);
 
-        mockCall.mockResolvedValue({ data: '0xResult' });
-        mockEstimateGas.mockResolvedValue(21000n);
+        await simulator.simulate(tx);
 
-        const result = await simulator.simulate(tx);
-
-        expect(result.success).toBe(true);
-
-        // Verify stateOverride was injected
+        // Verify stateOverride is NOT injected (Secure Default)
         expect(mockCall).toHaveBeenCalledWith(expect.objectContaining({
-            stateOverride: {
-                '0xSender': {
-                    balance: 1000000000000000000000n // 1000 BNB
-                }
-            }
+            stateOverride: undefined
         }));
     });
 

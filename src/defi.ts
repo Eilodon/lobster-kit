@@ -102,7 +102,9 @@ export class DeFiModule {
     to: string,
     data: string,
     value: bigint,
-    amountIn: bigint
+    amountIn: bigint,
+    tokenDecimals: number = 18, // FIX H1: Added decimals for unit normalization
+    emergencyMode: boolean = false // FIX: Emergency Override
   ): Promise<void> {
     try {
       const userAddress = await this.getAddress();
@@ -120,23 +122,30 @@ export class DeFiModule {
       // Note: Both gasCost and amountIn are in Wei, so comparison is unit-consistent
       // for native token swaps. For ERC20 swaps, amountIn is in token's smallest unit.
       if (value > 0n || amountIn > 0n) {
-        const tradeValue = value > 0n ? value : amountIn;
+        // Normalize amountIn to 18 decimals for comparison with Gas (Wei)
+        // If it's a token swap (value=0), we use amountIn.
+        // If it's a native swap (value>0), we use value (already 18 decimals).
 
-        // FIX P2-03: Use BigMath for Zero-Entropy Ratio Check
-        // Calculate ratio: (gasCost / tradeValue) in WAD
-        // if tradeValue < gasCost, ratio > 1.0.
-        // We want ratio <= 0.1 (10%)
+        let tradeValueWei = value;
+        if (value === 0n && amountIn > 0n) {
+          if (tokenDecimals === 18) {
+            tradeValueWei = amountIn;
+          } else if (tokenDecimals < 18) {
+            tradeValueWei = amountIn * (10n ** BigInt(18 - tokenDecimals));
+          } else {
+            tradeValueWei = amountIn / (10n ** BigInt(tokenDecimals - 18));
+          }
+        }
 
-        // Converting to WAD for precision: (gasCost * WAD) / tradeValue
-        // BigMath.divWad(a, b) = a * WAD / b.
-        // We want gasCost / tradeValue.
-        // So divWad(gasCost, tradeValue) returns (gasCost * WAD) / tradeValue.
+        const tradeValue = tradeValueWei;
+        const threshold = tradeValue / 10n; // 10% in same unit (Wei)
 
-        const ratio = BigMath.divWad(gasCost, tradeValue);
-        const threshold = BigMath.toWad("0.1"); // 10%
-
-        if (ratio > threshold) {
-          throw new Error(`Thermodynamic Fail: Gas Cost Ratio ${BigMath.fromWad(ratio)} > 0.1`);
+        if (gasCost > threshold) {
+          if (emergencyMode) {
+            console.warn(`⚠️ THERMODYNAMIC FAIL IGNORED (EMERGENCY MODE): Gas Cost ${formatEther(gasCost)} > 10% of Trade Value`);
+          } else {
+            throw new Error(`Thermodynamic Fail: Gas Cost ${formatEther(gasCost)} > 10% of Trade Value ${formatEther(tradeValue)}`);
+          }
         }
       }
 
@@ -153,7 +162,7 @@ export class DeFiModule {
    * await kit.defi.swap({ from: 'BNB', to: 'USDT', amount: '0.1' })
    */
   async swap(params: SwapParams): Promise<{ hash: string; amountOut: string }> {
-    const { from, to, amount, slippage = 0.5, deadline = 20 } = params;
+    const { from, to, amount, slippage = 0.5, deadline = 20, emergencyMode = false } = params;
 
     // Resolve token addresses
     const fromToken = this.resolveTokenAddress(from);
@@ -214,7 +223,13 @@ export class DeFiModule {
 
       try {
         // ⚡ CHECK 1: FLASH ACCOUNTING (Thermodynamics)
-        await this.checkThermodynamics(router, data, value, amountIn);
+        try {
+          await this.checkThermodynamics(router, data, value, amountIn, fromDecimals, emergencyMode);
+        } catch (err: any) {
+          // FIX: Re-throw fatal thermodynamic errors
+          if (String(err).includes('Thermodynamic Fail')) throw err;
+          console.warn(`Thermodynamic check failed: ${err.message}. Proceeding with caution.`);
+        }
 
         // 🛡️ CHECK 2: SIMULATION (The Hunter's Eye)
         await this.simulateTransaction(router, data, value, userAddress);
@@ -365,11 +380,13 @@ export class DeFiModule {
   * FIXED: Try multiple fee tiers to find liquidity
   */
   public async getRealQuote(
-    tokenIn: string,
-    tokenOut: string,
+    tokenInOrSymbol: string,
+    tokenOutOrSymbol: string,
     amountIn: bigint,
     slippage: number
   ): Promise<{ amountOutMin: bigint; fee: number }> {
+    const tokenIn = this.resolveTokenAddress(tokenInOrSymbol);
+    const tokenOut = this.resolveTokenAddress(tokenOutOrSymbol);
     // FIXED: Parallel execution for all fee tiers (Hyper-Routing)
     const feeTiers = [
       { fee: 2500, name: '0.25%' },  // Most common
@@ -617,13 +634,13 @@ export class DeFiModule {
 
   /**
    * Get user's staked pools
-   */
-  /**
-   * Get user's staked pools
-   * FIX L2: Real on-chain query to MasterChef
+   * ⚡ MULTICALL UPGRADE: All userInfo queries in a single RPC round-trip.
+   * Transforms O(N) sequential awaits into O(1) network latency.
    */
   private async getUserStakedPools(address: string): Promise<any[]> {
     const masterChef = this.contracts.pancakeMasterChef;
+    const userInfoAbi = parseAbi(['function userInfo(uint256 pid, address user) view returns (uint256 amount, uint256 rewardDebt)']);
+    const pendingCakeAbi = parseAbi(['function pendingCake(uint256 pid, address user) view returns (uint256)']);
 
     try {
       // 1. Get pool length
@@ -633,38 +650,51 @@ export class DeFiModule {
         functionName: 'poolLength'
       }) as bigint;
 
-      const pools = [];
-      // 2. Iterate pools (Optimized: In production, use Multicall or Graph)
-      // For now, limiting to first 20 pools to avoid RPC timeout if thousands exist
-      // or just iterate known PIDs if we had a config.
-      // We'll iterate up to 10 for demo/safety, or loop all if small.
-      const scanLimit = poolLength > 20n ? 20n : poolLength;
+      // Scan up to 100 pools. In production, use The Graph for known PIDs.
+      const scanLimit = poolLength > 100n ? 100n : poolLength;
+      if (scanLimit === 0n) return [];
 
-      for (let pid = 0n; pid < scanLimit; pid++) {
-        const userInfo = await this.publicClient.readContract({
-          address: toAddress(masterChef),
-          abi: parseAbi(['function userInfo(uint256 pid, address user) view returns (uint256 amount, uint256 rewardDebt)']),
-          functionName: 'userInfo',
-          args: [pid, toAddress(address)]
-        }) as [bigint, bigint];
+      // 2. ⚡ MULTICALL: Batch all userInfo queries in ONE round-trip
+      const userInfoCalls = Array.from({ length: Number(scanLimit) }, (_, i) => ({
+        address: toAddress(masterChef),
+        abi: userInfoAbi,
+        functionName: 'userInfo' as const,
+        args: [BigInt(i), toAddress(address)] as [bigint, `0x${string}`]
+      }));
 
-        if (userInfo[0] > 0n) {
-          // Determine pending rewards
-          const pending = await this.publicClient.readContract({
-            address: toAddress(masterChef),
-            abi: parseAbi(['function pendingCake(uint256 pid, address user) view returns (uint256)']),
-            functionName: 'pendingCake', // V3 might be different, assuming V2/MasterChef style
-            args: [pid, toAddress(address)]
-          }) as bigint;
+      const userInfoResults = await this.publicClient.multicall({ contracts: userInfoCalls, allowFailure: true });
 
-          pools.push({
-            pid: Number(pid),
-            stakedAmount: userInfo[0],
-            pendingRewards: pending
-          });
+      // 3. Filter pools where user has stake
+      const stakedPids: number[] = [];
+      const stakedAmounts: bigint[] = [];
+      userInfoResults.forEach((res, pid) => {
+        if (res.status === 'success') {
+          const [amount] = res.result as [bigint, bigint];
+          if (amount > 0n) {
+            stakedPids.push(pid);
+            stakedAmounts.push(amount);
+          }
         }
-      }
-      return pools;
+      });
+
+      if (stakedPids.length === 0) return [];
+
+      // 4. ⚡ MULTICALL: Batch pendingCake queries for staked pools only
+      const pendingCalls = stakedPids.map(pid => ({
+        address: toAddress(masterChef),
+        abi: pendingCakeAbi,
+        functionName: 'pendingCake' as const,
+        args: [BigInt(pid), toAddress(address)] as [bigint, `0x${string}`]
+      }));
+
+      const pendingResults = await this.publicClient.multicall({ contracts: pendingCalls, allowFailure: true });
+
+      return stakedPids.map((pid, i) => ({
+        pid,
+        stakedAmount: stakedAmounts[i],
+        pendingRewards: pendingResults[i].status === 'success' ? (pendingResults[i].result as bigint) : 0n
+      }));
+
     } catch (e) {
       console.warn('Failed to fetch staked pools', e);
       return [];

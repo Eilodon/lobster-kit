@@ -11,7 +11,9 @@
     "deploy": "hardhat run scripts/deploy.ts --network opbnb",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",
-    "mcp": "npx tsx src/mcp-server.ts"
+    "mcp": "npx tsx src/mcp-server.ts",
+    "start:mcp": "node dist/mcp-server.js",
+    "docker:build": "docker build -f Dockerfile.mcp -t clawkit/mcp-server ."
   },
   "keywords": [
     "openclaw",

@@ -193,25 +193,36 @@ export class GreenfieldAdapter implements IStorageProvider {
         }
     }
 
-    async readLog(key: string): Promise<any[]> {
+    async readLog(key: string, limit: number = 0): Promise<any[]> {
         const localPath = path.join(this.localDir, key);
         const entries: any[] = [];
 
         try {
             if (!existsSync(localPath)) return [];
 
-            const content = await fs.readFile(localPath, 'utf-8');
-            const lines = content.split('\n');
+            const fileHandle = await fs.open(localPath, 'r');
+            const stream = fileHandle.createReadStream({ encoding: 'utf-8' });
 
-            for (const line of lines) {
+            // Basic line reader implementation to avoid external deps
+            const readline = await import('readline');
+            const rl = readline.createInterface({
+                input: stream,
+                crlfDelay: Infinity
+            });
+
+            for await (const line of rl) {
                 if (!line.trim()) continue;
                 try {
                     const parsed = JSON.parse(line);
                     entries.push(parsed.data);
+                    if (limit > 0 && entries.length > limit) {
+                        entries.shift(); // Keep only the last N
+                    }
                 } catch (e) {
-                    console.warn(`⚠️ Corrupted log entry in ${key}, skipping.`);
+                    // skip corrupted
                 }
             }
+            await fileHandle.close();
         } catch (e: any) {
             console.error(`❌ Failed to read log ${key}`, e);
         }

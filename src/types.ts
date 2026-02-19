@@ -5,6 +5,7 @@ export interface SwapParams {
   amount: string; // Amount in human units (e.g., '1.5')
   slippage?: number; // Slippage tolerance (0-100), default 0.5%
   deadline?: number; // Transaction deadline in minutes, default 20
+  emergencyMode?: boolean; // Bypass thermodynamic checks (Gas/Slippage)
 }
 
 export interface StakeParams {
@@ -105,6 +106,7 @@ export interface ClawKitConfig {
   privateKey?: string; // Optional if WalletClient provided with account
   chainId?: number; // default: 204 (opBNB)
   rpcUrl?: string;
+  proxyUrl?: string; // [NEW] Ghost Protocol Proxy URL
   gasMultiplier?: number;
   privacyMode?: 'strict' | 'balanced'; // strict => no direct external price feeds
   approvalMode?: 'EXACT' | 'BUFFERED' | 'MAX';

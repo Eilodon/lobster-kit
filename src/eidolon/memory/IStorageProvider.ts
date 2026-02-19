@@ -41,6 +41,7 @@ export interface IStorageProvider {
     /**
      * Read all entries from a log file
      * @param key Filename or object key
+     * @param limit Optional limit of recent entries to return (0 = all)
      */
-    readLog(key: string): Promise<any[]>;
+    readLog(key: string, limit?: number): Promise<any[]>;
 }

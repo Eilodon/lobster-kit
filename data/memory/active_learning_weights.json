@@ -1,7 +1,10 @@
 {
   "weights": {},
-  "learningRate": 0.001,
-  "adjustmentCount": 2494,
-  "savedAt": "2026-02-18T00:43:11.088Z",
-  "version": "1.0"
+  "learningRate": 0.0001,
+  "adjustmentCount": 2493,
+  "adamM": {},
+  "adamV": {},
+  "adamT": 0,
+  "savedAt": "2026-02-19T00:03:05.807Z",
+  "version": "2.0"
 }

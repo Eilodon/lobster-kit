@@ -18,6 +18,7 @@ import { TraumaRegistry } from './TraumaRegistry';
 import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
 import { BigMath } from '../utils/BigMath';
 import { KpiTracker, KpiSnapshot } from './metrics/KpiTracker';
+import { withTimeout } from '../utils/Resilience';
 
 /**
  * 🛡️ EIDOLON GUARD
@@ -49,6 +50,7 @@ export interface ValidationResult {
     adjustments?: {
         suggestedPositionSize?: number;
         warning?: string;
+        emergencyMode?: boolean; // FIX: Emergency Override
     };
 }
 
@@ -57,6 +59,7 @@ export class EidolonGuard {
     private wallet: WalletClient;
     private kit: ClawKit;
     private config: GuardConfig;
+    private wasmAdapter: WasmAdapter; // [NEW]
 
     // Components
     private mind: DivineTransparency;
@@ -116,9 +119,9 @@ export class EidolonGuard {
         this.brain = new ActiveLearning();
         this.soul = new EmotionalCore();
 
-        const wasm = WasmAdapter.getInstance();
-        this.valueInvariant = wasm.createValueInvariant(5.0, config.riskParameters.maxPositionSize, 15.0);
-        this.antiRug = wasm.createAntiRug();
+        this.wasmAdapter = WasmAdapter.getInstance();
+        this.valueInvariant = this.wasmAdapter.createValueInvariant(5.0, config.riskParameters.maxPositionSize, 15.0);
+        this.antiRug = this.wasmAdapter.createAntiRug();
         this.trauma = new TraumaRegistry();
         this.traumaStorage = new AppendOnlyAdapter();
 
@@ -133,9 +136,14 @@ export class EidolonGuard {
     }
 
     public async init(): Promise<void> {
+        console.log('🛡️ EIDOLON GUARD: Initializing...');
+
+        // 1. Init WASM (Async Load)
+        await this.wasmAdapter.init();
+
+        // 2. Init Components
         await this.brain.init();
         await this.trauma.initPersistence(this.traumaStorage, 'eidolon_trauma_registry.json');
-        // Soul init is automatic in constructor now
 
         // Load persisted whitelist/blacklist into WASM
         this.loadAntiRugLists();
@@ -254,8 +262,12 @@ export class EidolonGuard {
             const balanceWei = await this.client.getBalance({
                 address: this.wallet.account!.address
             });
-            // Get Price
-            const bnbPrice = await this.oracle.getBNBPrice();
+            // Get Price (with timeout)
+            const bnbPrice = await withTimeout(
+                this.oracle.getBNBPrice(),
+                10000,
+                'Oracle BNB Price Timeout'
+            );
 
             // Calculate Portfolio Value
             const bnbPriceWad = BigMath.toWad(bnbPrice.toString());
@@ -344,19 +356,19 @@ export class EidolonGuard {
                 };
             }
 
-        // 1. HARD INVARIANT CHECK (The Citadel - RUST)
+            // 1. HARD INVARIANT CHECK (The Citadel - RUST)
             if (context.amountUSD !== undefined && context.amountUSD !== null) {
-            // Fix: Calculate predicted impact (default to 1% slippage if unknown)
-            const slippage = (
-                context.estimatedSlippage !== undefined &&
-                Number.isFinite(context.estimatedSlippage) &&
-                context.estimatedSlippage >= 0
-            ) ? context.estimatedSlippage : 0.01;
-            const amountUsdWad = BigMath.toWad(context.amountUSD.toString());
-            const slippageWad = BigMath.toWad(slippage.toString());
-            const predictedImpactWad = BigMath.mulWad(amountUsdWad, slippageWad);
-            const predictedImpact = BigMath.unitsToNumber(predictedImpactWad, 18);
-            const invariantCheck = this.valueInvariant.check_invariant(context.amountUSD, predictedImpact) as unknown as import('./WasmAdapter').InvariantCheckResult;
+                // Fix: Calculate predicted impact (default to 1% slippage if unknown)
+                const slippage = (
+                    context.estimatedSlippage !== undefined &&
+                    Number.isFinite(context.estimatedSlippage) &&
+                    context.estimatedSlippage >= 0
+                ) ? context.estimatedSlippage : 0.01;
+                const amountUsdWad = BigMath.toWad(context.amountUSD.toString());
+                const slippageWad = BigMath.toWad(slippage.toString());
+                const predictedImpactWad = BigMath.mulWad(amountUsdWad, slippageWad);
+                const predictedImpact = BigMath.unitsToNumber(predictedImpactWad, 18);
+                const invariantCheck = this.valueInvariant.check_invariant(context.amountUSD, predictedImpact) as unknown as import('./WasmAdapter').InvariantCheckResult;
 
 
                 if (invariantCheck.circuit_broken) {
@@ -380,24 +392,24 @@ export class EidolonGuard {
 
             // Check 2: Anti-Rug
             if (action === 'BUY' && context.tokenAddress) {
-            const now = Date.now();
-            const cached = this.securityCache.get(context.tokenAddress);
+                const now = Date.now();
+                const cached = this.securityCache.get(context.tokenAddress);
 
-            let security: import('./WasmAdapter').SecurityScore;
+                let security: import('./WasmAdapter').SecurityScore;
 
-            if (cached && (now - cached.timestamp < this.CACHE_TTL)) {
-                // console.log(`⚡ Cache Hit for ${context.tokenAddress}`);
-                security = cached.score;
-            } else {
-                this.debug(`🕵️ Inspecting token: ${context.tokenAddress}`);
-                const tokenData = await this.securityOracle.checkToken(context.tokenAddress);
-
-                if (tokenData) {
-                    security = (this.antiRug as any).compute_score(context.tokenAddress, tokenData) as import('./WasmAdapter').SecurityScore;
+                if (cached && (now - cached.timestamp < this.CACHE_TTL)) {
+                    // console.log(`⚡ Cache Hit for ${context.tokenAddress}`);
+                    security = cached.score;
                 } else {
-                    security = this.antiRug.check_token_security(context.tokenAddress) as unknown as import('./WasmAdapter').SecurityScore;
+                    this.debug(`🕵️ Inspecting token: ${context.tokenAddress}`);
+                    const tokenData = await this.securityOracle.checkToken(context.tokenAddress);
+
+                    if (tokenData) {
+                        security = (this.antiRug as any).compute_score(context.tokenAddress, tokenData) as import('./WasmAdapter').SecurityScore;
+                    } else {
+                        security = this.antiRug.check_token_security(context.tokenAddress) as unknown as import('./WasmAdapter').SecurityScore;
+                    }
                 }
-            }
 
                 if (security.is_honeypot || !security.contract_verified || security.score < 50) {
                     return {
@@ -409,129 +421,137 @@ export class EidolonGuard {
                 }
             }
 
-        // 2. Sense Market
-        const marketState = context.marketState || this.lastMarketState || await this.senseMarket();
+            // 2. Sense Market
+            const marketState = context.marketState || this.lastMarketState || await this.senseMarket();
 
-        // 3. Consult the Mind
-        // FIX L1: Await the now-async explain method (Neural Oracle)
-        const decision: DecisionLog = await this.mind.explain(marketState, action);
-        this.applyCausalBias(decision, marketState, action);
+            // 3. Consult the Mind
+            // FIX L1: Await the now-async explain method (Neural Oracle)
+            // FIX C4: Add timeout to prevent deadlock
+            const decision: DecisionLog = await withTimeout(
+                this.mind.explain(marketState, action),
+                5000,
+                'Mind Explain Timeout'
+            );
+            this.applyCausalBias(decision, marketState, action);
 
-        // 4. Consult the Soul (Thermodynamic)
-        const emotionalState = this.soul.getCurrentState();
-        // currentMode fetched earlier
-        const modeConfig = this.soul.getModeConfig();
+            // 4. Consult the Soul (Thermodynamic)
+            const emotionalState = this.soul.getCurrentState();
+            // currentMode fetched earlier
+            const modeConfig = this.soul.getModeConfig();
 
-        // FIX P2-04: Apply SentinelMode Limits
-        // Override risk parameters based on current mode
-        const maxLeverage = modeConfig.maxLeverage;
-        const maxPositionPct = modeConfig.maxPositionPct;
-        const riskLevel = modeConfig.riskLevel;
+            // FIX P2-04: Apply SentinelMode Limits
+            // Override risk parameters based on current mode
+            const maxLeverage = modeConfig.maxLeverage;
+            const maxPositionPct = modeConfig.maxPositionPct;
+            const riskLevel = modeConfig.riskLevel;
 
-        this.debug(`🧠 SENTINEL MODE: ${currentMode} (Risk: ${riskLevel}, Lev: ${maxLeverage}x)`);
+            this.debug(`🧠 SENTINEL MODE: ${currentMode} (Risk: ${riskLevel}, Lev: ${maxLeverage}x)`);
 
-        // Gate 1: Check Mode Constraints
-        if (currentMode === SentinelMode.EMERGENCY) {
-            return {
-                approved: false,
-                riskScore: 100,
-                confidence: 0,
-                reason: `🚨 SENTINEL EMERGENCY: All trading halted.`,
-                decisionLog: decision
-            };
-        }
+            // Gate 1: Check Mode Constraints
+            if (currentMode === SentinelMode.EMERGENCY) {
+                // FIX: Allow EMERGENCY_EXIT even in EMERGENCY mode
+                if (action !== 'EMERGENCY_EXIT') {
+                    return {
+                        approved: false,
+                        riskScore: 100,
+                        confidence: 0,
+                        reason: `🚨 SENTINEL EMERGENCY: All trading halted.`,
+                        decisionLog: decision
+                    };
+                }
+            }
 
-        // Gate 2: Calculate Risk Score (with mode bias)
-        const riskScore = this.calculateRisk(marketState, action, emotionalState);
+            // Gate 2: Calculate Risk Score (with mode bias)
+            const riskScore = this.calculateRisk(marketState, action, emotionalState);
 
-        // Calculate Position Size Limit based on Mode
-        // We need total portfolio value for this.
-        // Assuming we have it (or fetch it). 
-        // For now, let's use the provided adjustedPositionSize logic, but cap it.
-        const basePositionSize = this.config.riskParameters.maxPositionSize;
-        // Mode limit:
-        // If maxPositionPct is 10%, and portfolio is $1000, limit is $100.
-        // We lack portfolio value in context usually?
-        // updateSnapshot() updates valueInvariant.
-        // Let's assume we use maxPositionSize from config * mode scaler?
-        // Mode Risk is 0-1. 
+            // Calculate Position Size Limit based on Mode
+            // We need total portfolio value for this.
+            // Assuming we have it (or fetch it). 
+            // For now, let's use the provided adjustedPositionSize logic, but cap it.
+            const basePositionSize = this.config.riskParameters.maxPositionSize;
+            // Mode limit:
+            // If maxPositionPct is 10%, and portfolio is $1000, limit is $100.
+            // We lack portfolio value in context usually?
+            // updateSnapshot() updates valueInvariant.
+            // Let's assume we use maxPositionSize from config * mode scaler?
+            // Mode Risk is 0-1. 
 
-        const adjustedPositionSize = basePositionSize * riskLevel;
+            const adjustedPositionSize = basePositionSize * riskLevel;
 
-        const baseValidation = this.evaluateActionPure({
-            decision,
-            emotionalState,
-            riskScore,
-            adjustedPositionSize,
-            modeConfig
-        });
+            const baseValidation = this.evaluateActionPure({
+                decision,
+                emotionalState,
+                riskScore,
+                adjustedPositionSize,
+                modeConfig
+            });
 
             if (!baseValidation.approved) {
                 return baseValidation;
             }
 
-        // Gate 2: MULTIVERSE CHECK (Shadow Simulation)
+            // Gate 2: MULTIVERSE CHECK (Shadow Simulation)
             if (isTradeAction && context.txCandidate) {
-            this.debug('🔮 MULTIVERSE CHECK: Spawning Shadow Clone...');
-            let shadowResult: SimulationResult;
-            let touched: string[] = [];
-            let worstCaseGas: bigint | null = null;
+                this.debug('🔮 MULTIVERSE CHECK: Spawning Shadow Clone...');
+                let shadowResult: SimulationResult;
+                let touched: string[] = [];
+                let worstCaseGas: bigint | null = null;
 
-            const simulatorAny = this.simulator as any;
-            if (typeof simulatorAny.simulateRiskMatrix === 'function') {
-                const matrix = await simulatorAny.simulateRiskMatrix(context.txCandidate);
-                shadowResult = matrix.base;
-                touched = matrix.footprint?.touchedAddresses || [];
-                worstCaseGas = matrix.gasWorstCase?.estimatedGas ?? null;
+                const simulatorAny = this.simulator as any;
+                if (typeof simulatorAny.simulateRiskMatrix === 'function') {
+                    const matrix = await simulatorAny.simulateRiskMatrix(context.txCandidate);
+                    shadowResult = matrix.base;
+                    touched = matrix.footprint?.touchedAddresses || [];
+                    worstCaseGas = matrix.gasWorstCase?.estimatedGas ?? null;
 
-                if (!matrix.allPassed) {
+                    if (!matrix.allPassed) {
+                        this.kpi.recordSimulationResult(false);
+                        return {
+                            approved: false,
+                            riskScore: 100,
+                            confidence: 0,
+                            reason: `💀 MULTI-SIM FAILED: Base scenario reverted (${shadowResult.revertReason || 'unknown reason'})`,
+                            decisionLog: decision
+                        };
+                    }
+                } else {
+                    shadowResult = await this.simulator.simulate(context.txCandidate);
+                    touched = shadowResult.touchedAddresses || [];
+                }
+
+                if (!shadowResult.success) {
                     this.kpi.recordSimulationResult(false);
                     return {
                         approved: false,
                         riskScore: 100,
                         confidence: 0,
-                        reason: `💀 MULTI-SIM FAILED: Base scenario reverted (${shadowResult.revertReason || 'unknown reason'})`,
+                        reason: `💀 SHADOW CLONE DIED: Transaction Revert (${shadowResult.revertReason})`,
                         decisionLog: decision
                     };
                 }
-            } else {
-                shadowResult = await this.simulator.simulate(context.txCandidate);
-                touched = shadowResult.touchedAddresses || [];
-            }
 
-            if (!shadowResult.success) {
-                this.kpi.recordSimulationResult(false);
-                return {
-                    approved: false,
-                    riskScore: 100,
-                    confidence: 0,
-                    reason: `💀 SHADOW CLONE DIED: Transaction Revert (${shadowResult.revertReason})`,
-                    decisionLog: decision
-                };
-            }
+                // 🛡️ BLAST RADIUS CHECK (New in Phase 5)
+                if (touched.length > 10) {
+                    return {
+                        approved: false,
+                        riskScore: 95,
+                        confidence: 10,
+                        reason: `💥 BLAST RADIUS EXCEEDED: Touched ${touched.length} contracts (Max 10). Possible complexity attack.`,
+                        decisionLog: decision
+                    };
+                }
 
-            // 🛡️ BLAST RADIUS CHECK (New in Phase 5)
-            if (touched.length > 10) {
-                return {
-                    approved: false,
-                    riskScore: 95,
-                    confidence: 10,
-                    reason: `💥 BLAST RADIUS EXCEEDED: Touched ${touched.length} contracts (Max 10). Possible complexity attack.`,
-                    decisionLog: decision
-                };
-            }
+                // 🛡️ PHISHING/ROUTING CHECK
+                // If it's a simple APPROVE, it should only touch the Token and the Spender.
+                // Check based on txCandidate data if available
+                // FIX Bug #12: Strict signature check
+                if (context.txCandidate?.data?.startsWith('0x095ea7b3')) { // partial approve sig check
+                    // TODO: Parse tx data properly to identify Approve.
+                    // For now, relies on context.action which might be coarse.
+                }
 
-            // 🛡️ PHISHING/ROUTING CHECK
-            // If it's a simple APPROVE, it should only touch the Token and the Spender.
-            // Check based on txCandidate data if available
-            // FIX Bug #12: Strict signature check
-            if (context.txCandidate?.data?.startsWith('0x095ea7b3')) { // partial approve sig check
-                // TODO: Parse tx data properly to identify Approve.
-                // For now, relies on context.action which might be coarse.
-            }
-
-            const worstCaseSuffix = worstCaseGas ? ` | Worst-case gas: ${worstCaseGas.toString()}` : '';
-            this.debug(`✅ Shadow Clone survived. Cost: ${shadowResult.gasUsed.toString()} gas. Blast Radius: ${touched.length}${worstCaseSuffix}`);
+                const worstCaseSuffix = worstCaseGas ? ` | Worst-case gas: ${worstCaseGas.toString()}` : '';
+                this.debug(`✅ Shadow Clone survived. Cost: ${shadowResult.gasUsed.toString()} gas. Blast Radius: ${touched.length}${worstCaseSuffix}`);
                 this.kpi.recordSimulationResult(true);
             }
 
@@ -639,14 +659,21 @@ export class EidolonGuard {
             reason: decision.reasoning,
             decisionLog: decision,
             adjustments: {
-                suggestedPositionSize: adjustedPositionSize
+                suggestedPositionSize: adjustedPositionSize,
+                emergencyMode: decision.action === 'EMERGENCY_EXIT' || emotionalState.cortisol > 80
             }
         };
     }
 
+
+
     private async senseMarket(): Promise<MarketState> {
         if (this.config.marketStateSensor) {
-            return await this.config.marketStateSensor();
+            return await withTimeout(
+                this.config.marketStateSensor(),
+                5000,
+                'Market Sensor Timeout'
+            );
         }
         return {
             gasPrice: 'MEDIUM',

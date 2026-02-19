@@ -89,3 +89,32 @@ export async function withRetry<T>(
 
     throw lastError;
 }
+
+/**
+ * Wraps a promise with a timeout.
+ * @param promise The promise to wait for
+ * @param ms Timeout in milliseconds
+ * @param errorMessage Optional error message
+ */
+export function withTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    errorMessage: string = 'Operation timed out'
+): Promise<T> {
+    const timeout = new Promise<never>((_, reject) => {
+        const id = setTimeout(() => {
+            clearTimeout(id);
+            reject(new Error(errorMessage));
+        }, ms);
+        // Clean up timeout if promise resolves first? 
+        // Standard Promise.race doesn't cancel the timeout.
+        // For simple usage, this is fine, but in high-throughput nodejs, unref() or clear on win is better.
+        // We'll trust the caller handles the winning promise quickly.
+        if (id.unref) id.unref();
+    });
+
+    return Promise.race([
+        promise,
+        timeout
+    ]);
+}

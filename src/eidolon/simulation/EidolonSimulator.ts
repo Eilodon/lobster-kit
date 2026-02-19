@@ -62,12 +62,10 @@ export class EidolonSimulator {
             let overrides = tx.stateOverride;
 
             // Auto-fund if no override provided (Infinite Money Glitch for Simulation)
+            // FIX C4: Disable auto-funding by default to prevent false positives
+            // Only fund if explicitly requested via stateOverride
             if (!overrides) {
-                overrides = {
-                    [tx.account]: {
-                        balance: 1000000000000000000000n // 1000 BNB
-                    }
-                };
+                // overrides = { [tx.account]: { balance: ... } }; // DISABLED
             }
 
             // 2. Footprint Analysis (Access List)

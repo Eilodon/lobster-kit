@@ -74,8 +74,21 @@ export class OpenClawAdapter {
 
         // 2. Execute Skill (The Hand)
         try {
-            const result = await skill.handler(input.params);
-            this.emitTradeExecuted(mappedAction, validation, input.params, result, true);
+            // FIX: Measure adjustments (Emergency Mode / Position Sizing)
+            const finalParams = { ...input.params };
+            if (validation.adjustments) {
+                if (validation.adjustments.emergencyMode) {
+                    finalParams.emergencyMode = true;
+                    console.warn('🚨 ACTIVATING EMERGENCY OVERRIDE FOR THIS ACTION 🚨');
+                }
+                if (validation.adjustments.suggestedPositionSize) {
+                    // Start small: Just log for now, or override if the skill supports it
+                    // finalParams.amountUSD = validation.adjustments.suggestedPositionSize;
+                }
+            }
+
+            const result = await skill.handler(finalParams);
+            this.emitTradeExecuted(mappedAction, validation, finalParams, result, true);
             return { status: 'success', data: result, validation };
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -87,8 +100,9 @@ export class OpenClawAdapter {
     private mapSkillToAction(skillName: string): 'BUY' | 'SELL' | 'HOLD' {
         const name = skillName.toLowerCase();
         // FIX P1-05: Broader matching to prevent anti-rug bypass
-        const buyPatterns = ['buy', 'purchase', 'acquire', 'swap_to', 'mint', 'long'];
-        const sellPatterns = ['sell', 'dispose', 'swap_from', 'burn', 'short', 'liquidate', 'close'];
+        // FIX H2: Added 'snipe', 'trade' to catch ambiguous trading skills
+        const buyPatterns = ['buy', 'purchase', 'acquire', 'swap_to', 'mint', 'long', 'snipe', 'ape', 'fomo', 'trade'];
+        const sellPatterns = ['sell', 'dispose', 'swap_from', 'burn', 'short', 'liquidate', 'close', 'dump', 'exit'];
 
         if (buyPatterns.some(p => name.includes(p))) return 'BUY';
         if (sellPatterns.some(p => name.includes(p))) return 'SELL';

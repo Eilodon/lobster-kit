@@ -1,139 +1,131 @@
-# 🦞 ClawKit-BNB: Eidolon Edition
+# 🦞 ClawKit-BNB: The AI Survival Layer (MCP Edition)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://github.com/Eilodon/lobster-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/Eilodon/lobster-kit/actions)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
+[![MCP Ready](https://img.shields.io/badge/MCP-Ready-green.svg)](https://modelcontextprotocol.io/)
 [![BNB Chain](https://img.shields.io/badge/BNB%20Chain-OpBNB-yellow)](https://opbnb.bnbchain.org/)
 
-> **"From Toolkit to Living Organism."**
+> **"You provide the Brain (LLM). We provide the Body & Instincts."**
 
-**ClawKit-BNB: Eidolon Edition** is a next-generation AI Agent Framework for BNB Chain (BSC & opBNB). Unlike traditional scripts that simply execute commands, Eidolon Agents possess a primitive form of **digital consciousness**, allowing them to "feel" market volatility, "explain" their decisions, "learn" from outcomes, and "manage" their own risk state.
+**ClawKit-BNB** is not just a DeFi SDK. It is an **AI Exocortex**—a "Survival Layer" designed to give Large Language Models (LLMs) safe, conscious access to the blockchain.
 
----
-
-## 🌟 Key Features
-
-### 🦞 1. Eidolon Consciousness Framework
-The core innovation that transforms static bots into living agents:
-*   **🫀 Sentinel Heart (Adaptive Timing)**: Automatically adjusts heartbeat (polling interval) based on market volatility. "Adrenaline Mode" for high volatility, "Zen Mode" for stability.
-*   **🔮 Divine Transparency (Causal Reasoning)**: Every decision comes with a human-readable explanation (`Why did I buy?`). No more black boxes.
-*   **🧠 Active Learning (Self-Improvement)**: Agents track their P&L and adjust decision weights over time. Bad trades reduce confidence in specific strategies.
-*   **💫 Emotional Core (Risk Management)**: Simulates emotional states (Confident, Cautious, Fearful, Greedy, Panic). A "Panic Protocol" triggers automatic defensive actions during crashes.
-
-### 🛠️ 2. ClawKit Core Modules
-Production-ready toolkit for all on-chain interactions:
-*   **💸 DeFi Module**: Integrated with **PancakeSwap V3** (Swap) and **Venus Protocol** (Lend/Borrow/Repay).
-*   **📊 Analytics Module**: Real-time APY fetching from PancakeSwap/Venus APIs and portfolio health monitoring.
-*   **🛡️ Security Module**: Built-in integration with **GoPlus Security API** to detect honeypots, high taxes, and malicious contracts before interaction.
-*   **⛽ Gas Module**: Smart gas price estimation and optimal execution timing to minimize transaction costs.
-*   **🖼️ NFT Module**: Specialized for **Dynamic Badges** with on-chain metadata and SVG generation.
-
-### 🛡️ 3. SafeGuard Architecture
-*   **Proactive Revocation**: Built-in tools (`ApprovalRevoker`) to batch revoke allowances for high-risk contracts.
-*   **Atomic Transactions**: All operations are built to be atomic and failure-resistant.
+By implementing the **Model Context Protocol (MCP)**, ClawKit acts as a middleware that allows generic AI agents (Claude, ChatGPT, AutoGPT) to perceive market data and execute trades, **protected by an autonomous amygdala (`EidolonGuard`)**.
 
 ---
 
-## 📦 Installation
+## 🧠 Why "Survival Layer"?
+
+LLMs are brilliant planners but terrible executioners. They hallucinate, miscalculate decimals, and fall for honeypots.
+
+**ClawKit intercepts every intent.**
+When your AI says *"Buy this token"*, ClawKit doesn't just execute. It:
+1.  **Feels**: Checks volatility & gas pressure (`EmotionalCore`).
+2.  **Sees**: Scans for honeypots/rugpulls (`GoPlus` + `WasmAdapter`).
+3.  **Thinks**: Simulates the transaction (`EidolonSimulator`).
+4.  **Acts**: Only if the **Risk Score** is acceptable.
+
+---
+
+## 🚀 Features
+
+### 🔌 1. The Exocortex (MCP Server)
+Connect your AI directly to the chain via standard **JSON-RPC**.
+*   **Tools**:
+    *   `eidolon_oracle_sense`: Check prices & market depth.
+    *   `eidolon_security_scan`: Detect honeypots/scams.
+    *   `eidolon_execute_swap`: **Guard-Validated** trading.
+    *   `eidolon_panic_button`: Emergency portfolio liquidation.
+*   **Resources**:
+    *   `eidolon://bioreactor`: Read the agent's dopamine/cortisol levels.
+
+### 🛡️ 2. Eidolon Guard (The Conscious Firewall)
+*   **Anti-Rug System**: WASM-powered bytecode analysis.
+*   **Deadlock Prevention**: Timeout wrappers for all external calls.
+*   **Fail-Closed Consensus**: If Oracles disagree >10%, trading halts.
+
+### 👻 3. Ghost Protocol
+*   **Privacy**: Routes sensitive logic through internal oracles.
+*   **Resilience**: Intelligent retries and circuit breakers (`withRetry`, `withTimeout`).
+
+---
+
+## 📦 Installation & Usage
+
+### Option A: Run as Exocortex (MCP Middleware) - **RECOMMENDED**
+Ideal for connecting to Claude Desktop, Cursor, or Agentic Frameworks.
+
+**Using Docker:**
+```bash
+# 1. Build the image
+npm run docker:build
+
+# 2. Run the Exocortex (Inject your Private Key)
+docker run -e PRIVATE_KEY=0xYourKey... -i clawkit/mcp-server
+```
+
+**Using Node.js:**
+```bash
+# 1. Install & Build
+npm install
+npm run build
+
+# 2. Start MCP Server
+export PRIVATE_KEY=0xYourKey...
+npm run start:mcp
+```
+
+### Option B: Use as SDK (Library)
+For building custom specialized agents.
 
 ```bash
-# Install from local source (recommended for now)
-npm install ./path/to/clawkit-bnb
-
-# Or if published
 npm install @clawkit/bnb
 ```
 
-## 🚀 Quick Start
-
-### 1. Basic Usage (ClawKit)
-
 ```typescript
-import { ClawKit, createWalletClient, http } from '@clawkit/bnb';
-import { privateKeyToAccount } from 'viem/accounts';
-import { opBNB } from 'viem/chains';
+import { ClawKit, EidolonGuard } from '@clawkit/bnb';
 
-const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
-const walletClient = createWalletClient({ account, chain: opBNB, transport: http() });
+// Initialize the Body
+const kit = new ClawKit(walletClient, config);
 
-const kit = new ClawKit(walletClient, { privateKey: process.env.PRIVATE_KEY });
-
-// Swap BNB for USDT
-const tx = await kit.defi.swap({
-  from: 'BNB',
-  to: 'USDT',
-  amount: '0.1'
-});
-console.log('Swap TX:', tx.hash);
-```
-
-### 2. Advanced Usage (Eidolon Guard)
-
-The **EidolonGuard** acts as a conscious security layer that validates every action before execution.
-
-```typescript
-import { EidolonGuard } from '@clawkit/bnb/eidolon';
-
-// Initialize the Guard (The Conscious Layer)
-const guard = new EidolonGuard(publicClient, walletClient, {
-  maxRiskScore: 60,
-  minConfidence: 75,
-  riskParameters: {
-      maxPositionSize: 1000,
-      maxDrawdown: 10,
-      minConfidence: 75,
-      cooldownPeriod: 60000
-  }
-});
-
-// Wake up the agent's memory and sensors
+// Initialize the Soul
+const guard = new EidolonGuard(kit);
 await guard.init();
 
-// ... inside your trading loop ...
-
-// 1. Propose an action
-const action = 'BUY';
-const context = { 
-    tokenAddress: '0x...', 
-    amountUSD: 100 
-};
-
-// 2. Ask the Guard for permission
-const validation = await guard.validateAction(action, context);
+// Safe Execution Wrapper
+const intent = { action: 'BUY', token: '0x...', amount: 100 };
+const validation = await guard.validateAction(intent.action, intent);
 
 if (validation.approved) {
-    console.log("✅ Action Approved by Eidolon:", validation.reason);
-    // Execute trade...
+    console.log("✅ Eidolon Approved:", validation.reason);
+    await kit.defi.swap(...);
 } else {
-    console.log("🛑 Action Blocked:", validation.reason);
-    console.log("Risk Score:", validation.riskScore);
+    console.log("🛑 Blocked (" + validation.riskScore + "% Risk):", validation.reason);
 }
 ```
 
-## 📂 Documentation
+---
 
-*   [**Deep Autopsy Report**](docs/EIDOLON_AUTOPSY.md): Technical analysis of the architecture.
-*   [**Atomic Certificate**](docs/EIDOLON_ATOMIC_CERTIFICATE.md): Security audit and health certification.
-*   [**Deployment Guide**](docs/DEPLOYMENT_GUIDE.md): How to deploy contracts and agents.
-*   [**AI Prompts**](docs/AI_PROMPTS.md): The AI-driven development process.
+## 📂 Architecture
 
-## 🗺️ Roadmap
-
-- [x] **Phase 1: Deep Autopsy**: Architecture analysis & SOTA research.
-- [x] **Phase 2: Refactoring**: Race condition fixes, memory leak patches.
-- [x] **Phase 3: Hardening**: Security upgrades and panic protocols.
-- [x] **Phase 4: Expansion**: Venus Integration, Real Analytics, CI/CD, SafeGuard.
-- [ ] **Phase 5: Pro Version**: Private "Tuned Parameters" & advanced meta-learning models.
-
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```mermaid
+graph TD
+    LLM[Generic LLM (The Brain)] <-->|MCP Protocol| Middleware[ClawKit Exocortex]
+    
+    subgraph "ClawKit Middleware"
+        MCP[MCP Server] --> Guard[Eidolon Guard]
+        Guard --> Soul[Emotional Core]
+        Guard --> Eyes[Security Module]
+        Guard --> Hands[DeFi Module]
+    end
+    
+    Hands -->|Tx| Chain[BNB Chain / OpBNB]
+    Eyes -->|Scan| Chain
+```
 
 ---
 
-**Built with 🦞 by the ClawKit Team**
-*Part of the OpenClaw Ecosystem*
+
+## 📄 License
+
+MIT License.
+**Built with 🦞 by the ClawKit Team.**

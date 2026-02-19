@@ -45,23 +45,42 @@ export interface LearningConfig {
   GAMMA: number;
 }
 
-// ⚠️ PLACEHOLDER LEARNING RATES - Not optimized
-// Production rates use adaptive learning rate scheduling
+// 🧠 ADAM OPTIMIZER CONFIG
+// Adam (Adaptive Moment Estimation) hyperparameters.
+// Replaces simple gradient descent for faster convergence in volatile markets.
 export const LEARNING_CONFIG: LearningConfig = {
-  BASE_LEARNING_RATE: 0.05,      // How much to adjust weights
+  BASE_LEARNING_RATE: 0.001,      // Adam alpha (lower than SGD is correct)
   DECAY_RATE: 0.995,              // Learning rate decay per update
-  MIN_LEARNING_RATE: 0.001,       // Minimum learning rate
+  MIN_LEARNING_RATE: 0.0001,      // Minimum learning rate floor
   REWARD_MULTIPLIER: 1.0,         // Positive reinforcement strength
   PENALTY_MULTIPLIER: 1.2,        // Negative reinforcement strength (learn faster from pain)
   GAMMA: 0.9,                     // Discount factor for future rewards
 };
+
+// Adam Optimizer constants (standard values from original paper)
+const ADAM_BETA1 = 0.9;    // Exponential decay for 1st moment (momentum)
+const ADAM_BETA2 = 0.999;  // Exponential decay for 2nd moment (velocity)
+const ADAM_EPSILON = 1e-8; // Numerical stability constant
+
+// Adam state for a single weight
+interface AdamState {
+  m: number; // 1st moment (mean of gradients)
+  v: number; // 2nd moment (uncentered variance of gradients)
+}
 
 export class ActiveLearning {
   private weights = { ...REASONING_WEIGHTS }; // @deprecated: Keeping for backward compatibility
   private qTable: QTable = {}; // 🧠 The Brain 2.0
   private cognitiveBrain: CausalBrain; // 🧠 The Brain 3.0 (Bayesian)
   private learningRate = Q_CONFIG.ALPHA;
-  private config: LearningConfig; // Fixed: Added property
+  private config: LearningConfig;
+
+  // 🧠 ADAM OPTIMIZER STATE
+  // Per-weight momentum (m) and velocity (v) vectors.
+  // Key format: "category.key" e.g. "whaleFlow.ACCUMULATING"
+  private adamM: Record<string, number> = {}; // 1st moment
+  private adamV: Record<string, number> = {}; // 2nd moment
+  private adamT = 0; // Global timestep (for bias correction)
 
   private tradeHistory: TradeOutcome[] = [];
   private adjustmentCount = 0;
@@ -237,6 +256,8 @@ export class ActiveLearning {
       this.qTable[stateHash] = {
         BUY: 0, SELL: 0, HOLD: 0, EMERGENCY_EXIT: 0
       };
+      // FIX H5: Prevent unbounded memory growth
+      this.pruneMemory();
     }
 
     const currentQ = this.qTable[stateHash][action] || 0;
@@ -328,60 +349,92 @@ export class ActiveLearning {
   }
 
   /**
-   * Update weights using gradient-based learning
-   * Reinforcement Learning: Strengthen pathways that led to profit
+   * 🧠 ADAM OPTIMIZER: Adaptive weight update.
+   * Replaces simple gradient descent.
+   * Formula: w = w - alpha_t * m_hat / (sqrt(v_hat) + eps)
+   * where m_hat and v_hat are bias-corrected moment estimates.
    */
   private updateWeights(decision: DecisionLog, reward: number): void {
-    this.debug('    🔄 Updating neural pathways...');
+    this.debug('    🔄 Updating neural pathways (Adam Optimizer)...');
 
-    const adjustment = this.learningRate * reward;
     const multiplier = reward > 0
       ? this.config.REWARD_MULTIPLIER
       : this.config.PENALTY_MULTIPLIER;
 
-    // Update weights based on causal factors
+    // Gradient = reward signal scaled by multiplier and causal factor impact
     decision.causalFactors.forEach(factor => {
-      const weightUpdate = adjustment * multiplier * (factor.impact / 100);
+      let category: keyof typeof this.weights | null = null;
+      let key: string | null = null;
 
-      // Apply updates to specific weight categories
       if (factor.name === 'Whale Activity') {
-        this.adjustWeight('whaleFlow', decision.marketState.whaleFlow, weightUpdate);
+        category = 'whaleFlow'; key = decision.marketState.whaleFlow;
       } else if (factor.name === 'Network Cost') {
-        this.adjustWeight('gasPrice', decision.marketState.gasPrice, weightUpdate);
+        category = 'gasPrice'; key = decision.marketState.gasPrice;
       } else if (factor.name === 'Liquidity Risk' || factor.name === 'Liquidity Depth') {
-        this.adjustWeight('liquidityDepth', decision.marketState.liquidityDepth, weightUpdate);
+        category = 'liquidityDepth'; key = decision.marketState.liquidityDepth;
       } else if (factor.name === 'Market Sentiment') {
-        this.adjustWeight('sentiment', decision.marketState.sentiment, weightUpdate);
+        category = 'sentiment'; key = decision.marketState.sentiment;
       } else if (factor.name === 'Price Momentum') {
-        this.adjustWeight('priceAction', decision.marketState.priceAction, weightUpdate);
+        category = 'priceAction'; key = decision.marketState.priceAction;
       }
+
+      if (!category || !key) return;
+
+      // Gradient: how much this factor contributed to the outcome
+      const gradient = reward * multiplier * (factor.impact / 100);
+
+      this.applyAdamUpdate(category, key, gradient);
     });
 
     this.adjustmentCount++;
   }
 
   /**
-   * 🧠 NEURAL LINK: Robust Weight Adjustment
-   * Normalizes keys to prevent learning failures due to casing issues.
+   * Apply a single Adam update step to a specific weight.
+   * @param category - Weight category (e.g. 'whaleFlow')
+   * @param key - Weight key (e.g. 'ACCUMULATING')
+   * @param gradient - The gradient signal for this step
    */
-  private adjustWeight(category: keyof typeof this.weights, key: string, delta: number): void {
+  private applyAdamUpdate(category: keyof typeof this.weights, key: string, gradient: number): void {
     const categoryWeights = this.weights[category];
-    // Try exact match first
-    if (key in categoryWeights) {
-      (categoryWeights as any)[key] += delta;
-      this.debug(`       ${category} [${key}]: ${(categoryWeights as any)[key].toFixed(2)} (Δ ${delta.toFixed(4)})`);
+    // Normalize key
+    const resolvedKey = key in categoryWeights ? key
+      : key.toUpperCase() in categoryWeights ? key.toUpperCase()
+        : null;
+
+    if (!resolvedKey) {
+      console.warn(`⚠️ Adam: Key '${key}' not found in '${category}'. Skipping.`);
       return;
     }
 
-    // Try normalized match (Upper Case)
-    const upperKey = key.toUpperCase();
-    if (upperKey in categoryWeights) {
-      (categoryWeights as any)[upperKey] += delta;
-      this.debug(`       ${category} [${upperKey}]: ${(categoryWeights as any)[upperKey].toFixed(2)} (Δ ${delta.toFixed(4)})`);
-      return;
-    }
+    const stateKey = `${category}.${resolvedKey}`;
 
-    console.warn(`       ⚠️ Neural Link Warning: Key '${key}' not found in category '${category}'.Learning skipped for this factor.`);
+    // Increment global timestep
+    this.adamT += 1;
+
+    // Get or initialize moment vectors
+    const m = this.adamM[stateKey] ?? 0;
+    const v = this.adamV[stateKey] ?? 0;
+
+    // Update biased 1st moment estimate (momentum)
+    const mNew = ADAM_BETA1 * m + (1 - ADAM_BETA1) * gradient;
+    // Update biased 2nd moment estimate (velocity)
+    const vNew = ADAM_BETA2 * v + (1 - ADAM_BETA2) * gradient * gradient;
+
+    // Store updated moments
+    this.adamM[stateKey] = mNew;
+    this.adamV[stateKey] = vNew;
+
+    // Compute bias-corrected estimates
+    const mHat = mNew / (1 - Math.pow(ADAM_BETA1, this.adamT));
+    const vHat = vNew / (1 - Math.pow(ADAM_BETA2, this.adamT));
+
+    // Adam update rule
+    const weightUpdate = this.learningRate * mHat / (Math.sqrt(vHat) + ADAM_EPSILON);
+
+    const oldVal = (categoryWeights as any)[resolvedKey];
+    (categoryWeights as any)[resolvedKey] = oldVal + weightUpdate;
+    this.debug(`       Adam[${stateKey}]: ${oldVal.toFixed(4)} -> ${((categoryWeights as any)[resolvedKey]).toFixed(4)} (g=${gradient.toFixed(4)}, m̂=${mHat.toFixed(4)}, v̂=${vHat.toFixed(4)})`);
   }
 
   /**
@@ -487,18 +540,22 @@ export class ActiveLearning {
   }
 
   /**
-   * FIXED: Save weights and history to disk
-   * Enables "Living Organism" - agent remembers what it learned!
+   * Save weights and Adam optimizer state to disk.
+   * Enables "Living Organism" - agent remembers what it learned AND how it was learning!
    */
   public async saveToDisk(forceSnapshot: boolean = false): Promise<void> {
     try {
-      // Save weights
+      // Save weights + Adam optimizer state
       const weightsData = {
         weights: this.weights,
         learningRate: this.learningRate,
         adjustmentCount: this.adjustmentCount,
+        // 🧠 ADAM STATE: Persist momentum so brain doesn't lose velocity on restart
+        adamM: this.adamM,
+        adamV: this.adamV,
+        adamT: this.adamT,
         savedAt: new Date().toISOString(),
-        version: '1.0'
+        version: '2.0' // Bumped: Adam optimizer
       };
 
       await this.storage.save(this.WEIGHTS_KEY, weightsData);
@@ -530,11 +587,7 @@ export class ActiveLearning {
       this.dirtyQStates.clear();
       this.pendingUpdates = 0;
 
-      // Save history (last 1000 trades to limit file size)
-      const recentHistory = this.tradeHistory.slice(-1000);
-      // await this.storage.save(this.HISTORY_KEY, recentHistory); // Log is already appended
-
-      this.debug('💾 Brain State (Weights + Q-Table) saved to local memory');
+      this.debug('💾 Brain State (Weights + Adam + Q-Table) saved to local memory');
     } catch (error: any) {
       console.error('❌ Failed to save weights:', error.message);
       throw error;
@@ -542,21 +595,25 @@ export class ActiveLearning {
   }
 
   /**
-   * FIXED: Load weights and history from disk
-   * Called automatically on startup
+   * Load weights, Adam state, and history from disk.
+   * Called automatically on startup.
    */
   public async loadFromDisk(): Promise<void> {
     try {
-      // Load weights
+      // Load weights + Adam state
       const saved = await this.storage.load<any>(this.WEIGHTS_KEY);
 
       if (saved) {
         this.weights = saved.weights;
         this.learningRate = saved.learningRate;
         this.adjustmentCount = saved.adjustmentCount;
+        // 🧠 RESTORE ADAM STATE: Brain retains its learning momentum
+        if (saved.adamM) this.adamM = saved.adamM;
+        if (saved.adamV) this.adamV = saved.adamV;
+        if (typeof saved.adamT === 'number') this.adamT = saved.adamT;
 
-        this.debug(`🧠 Loaded learned weights from ${saved.savedAt} `);
-        this.debug(`   Adjustments made: ${saved.adjustmentCount} `);
+        this.debug(`🧠 Loaded learned weights (v${saved.version || '1.0'}) from ${saved.savedAt}`);
+        this.debug(`   Adjustments made: ${saved.adjustmentCount}, Adam t=${this.adamT}`);
       }
 
       // Load Q-Table
@@ -755,6 +812,7 @@ export class ActiveLearning {
       activeSignals.push({ cause: 'GasPriceGwei', effect: 'Volatility', direction: -1, label: 'High gas volatility pressure', weight: 0.6 });
     }
 
+
     if (activeSignals.length === 0) {
       return { confidenceDelta: 0, explanations: [] };
     }
@@ -785,5 +843,29 @@ export class ActiveLearning {
 
     const confidenceDelta = Math.round(Math.max(-1, Math.min(1, normalized)) * 20);
     return { confidenceDelta, explanations };
+  }
+
+
+  /**
+   * 🛡️ MEMORY DEFENSE: Prune Q-Table
+   * Prevents memory leaks by randomly evicting old states if table grows too large.
+   */
+  private pruneMemory(): void {
+    const MAX_STATES = 5000;
+    const keys = Object.keys(this.qTable);
+    if (keys.length <= MAX_STATES) return;
+
+    this.debug(`🧹 Pruning memory (Size: ${keys.length} > ${MAX_STATES})...`);
+
+    // Random eviction (approx 10% of table)
+    // In a real system, we'd use LRU, but random is sufficient for robustness here.
+    const target = Math.floor(keys.length * 0.9);
+    while (Object.keys(this.qTable).length > target) {
+      const idx = Math.floor(Math.random() * keys.length);
+      const keyToDelete = keys[idx];
+      if (this.qTable[keyToDelete]) {
+        delete this.qTable[keyToDelete];
+      }
+    }
   }
 }

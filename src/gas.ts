@@ -23,7 +23,8 @@ export class GasModule {
 
   // Price cache to reduce API calls and handle rate limits
   private priceCache: { value: number; timestamp: number } | null = null;
-  private readonly CACHE_DURATION = 60000; // 1 minute cache
+  // FIX H2: Reduce cache duration to 5s (opBNB blocks are 1s)
+  private readonly CACHE_DURATION = 5000;
 
   constructor(
     private walletClient: ClawKitWalletClient,
@@ -306,8 +307,14 @@ export class GasModule {
   ): Promise<() => void> {
     console.log(`🔔 Monitoring gas prices. Target: ${targetGwei} Gwei`);
 
+    let lastCheckTime = 0;
     const unwatch = this.publicClient.watchBlockNumber({
       onBlockNumber: async () => {
+        // FIX: Throttle to 3s to prevent RPC spam on L2 (1s blocks)
+        const now = Date.now();
+        if (now - lastCheckTime < 3000) return;
+        lastCheckTime = now;
+
         const gasPrice = await this.publicClient.getGasPrice();
         const gasPriceGwei = parseFloat(formatEther(gasPrice)) * 1e9;
 

@@ -1,3 +1,6 @@
+import * as path from 'path';
+import * as fs from 'fs';
+
 export interface InvariantCheckResult {
     safe: boolean;
     reason?: string;
@@ -144,14 +147,26 @@ class MockAntiRug implements AntiRug {
             };
         }
 
+        if (this.whitelist.has(tokenAddress.toLowerCase())) {
+            return {
+                score: 100,
+                is_honeypot: false,
+                liquidity_locked: true,
+                liquidity_unknown: false,
+                contract_verified: true,
+                owner_renounced: true,
+                status: 'WHITELISTED'
+            };
+        }
+
         return {
-            score: 60,
+            score: 0, // FAIL-CLOSED: Assume unsafe if checking mechanism (WASM) is offline
             is_honeypot: false,
             liquidity_locked: false,
             liquidity_unknown: true,
-            contract_verified: true,
+            contract_verified: false, // Assume unverified
             owner_renounced: false,
-            status: 'UNKNOWN'
+            status: 'UNSAFE_MOCK' // Distinct status for debugging
         };
     }
 
@@ -214,29 +229,80 @@ class MockAntiRug implements AntiRug {
  */
 export class WasmAdapter {
     private static instance: WasmAdapter;
-    private readonly coreModule: any;
-    private readonly fallbackMode: boolean;
+    private coreModule: any = null;
+    private fallbackMode: boolean = true;
+    private initialized: boolean = false;
 
-    private constructor() {
-        this.coreModule = this.safeLoadCoreModule();
-        this.fallbackMode = !this.coreModule;
-    }
-
-    private safeLoadCoreModule(): any | null {
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            return require('../../pkg/core_rust');
-        } catch (error) {
-            console.warn('⚠️ WASM core unavailable. Falling back to deterministic TS mocks.', error);
-            return null;
-        }
-    }
+    private constructor() { }
 
     public static getInstance(): WasmAdapter {
         if (!WasmAdapter.instance) {
             WasmAdapter.instance = new WasmAdapter();
         }
         return WasmAdapter.instance;
+    }
+
+    /**
+     * Resets the singleton instance.
+     * Useful for testing to ensure a clean state.
+     */
+    public static resetInstance(): void {
+        (WasmAdapter.instance as any) = null;
+    }
+
+    public async init(): Promise<void> {
+        if (this.initialized) return;
+
+        try {
+            // FIX: Use dynamic import for ESM support and correct path
+            // Path relative to dist/eidolon/WasmAdapter.js might be different than src
+            // But usually bundlers handle this. For Node execution:
+            // src/eidolon -> ../../core-rust/pkg/core_rust.js
+            try {
+                // 1. Import the JS Wrapper (ESM)
+                // Need to use absolute path resolution for stability in tests/node
+                const projectRoot = path.resolve(__dirname, '../../..'); // src/eidolon -> src -> root
+                // Check if we are in dist or src. 
+                // If __dirname contains 'src', we go up 2 levels to root.
+                // If __dirname contains 'dist', we go up 2 levels to root.
+                // Safest is to find 'core-rust' relative to this file.
+
+                const pkgPath = path.resolve(__dirname, '../../core-rust/pkg');
+                const jsPath = path.join(pkgPath, 'core_rust.js');
+                const wasmPath = path.join(pkgPath, 'core_rust_bg.wasm');
+
+                if (fs.existsSync(jsPath)) {
+                    const module = await import(jsPath);
+
+                    // 2. Initialize WASM memory with Binary (Node.js support)
+                    if (fs.existsSync(wasmPath)) {
+                        const buffer = fs.readFileSync(wasmPath);
+                        // Call default export (init) with the buffer
+                        // This populates the 'wasm' variable inside the module closure
+                        if (typeof module.default === 'function') {
+                            await module.default(buffer);
+                        }
+                    } else {
+                        console.warn('⚠️ WASM binary not found at', wasmPath);
+                    }
+
+                    this.coreModule = module;
+                    this.fallbackMode = false;
+                    console.log('🦀 WASM Core Loaded & Initialized');
+                } else {
+                    console.warn('⚠️ WASM JS wrapper not found at', jsPath);
+                    this.coreModule = null;
+                }
+            } catch (e1) {
+                console.warn('⚠️ WASM load failed:', e1);
+                this.coreModule = null; // Fallback
+            }
+        } catch (error) {
+            console.warn('⚠️ WASM core unavailable. Falling back to deterministic TS mocks.', error);
+            this.fallbackMode = true;
+        } finally {
+            this.initialized = true;
+        }
     }
 
     /**

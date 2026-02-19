@@ -19,7 +19,12 @@ export class EventRingBuffer<T extends object> {
             this.overflowCount++;
             return false;
         }
-        Object.assign(this.buffer[this.count], event);
+        // FIX C1: Ghost Event Bug
+        // Originally: Object.assign(this.buffer[this.count], event);
+        // Problem: Merged new event props into OLD object, keeping stale props (e.g. lossAmount).
+        // Solution: Direct assignment. We lose 'Zero-GC' benefit if 'event' is fresh (which it is),
+        // but we gain correctness. GC handles the old reference.
+        this.buffer[this.count] = event;
         this.count++;
         return true;
     }
