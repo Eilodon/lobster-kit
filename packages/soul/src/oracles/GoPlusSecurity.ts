@@ -56,9 +56,11 @@ export class GoPlusSecurity {
                 if (raw.is_locked !== undefined && raw.is_locked !== null) {
                     liquidityLocked = raw.is_locked === '1' || raw.is_locked === 1 || raw.is_locked === true;
                 } else if (Array.isArray(raw.lp_holders) && raw.lp_holders.length > 0) {
-                    liquidityLocked = raw.lp_holders.some((h: any) =>
-                        h?.is_locked === '1' || h?.is_locked === 1 || h?.is_locked === true
-                    );
+                    liquidityLocked = raw.lp_holders.some((h: unknown) => {
+                        if (!h || typeof h !== 'object') return false;
+                        const holder = h as { is_locked?: unknown };
+                        return holder.is_locked === '1' || holder.is_locked === 1 || holder.is_locked === true;
+                    });
                 }
 
                 // Map raw API response to our typed interface

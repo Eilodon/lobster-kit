@@ -2,18 +2,35 @@ import * as path from 'path';
 import { IStorageProvider } from './IStorageProvider';
 import { AppendOnlyAdapter } from './AppendOnlyAdapter';
 
+type SqliteRow = Record<string, unknown>;
+
+interface SqliteStatement<Row extends SqliteRow = SqliteRow> {
+    run(...params: unknown[]): void;
+    get(...params: unknown[]): Row | undefined;
+    all(...params: unknown[]): Row[];
+}
+
+interface SqliteDatabase {
+    pragma(statement: string): void;
+    exec(statement: string): void;
+    prepare<Row extends SqliteRow = SqliteRow>(sql: string): SqliteStatement<Row>;
+    close(): void;
+}
+
+type SqliteDatabaseConstructor = new (path: string) => SqliteDatabase;
+
 /**
  * SQLite-backed storage provider for high-frequency learning writes.
  * Uses better-sqlite3 when available, otherwise falls back to AppendOnlyAdapter.
  */
 export class SQLiteLearningStore implements IStorageProvider {
-    private db: any = null;
+    private db: SqliteDatabase | null = null;
     private readonly dbPath: string;
     private readonly fallback: AppendOnlyAdapter;
     private readonly allowFallback: boolean;
-    private readonly databaseClass: any;
+    private readonly databaseClass?: SqliteDatabaseConstructor;
 
-    constructor(config: { dbPath?: string; fallbackDir?: string; allowFallback?: boolean; databaseClass?: any } = {}) {
+    constructor(config: { dbPath?: string; fallbackDir?: string; allowFallback?: boolean; databaseClass?: SqliteDatabaseConstructor } = {}) {
         this.dbPath = config.dbPath || path.join(process.cwd(), 'data', 'memory', 'eidolon_learning.db');
         this.fallback = new AppendOnlyAdapter({ baseDir: config.fallbackDir });
         this.allowFallback = config.allowFallback !== false;
@@ -28,7 +45,7 @@ export class SQLiteLearningStore implements IStorageProvider {
     async init(): Promise<void> {
         try {
             // Use injected class or dynamic import to avoid hard require in linted TS.
-            const Database = this.databaseClass || (await import('better-sqlite3')).default;
+            const Database = this.databaseClass || (await import('better-sqlite3')).default as unknown as SqliteDatabaseConstructor;
             this.db = new Database(this.dbPath);
             this.db.pragma('journal_mode = WAL');
             this.db.pragma('secure_delete = ON'); // FIX: Overwrite deleted data with zeros
@@ -54,7 +71,7 @@ export class SQLiteLearningStore implements IStorageProvider {
         }
     }
 
-    async save(key: string, data: any): Promise<void> {
+    async save<T = unknown>(key: string, data: T): Promise<void> {
         if (!this.db) return this.fallback.save(key, data);
         const stmt = this.db.prepare(`
             INSERT INTO kv_store (k, v, updated_at)
@@ -66,8 +83,8 @@ export class SQLiteLearningStore implements IStorageProvider {
 
     async load<T>(key: string): Promise<T | null> {
         if (!this.db) return this.fallback.load<T>(key);
-        const stmt = this.db.prepare('SELECT v FROM kv_store WHERE k = ?');
-        const row = stmt.get(key);
+        const stmt = this.db.prepare<{ v: string }>('SELECT v FROM kv_store WHERE k = ?');
+        const row = stmt.get(key) as { v: string } | undefined;
         if (!row) return null;
         try {
             return JSON.parse(row.v) as T;
@@ -78,17 +95,17 @@ export class SQLiteLearningStore implements IStorageProvider {
 
     async list(): Promise<string[]> {
         if (!this.db) return this.fallback.list();
-        const rows = this.db.prepare('SELECT k FROM kv_store').all();
-        return rows.map((r: any) => String(r.k));
+        const rows = this.db.prepare<{ k: string }>('SELECT k FROM kv_store').all();
+        return rows.map((r) => String(r.k));
     }
 
-    async append(key: string, data: any): Promise<void> {
+    async append<T = unknown>(key: string, data: T): Promise<void> {
         if (!this.db) return this.fallback.append(key, data);
         const stmt = this.db.prepare('INSERT INTO append_logs (k, ts, v) VALUES (?, ?, ?)');
         stmt.run(key, Date.now(), JSON.stringify(data));
     }
 
-    async readLog(key: string, limit: number = 0, offset: number = 0): Promise<any[]> {
+    async readLog<T = unknown>(key: string, limit: number = 0, offset: number = 0): Promise<T[]> {
         if (!this.db) return this.fallback.readLog(key, limit, offset);
 
         // Standard: Head (Oldest First)
@@ -113,17 +130,17 @@ export class SQLiteLearningStore implements IStorageProvider {
         }
 
         const stmt = this.db.prepare(sql);
-        const rows = stmt.all(...params);
+        const rows = stmt.all(...params) as Array<{ v: string }>;
 
         if (limit > 0 && offset === 0) {
             // We fetched DESC (Tail), so reverse to get ASC
             rows.reverse();
         }
 
-        const out: unknown[] = [];
+        const out: T[] = [];
         for (const row of rows) {
             try {
-                out.push(JSON.parse(row.v));
+                out.push(JSON.parse(row.v) as T);
             } catch {
                 // skip corrupted entry
             }

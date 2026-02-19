@@ -2,6 +2,7 @@ import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS, QTable, Q_CONFIG, Ma
 import { IStorageProvider } from './memory/IStorageProvider';
 import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
 import { CausalBrain, SentinelVariable } from './ai/CausalBrain';
+import { RollingHistoryBuffer } from './events/RollingHistoryBuffer';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -45,6 +46,25 @@ export interface LearningConfig {
   GAMMA: number;
 }
 
+interface StoredWeights {
+  weights: typeof REASONING_WEIGHTS;
+  learningRate: number;
+  adjustmentCount: number;
+  adamM?: Record<string, number>;
+  adamV?: Record<string, number>;
+  adamT?: number;
+  savedAt?: string;
+  version?: string;
+}
+
+interface StoredQTable {
+  qTable: QTable;
+}
+
+interface QDeltaEntry {
+  updates?: Record<string, Partial<Record<ActionType, number>>>;
+}
+
 // 🧠 ADAM OPTIMIZER CONFIG
 // Adam (Adaptive Moment Estimation) hyperparameters.
 // Replaces simple gradient descent for faster convergence in volatile markets.
@@ -76,11 +96,11 @@ export class ActiveLearning {
   private adamV: Record<string, number> = {}; // 2nd moment
   private adamT = 0; // Global timestep (for bias correction)
 
-  private tradeHistory: TradeOutcome[] = [];
+  private tradeHistory!: RollingHistoryBuffer<TradeOutcome>;
   private adjustmentCount = 0;
 
   // Persistence
-  private storage: AppendOnlyAdapter;
+  private storage: IStorageProvider;
   private readonly WEIGHTS_KEY = 'active_learning_weights.json';
   private readonly Q_TABLE_KEY = 'active_learning_q_table.json'; // New Brain Memory
   private readonly CAUSAL_KEY = 'active_learning_causal.json'; // Synaptic Map
@@ -112,7 +132,7 @@ export class ActiveLearning {
     this.config = config;
 
     // Default to AppendOnly (Local) for Phase 1
-    this.storage = (storage as AppendOnlyAdapter) || new AppendOnlyAdapter();
+    this.storage = storage ?? new AppendOnlyAdapter();
     this.cognitiveBrain = new CausalBrain();
   }
 
@@ -390,6 +410,12 @@ export class ActiveLearning {
    * @param gradient - The gradient signal for this step
    */
   private applyAdamUpdate(category: keyof typeof this.weights, key: string, gradient: number): void {
+    // FIX: NaN Poisoning Guard
+    if (!Number.isFinite(gradient) || Number.isNaN(gradient)) {
+      console.warn(`⚠️ Adam: Ignored NaN/Infinity gradient for ${category}.${key}`);
+      return;
+    }
+
     const categoryWeights = this.weights[category];
     // Normalize key
     const resolvedKey = key in categoryWeights ? key
@@ -426,9 +452,9 @@ export class ActiveLearning {
     // Adam update rule
     const weightUpdate = this.learningRate * mHat / (Math.sqrt(vHat) + ADAM_EPSILON);
 
-    const oldVal = (categoryWeights as any)[resolvedKey];
-    (categoryWeights as any)[resolvedKey] = oldVal + weightUpdate;
-    this.debug(`       Adam[${stateKey}]: ${oldVal.toFixed(4)} -> ${((categoryWeights as any)[resolvedKey]).toFixed(4)} (g=${gradient.toFixed(4)}, m̂=${mHat.toFixed(4)}, v̂=${vHat.toFixed(4)})`);
+    const oldVal = categoryWeights[resolvedKey] ?? 0;
+    categoryWeights[resolvedKey] = oldVal + weightUpdate;
+    this.debug(`       Adam[${stateKey}]: ${oldVal.toFixed(4)} -> ${categoryWeights[resolvedKey].toFixed(4)} (g=${gradient.toFixed(4)}, m̂=${mHat.toFixed(4)}, v̂=${vHat.toFixed(4)})`);
   }
 
   /**
@@ -464,7 +490,8 @@ export class ActiveLearning {
       };
     }
 
-    const successfulTrades = this.tradeHistory.filter(t => t.success);
+    const history = this.tradeHistory.toArray();
+    const successfulTrades = history.filter(t => t.success);
     const wins = successfulTrades.filter(t => t.profitLoss > 0);
     const losses = successfulTrades.filter(t => t.profitLoss < 0);
 
@@ -582,8 +609,9 @@ export class ActiveLearning {
       this.pendingUpdates = 0;
 
       this.debug('💾 Brain State (Weights + Adam + Q-Table) saved to local memory');
-    } catch (error: any) {
-      console.error('❌ Failed to save weights:', error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('❌ Failed to save weights:', message);
       throw error;
     }
   }
@@ -595,7 +623,7 @@ export class ActiveLearning {
   public async loadFromDisk(): Promise<void> {
     try {
       // Load weights + Adam state
-      const saved = await this.storage.load<any>(this.WEIGHTS_KEY);
+      const saved = await this.storage.load<StoredWeights>(this.WEIGHTS_KEY);
 
       if (saved) {
         this.weights = saved.weights;
@@ -611,7 +639,7 @@ export class ActiveLearning {
       }
 
       // Load Q-Table
-      const savedQ = await this.storage.load<any>(this.Q_TABLE_KEY);
+      const savedQ = await this.storage.load<StoredQTable>(this.Q_TABLE_KEY);
       if (savedQ) {
         this.qTable = savedQ.qTable;
         this.debug(`🧠 Loaded Q - Table(Size: ${Object.keys(this.qTable).length} states)`);
@@ -621,7 +649,8 @@ export class ActiveLearning {
       await this.cognitiveBrain.loadSynapticMap(this.storage, this.CAUSAL_KEY);
 
       // Replay Q-Delta log on top of snapshot.
-      const qDeltas = await this.storage.readLog(this.Q_DELTA_KEY);
+      // Replay Q-Delta log on top of snapshot.
+      const qDeltas = (await this.storage.readLog(this.Q_DELTA_KEY)) as QDeltaEntry[];
       if (qDeltas.length > 0) {
         for (const delta of qDeltas) {
           if (!delta?.updates || typeof delta.updates !== 'object') continue;
@@ -638,11 +667,11 @@ export class ActiveLearning {
       }
 
       // Load history from AppendLog (Limit to last 1000 to prevent OOM)
-      const logs = await this.storage.readLog(this.HISTORY_KEY, 1000);
+      const logs = (await this.storage.readLog(this.HISTORY_KEY, 1000)) as TradeOutcome[];
       if (logs.length > 0) {
         // Keep bounded working-set in memory
-        this.tradeHistory = logs;
-        this.debug(`📊 Loaded ${this.tradeHistory.length} historical trades from AppendLog`);
+        this.tradeHistory.clear();
+        logs.forEach(log => this.tradeHistory.push(log));
         this.debug(`📊 Loaded ${this.tradeHistory.length} historical trades from AppendLog`);
       } else {
         this.debug('📊 No trade history found (starting fresh)');
@@ -693,12 +722,11 @@ export class ActiveLearning {
     this.debug(`📦 Archiving ${this.tradeHistory.length} trades to ${archiveKey} `);
 
     // Save all current history to archive file
-    await this.storage.save(archiveKey, this.tradeHistory);
+    await this.storage.save(archiveKey, this.tradeHistory.toArray());
 
-    // Reduce in-memory history (Keep last 1000)
-    // We treat the active 'tradeHistory' array as the working memory (RAM).
-    // The AppendLog on disk contains everything, but we don't want to load it all next time.
-    this.tradeHistory = this.tradeHistory.slice(-1000);
+    // NOTE: With RollingHistoryBuffer, we don't need to manually slice/prune memory.
+    // The buffer automatically manages its size (1000).
+    // The archiving here serves as a manual snapshot.
   }
 
   /**
@@ -729,9 +757,11 @@ export class ActiveLearning {
           // Initialize new empty file
           await fs.writeFile(logPath, '', 'utf-8');
         }
-      } catch (e: any) {
-        if (e.code !== 'ENOENT') {
-          console.warn('⚠️ Log rotation check failed:', e.message);
+      } catch (e: unknown) {
+        const code = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code?: unknown }).code) : '';
+        if (code !== 'ENOENT') {
+          const message = e instanceof Error ? e.message : String(e);
+          console.warn('⚠️ Log rotation check failed:', message);
         }
       }
     } catch (error) {
@@ -759,8 +789,9 @@ export class ActiveLearning {
     }
 
     this.saveInFlight = this.saveToDisk(forceSnapshot)
-      .catch((err: any) => {
-        console.error('⚠️ Failed to save weights:', err.message);
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('⚠️ Failed to save weights:', message);
       })
       .finally(() => {
         this.saveInFlight = null;

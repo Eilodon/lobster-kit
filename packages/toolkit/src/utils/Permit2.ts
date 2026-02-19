@@ -108,7 +108,7 @@ export async function signPermit2(
     };
 
     // signTypedData is available on WalletClient
-    const signature = await (walletClient as any).signTypedData({
+    const signature = await walletClient.signTypedData({
         account: owner,
         domain: {
             name: PERMIT2_DOMAIN_NAME,

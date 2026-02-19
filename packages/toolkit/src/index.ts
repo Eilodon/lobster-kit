@@ -55,8 +55,9 @@ export class ClawKit implements IClawKit {
         // P3: Wire shared PriceService as oracle for Gas module
         const priceService = getPriceService(config);
         priceService.setOracle(this.analytics); // Use analytics as the oracle source
-        if (typeof (this.gas as any).setPriceService === 'function') {
-            this.gas.setPriceService(priceService); // GasModule accepts PriceService for getBNBPrice
+        const gasWithPrice = this.gas as GasModule & { setPriceService?: (svc: typeof priceService) => void };
+        if (typeof gasWithPrice.setPriceService === 'function') {
+            gasWithPrice.setPriceService(priceService); // GasModule accepts PriceService for getBNBPrice
         } else {
             console.warn('⚠️ Gas module does not expose setPriceService; skipping PriceService injection.');
         }

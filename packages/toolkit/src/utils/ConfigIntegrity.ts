@@ -6,7 +6,7 @@ type HashAlgorithm = 'sha256' | 'sha512';
 // BigInt-safe JSON replacer
 // ─────────────────────────────────────────────
 
-function bigIntReplacer(_key: string, value: any): any {
+function bigIntReplacer(_key: string, value: unknown): unknown {
   return typeof value === 'bigint' ? value.toString() : value;
 }
 
@@ -14,13 +14,13 @@ function bigIntReplacer(_key: string, value: any): any {
 // Normalize for canonical hashing
 // ─────────────────────────────────────────────
 
-function normalizeForHashing(value: any): any {
+function normalizeForHashing(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) return value.map(normalizeForHashing);
   if (typeof value !== 'object') return value;
 
-  const entries = Object.entries(value)
+  const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, v]) => v !== undefined)
     .sort(([a], [b]) => a.localeCompare(b));
 
@@ -66,14 +66,17 @@ export function computeConfigHmac(config: unknown, secret: string): string {
  * @param hmacSecret If provided, also verifies HMAC authenticity tag
  */
 export function verifyConfigIntegrity(
-  config: any,
+  config: unknown,
   sourceName: string = 'Config',
   hmacSecret?: string,
 ): void {
-  const integrity = config?.configIntegrity;
+  const typedConfig = (config && typeof config === 'object') ? config as Record<string, unknown> : {};
+  const integrity = (typedConfig.configIntegrity && typeof typedConfig.configIntegrity === 'object')
+    ? typedConfig.configIntegrity as Record<string, unknown>
+    : undefined;
   if (!integrity?.expectedHash) return;
 
-  const algorithm: HashAlgorithm = integrity.algorithm || 'sha256';
+  const algorithm: HashAlgorithm = integrity.algorithm === 'sha512' ? 'sha512' : 'sha256';
   const actual = computeConfigHash(config, algorithm);
   const expected = String(integrity.expectedHash).toLowerCase();
   const strict = integrity.strict !== false;

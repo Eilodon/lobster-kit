@@ -3,6 +3,21 @@ import axios from 'axios';
 import { PythConfig } from '@clawkit/core';
 import { withRetry } from '@clawkit/core';
 
+interface PythPricePayload {
+    price?: unknown;
+    expo?: unknown;
+}
+
+interface PythMessage {
+    type?: unknown;
+    id?: unknown;
+    price?: unknown;
+    price_feed?: {
+        id?: unknown;
+        price?: unknown;
+    };
+}
+
 export class PythAdapter {
     private readonly DEFAULT_ENDPOINT = 'wss://hermes.pyth.network/ws';
     private ws: WebSocket | null = null;
@@ -147,8 +162,10 @@ export class PythAdapter {
                 baseDelay: 300,
                 maxDelay: 2000,
                 totalTimeoutMs: 10000,
-                shouldRetry: (error: any) => {
-                    const message = String(error?.message || '');
+                shouldRetry: (error: unknown) => {
+                    const message = (error && typeof error === 'object' && 'message' in error)
+                        ? String((error as { message?: unknown }).message ?? '')
+                        : String(error ?? '');
                     return !message.includes('Invalid Pyth response format');
                 }
             });
@@ -165,16 +182,18 @@ export class PythAdapter {
 
     private handleWsMessage(raw: unknown) {
         try {
-            const payload = typeof raw === 'string' ? JSON.parse(raw) : raw as any;
+            const payload = typeof raw === 'string' ? JSON.parse(raw) : raw;
             const messages = Array.isArray(payload) ? payload : [payload];
 
             for (const message of messages) {
-                if (!message || message.type === 'response' || message.type === 'ping') continue;
-                if (message.type && message.type !== 'price_update') continue;
+                if (!message || typeof message !== 'object') continue;
+                const typedMessage = message as PythMessage;
+                if (typedMessage.type === 'response' || typedMessage.type === 'ping') continue;
+                if (typedMessage.type && typedMessage.type !== 'price_update') continue;
 
-                const container = message.price_feed || message;
-                const feedId = this.normalizeFeedId(container?.id || message.id || '');
-                const parsed = this.parsePricePayload(container?.price || message.price);
+                const container = typedMessage.price_feed ?? typedMessage;
+                const feedId = this.normalizeFeedId(String(container?.id ?? typedMessage.id ?? ''));
+                const parsed = this.parsePricePayload(container?.price ?? typedMessage.price);
                 if (!feedId || parsed === null) continue;
                 this.priceCache.set(feedId, parsed);
             }
@@ -183,11 +202,13 @@ export class PythAdapter {
         }
     }
 
-    private parsePricePayload(pricePayload: any): number | null {
-        if (!pricePayload || pricePayload.price === undefined || pricePayload.expo === undefined) return null;
+    private parsePricePayload(pricePayload: unknown): number | null {
+        if (!pricePayload || typeof pricePayload !== 'object') return null;
+        const payload = pricePayload as PythPricePayload;
+        if (payload.price === undefined || payload.expo === undefined) return null;
         try {
-            const priceBig = BigInt(String(pricePayload.price));
-            const expoNum = Number(pricePayload.expo);
+            const priceBig = BigInt(String(payload.price));
+            const expoNum = Number(payload.expo);
             if (!Number.isFinite(expoNum)) return null;
             const decimalPrice = this.toDecimalString(priceBig, expoNum);
             const parsed = Number(decimalPrice);
@@ -220,8 +241,8 @@ export class PythAdapter {
             this.connect();
         }, delay);
 
-        if ((this.reconnectTimer as any).unref) {
-            (this.reconnectTimer as any).unref();
+        if (this.reconnectTimer && typeof (this.reconnectTimer as NodeJS.Timeout & { unref?: () => void }).unref === 'function') {
+            (this.reconnectTimer as NodeJS.Timeout & { unref?: () => void }).unref?.();
         }
     }
 

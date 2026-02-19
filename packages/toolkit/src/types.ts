@@ -116,6 +116,7 @@ export interface ClawKitConfig {
   usePermit2?: boolean;       // [P3] Use Permit2 gasless approvals instead of on-chain approve()
   contracts?: Partial<typeof CLAWKIT_CONTRACTS>;
   chainConfig?: ChainConfig; // Inject chain specific config
+  fallbackBNBPrice?: number; // User-defined fallback price used when live feeds fail
   pythConfig?: PythConfig; // [NEW] Pyth Network Configuration
   configIntegrity?: {
     expectedHash: string;

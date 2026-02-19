@@ -1,0 +1,11 @@
+/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/debug/deps/embassy_futures-0c356eb28b5c48a5.d: /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/lib.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/fmt.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/block_on.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/yield_now.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/join.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/select.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/../README.md
+
+/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/debug/deps/libembassy_futures-0c356eb28b5c48a5.rmeta: /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/lib.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/fmt.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/block_on.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/yield_now.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/join.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/select.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/../README.md
+
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/lib.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/fmt.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/block_on.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/yield_now.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/join.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/select.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/embassy-futures-0.1.2/src/../README.md:

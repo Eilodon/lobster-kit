@@ -24,7 +24,7 @@ export interface RetryConfig {
     /** Cap on total wall-clock time across all attempts (ms). 0 = unlimited */
     totalTimeoutMs: number;
     /** Return false to abort retry immediately (e.g. for 4xx errors) */
-    shouldRetry?: (error: any) => boolean;
+    shouldRetry?: (error: unknown) => boolean;
 }
 
 const DEFAULT_CONFIG: RetryConfig = {
@@ -61,7 +61,7 @@ export async function withRetry<T>(
 ): Promise<T> {
     const cfg = { ...DEFAULT_CONFIG, ...config };
     const startTime = Date.now();
-    let lastError: any;
+    let lastError: unknown = new Error('Retry attempts exhausted');
 
     for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
         // Check total timeout budget before each attempt
@@ -117,7 +117,10 @@ export async function withRetry<T>(
         }
     }
 
-    throw lastError;
+    if (lastError instanceof Error) {
+        throw lastError;
+    }
+    throw new Error(String(lastError));
 }
 
 // ─────────────────────────────────────────────

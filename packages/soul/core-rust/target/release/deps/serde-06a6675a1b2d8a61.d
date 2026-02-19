@@ -1,0 +1,14 @@
+/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/release/deps/serde-06a6675a1b2d8a61.d: /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/release/build/serde-e9ff6a90894e9258/out/private.rs
+
+/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/release/deps/libserde-06a6675a1b2d8a61.rlib: /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/release/build/serde-e9ff6a90894e9258/out/private.rs
+
+/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/release/deps/libserde-06a6675a1b2d8a61.rmeta: /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/release/build/serde-e9ff6a90894e9258/out/private.rs
+
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/release/build/serde-e9ff6a90894e9258/out/private.rs:
+
+# env-dep:OUT_DIR=/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/release/build/serde-e9ff6a90894e9258/out

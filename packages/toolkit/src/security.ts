@@ -3,6 +3,7 @@ import { ClawKitConfig, PANCAKE_ROUTER, CLAWKIT_CONTRACTS, ClawKitWalletClient, 
 import axios from 'axios';
 import { withRetry } from './utils/Resilience';
 import { verifyConfigIntegrity } from './utils/ConfigIntegrity';
+import { ERC20_ALLOWANCE_ABI, ERC20_APPROVE_ABI } from './abi/erc20';
 
 
 interface SecurityScanResult {
@@ -13,6 +14,20 @@ interface SecurityScanResult {
   recommendations: string[];
   degradedMode?: boolean;
   maxAllowedTradeUSD?: number;
+}
+
+interface GoPlusSecurityData {
+  is_honeypot: boolean;
+  is_high_tax: boolean;
+  is_blacklisted: boolean;
+  is_open_source: boolean;
+  liquidity_locked: boolean;
+  buy_tax: number;
+  sell_tax: number;
+  holder_count: number;
+  creator_balance: unknown;
+  owner_address: unknown;
+  can_take_back_ownership: boolean;
 }
 
 export class SecurityModule {
@@ -67,8 +82,9 @@ export class SecurityModule {
           risks.push('🚨 HONEYPOT DETECTED - Cannot sell tokens');
           riskScore += 100;
         }
-      } catch (e: any) {
-        if (e.message === 'SECURITY_SCAN_FAILED') {
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (message === 'SECURITY_SCAN_FAILED') {
           degradedMode = true;
           maxAllowedTradeUSD = 100;
           risks.push('⚠️ Security API unavailable - Degraded mode enabled (probe-only).');
@@ -231,7 +247,7 @@ export class SecurityModule {
   /**
    * Get comprehensive security data from GoPlus
    */
-  private async getGoPlusSecurityData(address: string): Promise<any> {
+  private async getGoPlusSecurityData(address: string): Promise<GoPlusSecurityData | null> {
     try {
       const chainId = this.config.chainId || 204;
       const response = await withRetry(() => axios.get(
@@ -386,7 +402,9 @@ export class SecurityModule {
 
   private async checkBytecodeSanity(address: string): Promise<boolean> {
     try {
-      const getBytecode = (this.publicClient as any).getBytecode;
+      const getBytecode = (this.publicClient as PublicClient & {
+        getBytecode?: (args: { address: `0x${string}` }) => Promise<`0x${string}` | null>;
+      }).getBytecode;
       if (typeof getBytecode !== 'function') return true;
       const code = await getBytecode({ address: toAddress(address) });
       if (!code || code === '0x') return false;
@@ -427,6 +445,10 @@ export class SecurityModule {
 
   /**
    * Revoke approval for a contract
+   * Security rationale:
+   * - Uses direct ERC20 `approve(spender, 0)` from user wallet.
+   * - Avoids delegating approval resets to external helper contracts.
+   * - Keeps failure domain minimal for emergency containment.
    * @example
    * await kit.security.revokeApproval('0x...', 'USDT')
    */
@@ -437,7 +459,7 @@ export class SecurityModule {
     try {
       // 🛡️ SPINAL REFLEX: Direct approve(0) — no external contract dependency
       const data = encodeFunctionData({
-        abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
+        abi: ERC20_APPROVE_ABI,
         functionName: 'approve',
         args: [spender as `0x${string}`, 0n]
       });
@@ -458,6 +480,10 @@ export class SecurityModule {
 
   /**
    * Check all token approvals for an address
+   * Security rationale:
+   * - Enumerates known high-risk spenders (DEX routers + helper contracts).
+   * - Uses on-chain allowance reads only; no off-chain trust assumptions.
+   * - Returns only non-zero allowances to focus operator attention.
    */
   async checkApprovals(tokenAddresses: string[]): Promise<Array<{
     token: string;
@@ -485,7 +511,7 @@ export class SecurityModule {
         try {
           const allowance = await this.publicClient.readContract({
             address: token as `0x${string}`,
-            abi: parseAbi(['function allowance(address,address) view returns (uint256)']),
+            abi: ERC20_ALLOWANCE_ABI,
             functionName: 'allowance',
             args: [owner as `0x${string}`, spender as `0x${string}`],
           });
@@ -510,6 +536,9 @@ export class SecurityModule {
    * 🛡️ SPINAL REFLEX: Batch revoke approvals via direct approve(0) calls.
    * No external contract dependency — trustless and atomic.
    * Each revoke is a direct ERC20 call from the user's wallet.
+   * Security rationale:
+   * - Best-effort loop: one token failure does not block other revokes.
+   * - Throws only when all revokes fail, signaling full containment failure.
    */
   async batchRevokeApprovals(
     tokens: string[],
@@ -522,14 +551,13 @@ export class SecurityModule {
       return { hashes: [], count: 0 };
     }
 
-    const revokeAbi = parseAbi(['function approve(address spender, uint256 amount) returns (bool)']);
     const hashes: string[] = [];
     const errors: string[] = [];
 
     for (let i = 0; i < tokens.length; i++) {
       try {
         const data = encodeFunctionData({
-          abi: revokeAbi,
+          abi: ERC20_APPROVE_ABI,
           functionName: 'approve',
           args: [toAddress(spenders[i]), 0n]
         });
@@ -540,9 +568,10 @@ export class SecurityModule {
         });
         hashes.push(hash);
         console.info(`✅ Revoked [${i + 1}/${tokens.length}]: token=${tokens[i]} spender=${spenders[i]}`);
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Non-fatal: log and continue. One bad token should not block others.
-        const msg = `Failed to revoke token=${tokens[i]} spender=${spenders[i]}: ${err.message}`;
+        const message = err instanceof Error ? err.message : String(err);
+        const msg = `Failed to revoke token=${tokens[i]} spender=${spenders[i]}: ${message}`;
         console.error(`❌ ${msg}`);
         errors.push(msg);
       }
@@ -568,7 +597,7 @@ export class SecurityModule {
    * Watches Approval events from ALL specified tokens simultaneously.
    */
   async monitorSuspiciousActivity(
-    callback: (alert: any) => void,
+    callback: (alert: Record<string, unknown>) => void,
     additionalTokens: string[] = []
   ): Promise<() => void> {
     const userAddress = await this.getAddress();

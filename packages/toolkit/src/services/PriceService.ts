@@ -8,7 +8,10 @@
  *   1. Internal oracle (for strict privacy mode)
  *   2. In-memory TTL cache (60s)
  *   3. CoinGecko API
- *   4. Binance API fallback
+ *   4. Binance API (primary)
+ *   5. Binance API (mirror endpoint)
+ *   6. Stale cache fallback (last known good)
+ *   7. Configured fallback price
  *
  * Usage:
  *   import { getPriceService } from './PriceService';
@@ -49,12 +52,32 @@ export class PriceService {
 
     private getCached(key: string): number | undefined {
         const entry = this.cache.get(key);
-        if (entry && Date.now() < entry.expiresAt) return entry.value;
+        if (entry && Date.now() < entry.expiresAt && this.isSanePrice(entry.value)) return entry.value;
+        return undefined;
+    }
+
+    private getStaleCached(key: string): number | undefined {
+        const entry = this.cache.get(key);
+        if (entry && this.isSanePrice(entry.value)) return entry.value;
         return undefined;
     }
 
     private setCached(key: string, value: number): void {
+        if (!this.isSanePrice(value)) return;
         this.cache.set(key, { value, expiresAt: Date.now() + this.TTL_MS });
+    }
+
+    private isSanePrice(value: unknown): value is number {
+        return typeof value === 'number'
+            && Number.isFinite(value)
+            && value > 0
+            && value <= 100_000;
+    }
+
+    private getConfiguredFallbackBNBPrice(): number | undefined {
+        const fallback = this.config.fallbackBNBPrice;
+        if (this.isSanePrice(fallback)) return fallback;
+        return undefined;
     }
 
     // ── BNB Price ───────────────────────────────────────────────────────────────
@@ -63,21 +86,32 @@ export class PriceService {
         const key = 'BNB';
         const cached = this.getCached(key);
         if (cached !== undefined) return cached;
+        const staleCached = this.getStaleCached(key);
 
         // Try oracle first
         if (this.oracle) {
             try {
                 const prices = await this.oracle.fetchTokenPrices();
-                if (prices['BNB'] || prices['WBNB']) {
-                    const price = prices['BNB'] ?? prices['WBNB'];
+                const price = prices['BNB'] ?? prices['WBNB'];
+                if (this.isSanePrice(price)) {
                     this.setCached(key, price);
                     return price;
                 }
             } catch { /* fall through */ }
         }
 
+        const configuredFallback = this.getConfiguredFallbackBNBPrice();
         const isStrict = this.config.privacyMode === 'strict';
         if (isStrict) {
+            if (staleCached !== undefined) {
+                console.warn(`⚠️ [PriceService] Strict mode using stale BNB cache: $${staleCached.toFixed(2)}`);
+                return staleCached;
+            }
+            if (configuredFallback !== undefined) {
+                console.warn(`⚠️ [PriceService] Strict mode using configured BNB fallback: $${configuredFallback.toFixed(2)}`);
+                this.setCached(key, configuredFallback);
+                return configuredFallback;
+            }
             throw new Error('🔒 Cannot fetch BNB price: strict privacy mode requires an internal oracle.');
         }
 
@@ -85,25 +119,53 @@ export class PriceService {
 
         // CoinGecko
         try {
-            const data = await gateway.get<{ binancecoin: { usd: number } }>(
+            const data = await gateway.get<{ binancecoin?: { usd?: number } }>(
                 'https://api.coingecko.com/api/v3/simple/price?ids=binancecoin&vs_currencies=usd'
             );
-            const price = data.binancecoin.usd;
-            this.setCached(key, price);
-            console.info(`✅ [PriceService] BNB from CoinGecko: $${price}`);
-            return price;
+            const price = data?.binancecoin?.usd;
+            if (this.isSanePrice(price)) {
+                this.setCached(key, price);
+                console.info(`✅ [PriceService] BNB from CoinGecko: $${price.toFixed(2)}`);
+                return price;
+            }
         } catch { /* fall through to Binance */ }
 
-        // Binance fallback
+        // Binance primary fallback
         try {
-            const data = await gateway.get<{ price: string }>(
+            const data = await gateway.get<{ price?: string }>(
                 'https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT'
             );
-            const price = parseFloat(data.price);
-            this.setCached(key, price);
-            console.info(`✅ [PriceService] BNB from Binance: $${price.toFixed(2)}`);
-            return price;
+            const price = Number.parseFloat(data?.price ?? '');
+            if (this.isSanePrice(price)) {
+                this.setCached(key, price);
+                console.info(`✅ [PriceService] BNB from Binance: $${price.toFixed(2)}`);
+                return price;
+            }
         } catch { /* fall through */ }
+
+        // Binance mirror fallback (often survives regional/API hiccups)
+        try {
+            const data = await gateway.get<{ price?: string }>(
+                'https://data-api.binance.vision/api/v3/ticker/price?symbol=BNBUSDT'
+            );
+            const price = Number.parseFloat(data?.price ?? '');
+            if (this.isSanePrice(price)) {
+                this.setCached(key, price);
+                console.info(`✅ [PriceService] BNB from Binance Vision: $${price.toFixed(2)}`);
+                return price;
+            }
+        } catch { /* fall through */ }
+
+        if (staleCached !== undefined) {
+            console.warn(`⚠️ [PriceService] Using stale BNB cache after live-source failure: $${staleCached.toFixed(2)}`);
+            return staleCached;
+        }
+
+        if (configuredFallback !== undefined) {
+            console.warn(`⚠️ [PriceService] Using configured BNB fallback: $${configuredFallback.toFixed(2)}`);
+            this.setCached(key, configuredFallback);
+            return configuredFallback;
+        }
 
         throw new Error('PriceService: All BNB price sources failed');
     }

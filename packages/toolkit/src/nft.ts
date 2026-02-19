@@ -147,7 +147,7 @@ export class NFTModule {
   /**
    * Get metadata for a token
    */
-  async getMetadata(tokenId: string): Promise<any> {
+  async getMetadata(tokenId: string): Promise<unknown> {
     const metadata = await this.publicClient.readContract({
       address: toAddress(CLAWKIT_CONTRACTS.DynamicBadge),
       abi: DYNAMIC_BADGE_ABI,
@@ -174,8 +174,9 @@ export class NFTModule {
       });
 
       return result as boolean;
-    } catch (error: any) {
-      if (error.message?.includes('not deployed')) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('not deployed')) {
         console.warn('DynamicBadge contract not deployed, cannot check badges');
         return false;
       }

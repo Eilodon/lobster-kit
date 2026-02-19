@@ -16,7 +16,7 @@ export interface ActionInput {
 
 export interface ActionOutput {
     status: 'success' | 'failed' | 'denied';
-    data?: any;
+    data?: unknown;
     error?: string;
     validation?: ValidationResult;
 }
@@ -24,8 +24,8 @@ export interface ActionOutput {
 export interface SkillDefinition {
     name: string;
     description: string;
-    schema: any; // JSON Schema for params
-    handler: (params: any) => Promise<any>;
+    schema: Record<string, unknown>; // JSON Schema for params
+    handler: (params: Record<string, unknown>) => Promise<unknown>;
 }
 
 export class OpenClawAdapter {
@@ -90,7 +90,7 @@ export class OpenClawAdapter {
             this.emitTradeExecuted(mappedAction, validation, finalParams, result, true);
             return { status: 'success', data: result, validation };
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
 
             return { status: 'failed', error: errorMessage };
@@ -124,7 +124,7 @@ export class OpenClawAdapter {
         action: ActionType,
         validation: ValidationResult,
         params: Record<string, unknown>,
-        result: any,
+        result: unknown,
         success: boolean,
         executionError?: string
     ) {
@@ -145,7 +145,9 @@ export class OpenClawAdapter {
             payload: {
                 action,
                 decisionLog: validation.decisionLog,
-                txHash: typeof result?.hash === 'string' ? result.hash : undefined,
+                txHash: (result && typeof result === 'object' && 'hash' in result && typeof (result as { hash?: unknown }).hash === 'string')
+                    ? (result as { hash: string }).hash
+                    : undefined,
                 executionError,
                 outcome: {
                     decisionId,
@@ -169,11 +171,12 @@ export class OpenClawAdapter {
         return 0;
     }
 
-    private extractNumber(source: any, keys: string[], fallback: number): number {
+    private extractNumber(source: unknown, keys: string[], fallback: number): number {
         if (!source || typeof source !== 'object') return fallback;
+        const sourceObj = source as Record<string, unknown>;
 
         for (const key of keys) {
-            const raw = source[key];
+            const raw = sourceObj[key];
             if (typeof raw === 'number' && Number.isFinite(raw)) {
                 return raw;
             }

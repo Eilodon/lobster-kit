@@ -109,7 +109,7 @@ export class ExternalAPIGateway {
 
     // ── Core Request ────────────────────────────────────────────────────────────
 
-    async get<T = any>(url: string, axiosConfig?: AxiosRequestConfig): Promise<T> {
+    async get<T = unknown>(url: string, axiosConfig?: AxiosRequestConfig): Promise<T> {
         // Privacy guard
         const isStrict = this.config.privacyMode === 'strict';
         if (isStrict) {
@@ -136,14 +136,16 @@ export class ExternalAPIGateway {
                 });
                 this.recordSuccess(domain);
                 return res.data;
-            } catch (err: any) {
-                lastError = err;
-                const status = err.response?.status;
+            } catch (err: unknown) {
+                lastError = err instanceof Error ? err : new Error(String(err));
+                const status = (typeof err === 'object' && err !== null && 'response' in err)
+                    ? (err as { response?: { status?: number } }).response?.status
+                    : undefined;
 
                 // Don't retry client errors (400, 401, 403, 404)
                 if (status && status >= 400 && status < 500 && status !== 429) {
                     this.recordFailure(domain);
-                    throw err;
+                    throw lastError;
                 }
 
                 // Backoff: 500ms, 1000ms, 2000ms
@@ -157,7 +159,7 @@ export class ExternalAPIGateway {
         throw lastError ?? new Error(`Request to ${url} failed`);
     }
 
-    async post<T = any>(url: string, body: any, axiosConfig?: AxiosRequestConfig): Promise<T> {
+    async post<T = unknown>(url: string, body: unknown, axiosConfig?: AxiosRequestConfig): Promise<T> {
         const isStrict = this.config.privacyMode === 'strict';
         if (isStrict) {
             throw new Error(`🔒 PRIVACY_BLOCKED: External call to ${url} blocked in 'strict' mode.`);

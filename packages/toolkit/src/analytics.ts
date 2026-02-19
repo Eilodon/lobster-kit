@@ -2,15 +2,26 @@ import { PublicClient, formatEther, formatUnits, parseAbi } from 'viem';
 import { ClawKitConfig, PortfolioHealth, Position, ClawKitWalletClient, getTokenDecimals, resolveTokenAddress } from './types';
 import axios from 'axios';
 import { getGateway } from './utils/ApiGateway';
+import { ERC20_BALANCE_OF_ABI } from './abi/erc20';
 import * as fs from 'fs';
 import * as path from 'path';
+
+interface HistoryTx {
+  hash: string;
+  from: string;
+  to: string;
+  value: string;
+  timestamp: string;
+  status: 'success' | 'failed';
+  gasUsed: string;
+}
 
 export class AnalyticsModule {
   private readonly COINGECKO_API = 'https://api.coingecko.com/api/v3';
   private readonly PANCAKE_API = 'https://farms-api.pancakeswap.com';
 
   // FIXED: Add price caching to prevent rate limiting
-  private priceCache: { [key: string]: { value: number; timestamp: number } } = {};
+  private priceCache: { [key: string]: { value: unknown; timestamp: number } } = {};
   private readonly CACHE_DURATION = 60000; // 1 minute cache
   private static readonly HISTORY_FILE = path.resolve(process.cwd(), '.clawkit', 'portfolio_history.json');
   private static readonly MAX_HISTORY_ENTRIES = 365;
@@ -83,7 +94,7 @@ export class AnalyticsModule {
     // Check cache first
     if (this.priceCache[cacheKey] &&
       Date.now() - this.priceCache[cacheKey].timestamp < this.CACHE_DURATION) {
-      return this.priceCache[cacheKey].value as any;
+      return this.priceCache[cacheKey].value as Record<string, number>;
     }
 
     try {
@@ -109,24 +120,28 @@ export class AnalyticsModule {
 
       // Cache the results
       this.priceCache[cacheKey] = {
-        value: prices as any,
+        value: prices,
         timestamp: Date.now()
       };
 
       return prices;
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const status = (typeof error === 'object' && error !== null && 'response' in error)
+        ? (error as { response?: { status?: number } }).response?.status
+        : undefined;
       // Handle rate limiting
-      if (error.response?.status === 429) {
+      if (status === 429) {
         console.warn('⚠️ CoinGecko rate limit (429) - using cache or fallback');
 
         // Return stale cache if available
         if (this.priceCache[cacheKey]) {
           console.warn('Using stale cache');
-          return this.priceCache[cacheKey].value as any;
+          return this.priceCache[cacheKey].value as Record<string, number>;
         }
       } else {
-        console.error('Error fetching token prices:', error.message);
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('Error fetching token prices:', message);
       }
 
       // Fallback prices (reasonable defaults)
@@ -213,7 +228,7 @@ export class AnalyticsModule {
         // Read vToken balance
         const balance = await this.publicClient.readContract({
           address: market.vToken as `0x${string}`,
-          abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
+          abi: ERC20_BALANCE_OF_ABI,
           functionName: 'balanceOf',
           args: [address as `0x${string}`]
         });
@@ -261,7 +276,7 @@ export class AnalyticsModule {
       try {
         const balance = await this.publicClient.readContract({
           address: lpToken.address as `0x${string}`,
-          abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
+          abi: ERC20_BALANCE_OF_ABI,
           functionName: 'balanceOf',
           args: [address as `0x${string}`]
         });
@@ -333,8 +348,9 @@ export class AnalyticsModule {
     try {
       const subgraphPositions = await this.fetchSubgraphPositions(address, prices);
       positions.push(...subgraphPositions);
-    } catch (subgraphErr: any) {
-      console.warn('[Analytics] Subgraph fetch failed, relying on on-chain data only:', subgraphErr.message);
+    } catch (subgraphErr: unknown) {
+      const message = subgraphErr instanceof Error ? subgraphErr.message : String(subgraphErr);
+      console.warn('[Analytics] Subgraph fetch failed, relying on on-chain data only:', message);
     }
 
     return positions;
@@ -370,11 +386,12 @@ export class AnalyticsModule {
     }>(SUBGRAPH_URL, { query });
 
     const rawPositions = data?.data?.positions ?? [];
-    return rawPositions.map((p: any) => {
-      const token0 = p.token0.symbol;
-      const token1 = p.token1.symbol;
-      const dep0 = parseFloat(p.depositedToken0) - parseFloat(p.withdrawnToken0 || '0');
-      const dep1 = parseFloat(p.depositedToken1) - parseFloat(p.withdrawnToken1 || '0');
+    return rawPositions.map((p) => {
+      const raw = (p && typeof p === 'object') ? p as Record<string, unknown> : {};
+      const token0 = (raw.token0 as { symbol?: string } | undefined)?.symbol ?? 'UNKNOWN';
+      const token1 = (raw.token1 as { symbol?: string } | undefined)?.symbol ?? 'UNKNOWN';
+      const dep0 = parseFloat(String(raw.depositedToken0 ?? '0')) - parseFloat(String(raw.withdrawnToken0 ?? '0'));
+      const dep1 = parseFloat(String(raw.depositedToken1 ?? '0')) - parseFloat(String(raw.withdrawnToken1 ?? '0'));
       const p0 = prices[token0] || 0;
       const p1 = prices[token1] || 0;
       const valueUSD = dep0 * p0 + dep1 * p1;
@@ -402,12 +419,14 @@ export class AnalyticsModule {
       if (response.data?.markets) {
         // Venus API stores symbols as 'vBNB', 'vUSDT', etc. or underlying symbol
         // We match by underlyingSymbol which is safer
-        const market = response.data.markets.find((m: any) =>
-          m.underlyingSymbol?.toUpperCase() === asset.toUpperCase()
+        const market = response.data.markets.find((m: unknown) =>
+          (m && typeof m === 'object' && 'underlyingSymbol' in m)
+            ? String((m as { underlyingSymbol?: unknown }).underlyingSymbol ?? '').toUpperCase() === asset.toUpperCase()
+            : false
         );
 
-        if (market?.supplyApy) {
-          const apy = parseFloat(market.supplyApy);
+        if (market && typeof market === 'object' && 'supplyApy' in market) {
+          const apy = parseFloat(String((market as { supplyApy?: unknown }).supplyApy ?? '0'));
           return apy;
         }
       }
@@ -433,14 +452,16 @@ export class AnalyticsModule {
       if (response.data && Array.isArray(response.data)) {
         // Find farm by LP symbol (e.g., 'BNB-USDT LP') or pair
         // The API returns 'lpSymbol' like 'BNB-USDT LP'
-        const farm = response.data.find((f: any) => {
-          const symbol = f.lpSymbol?.toUpperCase();
+        const farm = response.data.find((f: unknown) => {
+          const symbol = (f && typeof f === 'object' && 'lpSymbol' in f)
+            ? String((f as { lpSymbol?: unknown }).lpSymbol ?? '').toUpperCase()
+            : '';
           const pairClean = pair.toUpperCase().replace(' LP', '');
           return symbol?.includes(pairClean);
         });
 
-        if (farm?.apr) {
-          return farm.apr;
+        if (farm && typeof farm === 'object' && 'apr' in farm) {
+          return Number((farm as { apr?: unknown }).apr ?? 0);
         }
       }
     } catch {
@@ -517,7 +538,7 @@ export class AnalyticsModule {
   async getTransactionHistory(
     limit: number = 50,
     address?: string
-  ): Promise<any[]> {
+  ): Promise<HistoryTx[]> {
     const addr = address || await this.getAddress();
 
     try {
@@ -538,14 +559,14 @@ export class AnalyticsModule {
       });
 
       if (response.data.status === '1' && response.data.result) {
-        return response.data.result.map((tx: any) => ({
-          hash: tx.hash,
-          from: tx.from,
-          to: tx.to,
-          value: formatEther(BigInt(tx.value)),
-          timestamp: new Date(parseInt(tx.timeStamp) * 1000).toISOString(),
-          status: tx.isError === '0' ? 'success' : 'failed',
-          gasUsed: tx.gasUsed
+        return response.data.result.map((tx: Record<string, unknown>) => ({
+          hash: String(tx.hash ?? ''),
+          from: String(tx.from ?? ''),
+          to: String(tx.to ?? ''),
+          value: formatEther(BigInt(String(tx.value ?? '0'))),
+          timestamp: new Date(parseInt(String(tx.timeStamp ?? '0'), 10) * 1000).toISOString(),
+          status: String(tx.isError ?? '1') === '0' ? 'success' : 'failed',
+          gasUsed: String(tx.gasUsed ?? '')
         }));
       }
 
@@ -588,7 +609,7 @@ export class AnalyticsModule {
    * Monitor wallet events (setup listeners)
    */
   async watchWallet(
-    callback: (event: any) => void,
+    callback: (event: Record<string, unknown>) => void,
     address?: string
   ): Promise<() => void> {
     const addr = address || await this.getAddress();

@@ -93,10 +93,16 @@ export class PriceAggregator {
 
         if (!this.kit.defi.getRealQuote) throw new Error('Defi module not available');
         const quote = await this.kit.defi.getRealQuote(wbnb, usdt, oneUnit, 0);
-        if (!quote?.amountOutMin) throw new Error('No DEX liquidity');
+        const amountOutMin = this.extractAmountOutMin(quote);
+        if (!amountOutMin) throw new Error('No DEX liquidity');
 
         const usdtDecimals = getTokenDecimals('USDT');
-        return Number(formatUnits(quote.amountOutMin, usdtDecimals));
+        return Number(formatUnits(amountOutMin, usdtDecimals));
+    }
+
+    private extractAmountOutMin(quote: Record<string, unknown> | null | undefined): bigint | null {
+        const maybeAmount = quote?.amountOutMin;
+        return typeof maybeAmount === 'bigint' ? maybeAmount : null;
     }
 
     private calculateConsensus(sources: PriceSource[]): number {

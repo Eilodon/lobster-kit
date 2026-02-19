@@ -24,6 +24,12 @@ export interface DeepSeekConfig {
     timeout?: number;
 }
 
+interface OracleApiError extends Error {
+    response?: {
+        status?: number;
+    };
+}
+
 export class DeepSeekOracle implements IOracle {
     private config: DeepSeekConfig;
     private responseCache: { result: OracleInsight; expiry: number } | null = null;
@@ -128,7 +134,7 @@ Provide ONLY raw JSON. No markdown formatting.
                 });
 
                 if (!response.ok) {
-                    const err = new Error(`API Error: ${response.status} ${response.statusText}`) as any;
+                    const err: OracleApiError = new Error(`API Error: ${response.status} ${response.statusText}`);
                     err.response = { status: response.status };
                     throw err;
                 }
@@ -141,8 +147,10 @@ Provide ONLY raw JSON. No markdown formatting.
         }, {
             maxAttempts: 3,
             baseDelay: 1000,
-            shouldRetry: (e: any) => {
-                const status = e?.response?.status;
+            shouldRetry: (e: unknown) => {
+                const status = (typeof e === 'object' && e !== null && 'response' in e)
+                    ? (e as OracleApiError).response?.status
+                    : undefined;
                 // Retry on 429 (rate limit) and 5xx; abort on 4xx auth errors
                 return !status || status === 429 || status >= 500;
             }

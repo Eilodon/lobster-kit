@@ -22,6 +22,12 @@ export interface EmotionalState {
   lastUpdate: number;
 }
 
+interface RiskParameterInput {
+  maxPositionSize: number;
+  minConfidence: number;
+  [key: string]: unknown;
+}
+
 export class EmotionalCore {
   private state: EmotionalState;
   private storage: AppendOnlyAdapter;
@@ -97,9 +103,12 @@ export class EmotionalCore {
     this.unsubs.push(unsubPrice);
 
     // Trauma: Instant Cortisol Spike
-    const unsubTrauma = this.bus.subscribe(EidolonEventType.TRAUMA, (event: any) => {
+    const unsubTrauma = this.bus.subscribe(EidolonEventType.TRAUMA, (event) => {
       if (this.disposed) return;
-      const severity = event.payload.severity || 10;
+      const payload = (event.payload && typeof event.payload === 'object')
+        ? event.payload as { severity?: unknown }
+        : undefined;
+      const severity = typeof payload?.severity === 'number' ? payload.severity : 10;
       this.stimulate(severity, 'DANGER');
       this.scheduleSnapshotPersist(true);
     });
@@ -308,13 +317,13 @@ export class EmotionalCore {
   /**
    * Legacy adapter for RiskParameters
    */
-  getRiskParameters(baseParams: any): any {
+  getRiskParameters<T extends RiskParameterInput>(baseParams: T): T {
     const multiplier = this.getRiskMultiplier();
     return {
       ...baseParams,
       maxPositionSize: baseParams.maxPositionSize * multiplier,
       minConfidence: this.state.cortisol > 50 ? 80 : baseParams.minConfidence
-    };
+    } as T;
   }
 
   // Adapter for logs
@@ -347,7 +356,7 @@ export class EmotionalCore {
       }
 
       // 2. Fallback to Log (Slow Replay) - Legacy support
-      const logs = await this.storage.readLog(this.LOG_KEY);
+      const logs = await this.storage.readLog<{ state: EmotionalState }>(this.LOG_KEY);
       if (logs.length > 0) {
         const lastEntry = logs[logs.length - 1];
         if (lastEntry && lastEntry.state) {

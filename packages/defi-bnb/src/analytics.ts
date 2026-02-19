@@ -2,6 +2,7 @@ import { WalletClient, PublicClient, formatEther, formatUnits, parseAbi } from '
 import { ClawKitConfig, PortfolioHealth, Position, ClawKitWalletClient, getTokenDecimals, resolveTokenAddress } from './types';
 import axios from 'axios';
 import { getGateway } from './utils/ApiGateway';
+import { ERC20_BALANCE_OF_ABI } from './abi/erc20';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -213,7 +214,7 @@ export class AnalyticsModule {
         // Read vToken balance
         const balance = await this.publicClient.readContract({
           address: market.vToken as `0x${string}`,
-          abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
+          abi: ERC20_BALANCE_OF_ABI,
           functionName: 'balanceOf',
           args: [address as `0x${string}`]
         });
@@ -261,7 +262,7 @@ export class AnalyticsModule {
       try {
         const balance = await this.publicClient.readContract({
           address: lpToken.address as `0x${string}`,
-          abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
+          abi: ERC20_BALANCE_OF_ABI,
           functionName: 'balanceOf',
           args: [address as `0x${string}`]
         });

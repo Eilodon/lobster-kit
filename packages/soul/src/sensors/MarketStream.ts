@@ -1,6 +1,16 @@
 import { EidolonBus, EidolonEventType } from '@clawkit/core';
 import { EventEmitter } from 'events';
 
+interface WebSocketLike {
+    close(): void;
+    on?(event: string, handler: (...args: unknown[]) => void): void;
+    addEventListener?(event: string, handler: EventListener): void;
+    ping?(): void;
+    terminate?(): void;
+}
+
+type WebSocketConstructor = new (url: string) => WebSocketLike;
+
 export interface TickerData {
     symbol: string;
     price: number;
@@ -13,7 +23,7 @@ export interface TickerData {
  * Used for Reflex actions (e.g. Panic Sell on crash).
  */
 export class MarketStream extends EventEmitter {
-    private ws: any | null = null;
+    private ws: WebSocketLike | null = null;
     private reconnectTimer: NodeJS.Timeout | null = null;
     private heartbeatInterval: NodeJS.Timeout | null = null;
     private isAlive = false;
@@ -36,9 +46,12 @@ export class MarketStream extends EventEmitter {
     }
 
     public override on(event: 'price', listener: (data: TickerData) => void): this;
-    public override on(event: string, listener: (...args: any[]) => void): this;
-    public override on(event: string, listener: (...args: any[]) => void): this {
-        return super.on(event, listener);
+    public override on(event: string | symbol, listener: (...args: unknown[]) => void): this;
+    public override on(
+        event: string | symbol,
+        listener: ((data: TickerData) => void) | ((...args: unknown[]) => void)
+    ): this {
+        return super.on(event, listener as (...args: unknown[]) => void);
     }
 
     public start(): void {
@@ -46,7 +59,7 @@ export class MarketStream extends EventEmitter {
     }
 
     private connect(): void {
-        const WebSocketCtor = (globalThis as any).WebSocket;
+        const WebSocketCtor = (globalThis as { WebSocket?: WebSocketConstructor }).WebSocket;
         if (!WebSocketCtor) {
             console.warn('🌊 MarketStream: WebSocket is unavailable in this runtime.');
             return;
@@ -94,9 +107,11 @@ export class MarketStream extends EventEmitter {
                 this.isAlive = true;
             });
 
-            on('message', (dataOrEvent: any) => {
+            on('message', (dataOrEvent: unknown) => {
                 try {
-                    const payload = dataOrEvent?.data ?? dataOrEvent;
+                    const payload = (dataOrEvent && typeof dataOrEvent === 'object' && 'data' in dataOrEvent)
+                        ? (dataOrEvent as { data?: unknown }).data
+                        : dataOrEvent;
                     const raw = JSON.parse(
                         typeof payload === 'string'
                             ? payload
@@ -169,8 +184,11 @@ export class MarketStream extends EventEmitter {
                 this.scheduleReconnect();
             });
 
-            on('error', (err: any) => {
-                console.error('🌊 MarketStream Error:', err?.message ?? err);
+            on('error', (err: unknown) => {
+                const message = (err && typeof err === 'object' && 'message' in err)
+                    ? String((err as { message?: unknown }).message)
+                    : String(err);
+                console.error('🌊 MarketStream Error:', message);
                 if (typeof this.ws?.terminate === 'function') {
                     this.ws.terminate();
                 } else {

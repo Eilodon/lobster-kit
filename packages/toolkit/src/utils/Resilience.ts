@@ -24,7 +24,7 @@ export interface RetryConfig {
     /** Cap on total wall-clock time across all attempts (ms). 0 = unlimited */
     totalTimeoutMs: number;
     /** Return false to abort retry immediately (e.g. for 4xx errors) */
-    shouldRetry?: (error: any) => boolean;
+    shouldRetry?: (error: unknown) => boolean;
 }
 
 const DEFAULT_CONFIG: RetryConfig = {
@@ -37,13 +37,31 @@ const DEFAULT_CONFIG: RetryConfig = {
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
+type RetryErrorLike = {
+    message?: unknown;
+    response?: {
+        status?: unknown;
+        headers?: Record<string, unknown>;
+    };
+};
+
+function asRetryError(error: unknown): RetryErrorLike {
+    return (typeof error === 'object' && error !== null) ? (error as RetryErrorLike) : {};
+}
+
+function getRetryErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    const err = asRetryError(error);
+    return typeof err.message === 'string' ? err.message : String(error);
+}
+
 export async function withRetry<T>(
     fn: () => Promise<T>,
     config: Partial<RetryConfig> = {}
 ): Promise<T> {
     const cfg = { ...DEFAULT_CONFIG, ...config };
     const startTime = Date.now();
-    let lastError: any;
+    let lastError: unknown = new Error('Retry attempts exhausted');
 
     for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
         // Check total timeout budget before each attempt
@@ -57,18 +75,22 @@ export async function withRetry<T>(
 
         try {
             return await fn();
-        } catch (error: any) {
+        } catch (error: unknown) {
             lastError = error;
+            const err = asRetryError(error);
+            const message = getRetryErrorMessage(error);
+            const status = typeof err.response?.status === 'number' ? err.response.status : null;
 
             if (attempt === cfg.maxAttempts) {
-                Logger.error('Retry limit reached', { attempt, maxAttempts: cfg.maxAttempts, error: error.message });
+                Logger.error('Retry limit reached', { attempt, maxAttempts: cfg.maxAttempts, error: message });
                 break;
             }
 
             // FIX L11: Skip 4xx (except 429 rate-limit)
-            if (error.response?.status >= 400 && error.response?.status < 500) {
-                if (error.response.status === 429) {
-                    const retryAfter = parseInt(error.response.headers?.['retry-after'] || '5');
+            if (status !== null && status >= 400 && status < 500) {
+                if (status === 429) {
+                    const retryAfterRaw = err.response?.headers?.['retry-after'];
+                    const retryAfter = parseInt(String(retryAfterRaw ?? '5'), 10);
                     Logger.warn('Rate limited (429)', { retryAfterSec: retryAfter });
                     await sleep(retryAfter * 1000);
                     continue;
@@ -78,7 +100,7 @@ export async function withRetry<T>(
 
             // FIX U4: Custom shouldRetry predicate
             if (cfg.shouldRetry && !cfg.shouldRetry(error)) {
-                Logger.warn('Retry aborted by shouldRetry predicate', { error: error.message });
+                Logger.warn('Retry aborted by shouldRetry predicate', { error: message });
                 throw error;
             }
 
@@ -89,13 +111,16 @@ export async function withRetry<T>(
             Logger.warn('Attempt failed, retrying', {
                 attempt,
                 nextDelayMs: Math.round(delay),
-                error: error.message,
+                error: message,
             });
             await sleep(delay);
         }
     }
 
-    throw lastError;
+    if (lastError instanceof Error) {
+        throw lastError;
+    }
+    throw new Error(String(lastError));
 }
 
 // ─────────────────────────────────────────────

@@ -13,6 +13,9 @@ serde-wasm-bindgen = "0.6"
 getrandom = { version = "0.2", features = ["js"] }
 wee_alloc = { version = "0.4", optional = true }
 blake3 = "1.8"
+burn = { version = "0.16", default-features = false, features = ["train", "wgpu"] } 
+burn-ndarray = { version = "0.16", default-features = false }
+burn-autodiff = { version = "0.16", default-features = false }
 
 [features]
 default = []

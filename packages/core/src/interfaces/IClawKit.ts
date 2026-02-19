@@ -23,21 +23,17 @@ export interface IClawKit {
         };
         [key: string]: unknown;
     };
-    readonly analytics: {
-        getPrice?(symbol: string): Promise<number>;
-        portfolioHealth?(address?: string): Promise<any>;
-        getHistoricalValue?(days?: number, address?: string): Promise<any[]>;
-    };
+    readonly analytics: object;
     readonly defi: {
-        getRealQuote?(tokenIn: string, tokenOut: string, amount: bigint, slippage: number): Promise<any>;
-        swap?(params: any): Promise<any>;
-    };
-    readonly security: {
-        scanContract?(address: string): Promise<any>;
+        getRealQuote?(
+            tokenIn: string,
+            tokenOut: string,
+            amount: bigint,
+            slippage: number
+        ): Promise<Record<string, unknown>>;
     };
     readonly gas: {
-        estimateGas?(params: any): Promise<any>;
-        getOptimalExecutionTime?(): Promise<any>;
+        getOptimalExecutionTime?(): Promise<Record<string, unknown>>;
     };
     getAddress(): Promise<string>;
 }

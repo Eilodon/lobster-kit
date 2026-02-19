@@ -3,6 +3,7 @@ import { ClawKitConfig, PANCAKE_ROUTER, CLAWKIT_CONTRACTS, ClawKitWalletClient, 
 import axios from 'axios';
 import { withRetry } from './utils/Resilience';
 import { verifyConfigIntegrity } from './utils/ConfigIntegrity';
+import { ERC20_ALLOWANCE_ABI, ERC20_APPROVE_ABI } from './abi/erc20';
 
 
 interface SecurityScanResult {
@@ -427,6 +428,10 @@ export class SecurityModule {
 
   /**
    * Revoke approval for a contract
+   * Security rationale:
+   * - Uses direct ERC20 `approve(spender, 0)` from user wallet.
+   * - Avoids delegating approval resets to external helper contracts.
+   * - Keeps failure domain minimal for emergency containment.
    * @example
    * await kit.security.revokeApproval('0x...', 'USDT')
    */
@@ -437,7 +442,7 @@ export class SecurityModule {
     try {
       // 🛡️ SPINAL REFLEX: Direct approve(0) — no external contract dependency
       const data = encodeFunctionData({
-        abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
+        abi: ERC20_APPROVE_ABI,
         functionName: 'approve',
         args: [spender as `0x${string}`, 0n]
       });
@@ -458,6 +463,10 @@ export class SecurityModule {
 
   /**
    * Check all token approvals for an address
+   * Security rationale:
+   * - Enumerates known high-risk spenders (DEX routers + helper contracts).
+   * - Uses on-chain allowance reads only; no off-chain trust assumptions.
+   * - Returns only non-zero allowances to focus operator attention.
    */
   async checkApprovals(tokenAddresses: string[]): Promise<Array<{
     token: string;
@@ -485,7 +494,7 @@ export class SecurityModule {
         try {
           const allowance = await this.publicClient.readContract({
             address: token as `0x${string}`,
-            abi: parseAbi(['function allowance(address,address) view returns (uint256)']),
+            abi: ERC20_ALLOWANCE_ABI,
             functionName: 'allowance',
             args: [owner as `0x${string}`, spender as `0x${string}`],
           });
@@ -510,6 +519,9 @@ export class SecurityModule {
    * 🛡️ SPINAL REFLEX: Batch revoke approvals via direct approve(0) calls.
    * No external contract dependency — trustless and atomic.
    * Each revoke is a direct ERC20 call from the user's wallet.
+   * Security rationale:
+   * - Best-effort loop: one token failure does not block other revokes.
+   * - Throws only when all revokes fail, signaling full containment failure.
    */
   async batchRevokeApprovals(
     tokens: string[],
@@ -522,14 +534,13 @@ export class SecurityModule {
       return { hashes: [], count: 0 };
     }
 
-    const revokeAbi = parseAbi(['function approve(address spender, uint256 amount) returns (bool)']);
     const hashes: string[] = [];
     const errors: string[] = [];
 
     for (let i = 0; i < tokens.length; i++) {
       try {
         const data = encodeFunctionData({
-          abi: revokeAbi,
+          abi: ERC20_APPROVE_ABI,
           functionName: 'approve',
           args: [toAddress(spenders[i]), 0n]
         });

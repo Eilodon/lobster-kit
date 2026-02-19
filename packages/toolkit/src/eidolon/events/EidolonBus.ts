@@ -18,7 +18,7 @@ export enum EidolonEventType {
 export interface EidolonEvent {
     type: EidolonEventType;
     timestamp: number;
-    payload: any;
+    payload: unknown;
 }
 
 export interface BlockEvent extends EidolonEvent {
@@ -104,7 +104,7 @@ export class EidolonBus extends EventEmitter {
         });
     }
 
-    public subscribe(type: EidolonEventType, callback: (event: any) => void): () => void {
+    public subscribe(type: EidolonEventType, callback: (event: EidolonEvent) => void): () => void {
         this.on(type, callback);
         return () => this.off(type, callback);
     }

@@ -13,7 +13,15 @@ export class Synesthesia {
 
     constructor() {
         try {
-            const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+            type AudioContextCtor = new () => AudioContext;
+            const audioGlobal = globalThis as typeof globalThis & {
+                AudioContext?: AudioContextCtor;
+                webkitAudioContext?: AudioContextCtor;
+            };
+            const AudioContextClass = audioGlobal.AudioContext || audioGlobal.webkitAudioContext;
+            if (!AudioContextClass) {
+                throw new Error('AudioContext unavailable');
+            }
             this.audioCtx = new AudioContextClass();
             this.masterGain = this.audioCtx!.createGain();
             this.masterGain.connect(this.audioCtx!.destination);

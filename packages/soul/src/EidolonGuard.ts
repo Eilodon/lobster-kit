@@ -13,6 +13,7 @@ import { EidolonSimulator, ShadowTransaction, SimulationResult } from './simulat
 import RiskParams from './config/RiskConfig.json';
 import { DeepSeekOracle } from './ai/DeepSeekOracle';
 import { EidolonBus, EidolonEventType, TradeExecutedEvent } from '@clawkit/core';
+import type { EidolonEvent } from '@clawkit/core';
 import { TraumaRegistry } from './TraumaRegistry';
 import { AppendOnlyAdapter } from '@clawkit/core';
 import { BigMath } from '@clawkit/core';
@@ -168,8 +169,9 @@ export class EidolonGuard {
             this.updateSnapshot().catch(e => Logger.warn('Snapshot failed', e));
         }, 15000);
 
-        const unsubTrade = this.bus.subscribe(EidolonEventType.TRADE_EXECUTED, (event: TradeExecutedEvent) => {
-            void this.handleTradeExecuted(event);
+        const unsubTrade = this.bus.subscribe(EidolonEventType.TRADE_EXECUTED, (event: EidolonEvent) => {
+            if (event.type !== EidolonEventType.TRADE_EXECUTED) return;
+            void this.handleTradeExecuted(event as TradeExecutedEvent);
         });
         this.unsubs.push(unsubTrade);
 
@@ -208,7 +210,7 @@ export class EidolonGuard {
             if (fs.existsSync(EidolonGuard.LISTS_FILE)) {
                 const raw = fs.readFileSync(EidolonGuard.LISTS_FILE, 'utf-8');
                 const data = JSON.parse(raw);
-                (this.antiRug as any).import_lists(data);
+                this.antiRug.import_lists(data);
                 this.debug(`   📋 Loaded ${data.whitelist?.length ?? 0} whitelist + ${data.blacklist?.length ?? 0} blacklist entries`);
             }
         } catch (e) {
@@ -223,7 +225,7 @@ export class EidolonGuard {
         try {
             const dir = path.dirname(EidolonGuard.LISTS_FILE);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            const data = (this.antiRug as any).export_lists();
+            const data = this.antiRug.export_lists();
             fs.writeFileSync(EidolonGuard.LISTS_FILE, JSON.stringify(data, null, 2));
         } catch (e) {
             Logger.warn('Failed to persist AntiRug lists', e);
@@ -254,7 +256,7 @@ export class EidolonGuard {
         try {
             const tokenData = await this.securityOracle.checkToken(tokenAddress);
             const score = tokenData
-                ? (this.antiRug as any).compute_score(tokenAddress, tokenData) as import('./WasmAdapter').SecurityScore
+                ? this.antiRug.compute_score(tokenAddress, tokenData) as import('./WasmAdapter').SecurityScore
                 : this.antiRug.check_token_security(tokenAddress) as unknown as import('./WasmAdapter').SecurityScore;
             this.securityCache.set(tokenAddress, { score, timestamp: Date.now() });
         } catch (e) {
@@ -439,7 +441,7 @@ export class EidolonGuard {
                     const tokenData = await this.securityOracle.checkToken(context.tokenAddress);
 
                     if (tokenData) {
-                        security = (this.antiRug as any).compute_score(context.tokenAddress, tokenData) as import('./WasmAdapter').SecurityScore;
+                        security = this.antiRug.compute_score(context.tokenAddress, tokenData) as import('./WasmAdapter').SecurityScore;
                     } else {
                         security = this.antiRug.check_token_security(context.tokenAddress) as unknown as import('./WasmAdapter').SecurityScore;
                     }
@@ -522,36 +524,26 @@ export class EidolonGuard {
             // Gate 2: MULTIVERSE CHECK (Shadow Simulation)
             if (isTradeAction && context.txCandidate) {
                 this.debug('🔮 MULTIVERSE CHECK: Spawning Shadow Clone...');
-                let shadowResult: SimulationResult;
-                let touched: string[] = [];
-                let worstCaseGas: bigint | null = null;
+                const matrix = await this.simulator.simulateRiskMatrix(context.txCandidate);
+                const shadowResult: SimulationResult = matrix.base;
+                const touched: string[] = matrix.footprint?.touchedAddresses || [];
+                const worstCaseGas: bigint | null = matrix.gasWorstCase?.estimatedGas ?? null;
 
-                const simulatorAny = this.simulator as any;
-                if (typeof simulatorAny.simulateRiskMatrix === 'function') {
-                    const matrix = await simulatorAny.simulateRiskMatrix(context.txCandidate);
-                    shadowResult = matrix.base;
-                    touched = matrix.footprint?.touchedAddresses || [];
-                    worstCaseGas = matrix.gasWorstCase?.estimatedGas ?? null;
-
-                    if (!matrix.allPassed) {
-                        let reason = `💀 MULTI-SIM FAILED: Base scenario reverted (${shadowResult.revertReason || 'unknown reason'})`;
-                        if (matrix.footprint?.error) {
-                            reason = `💀 MULTI-SIM FAILED: ${matrix.footprint.error}`;
-                        } else if (matrix.footprint?.breached) {
-                            reason = `💥 BLAST RADIUS EXCEEDED: Touched ${matrix.footprint.touchedCount} contracts (Max ${matrix.footprint.maxTouchedAddresses}).`;
-                        }
-                        this.kpi.recordSimulationResult(false);
-                        return {
-                            approved: false,
-                            riskScore: 100,
-                            confidence: 0,
-                            reason,
-                            decisionLog: decision
-                        };
+                if (!matrix.allPassed) {
+                    let reason = `💀 MULTI-SIM FAILED: Base scenario reverted (${shadowResult.revertReason || 'unknown reason'})`;
+                    if (matrix.footprint?.error) {
+                        reason = `💀 MULTI-SIM FAILED: ${matrix.footprint.error}`;
+                    } else if (matrix.footprint?.breached) {
+                        reason = `💥 BLAST RADIUS EXCEEDED: Touched ${matrix.footprint.touchedCount} contracts (Max ${matrix.footprint.maxTouchedAddresses}).`;
                     }
-                } else {
-                    shadowResult = await this.simulator.simulate(context.txCandidate);
-                    touched = shadowResult.touchedAddresses || [];
+                    this.kpi.recordSimulationResult(false);
+                    return {
+                        approved: false,
+                        riskScore: 100,
+                        confidence: 0,
+                        reason,
+                        decisionLog: decision
+                    };
                 }
 
                 if (!shadowResult.success) {
@@ -734,7 +726,7 @@ export class EidolonGuard {
     }
 
     private applyCausalBias(decision: DecisionLog, marketState: MarketState, action: ActionType): void {
-        const signal = (this.brain as any).getCausalSignal?.(marketState, action);
+        const signal = this.brain.getCausalSignal(marketState, action);
         if (!signal) return;
 
         const delta = Number.isFinite(signal.confidenceDelta) ? signal.confidenceDelta : 0;

@@ -2,6 +2,7 @@ import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS, QTable, Q_CONFIG, Ma
 import { IStorageProvider } from './memory/IStorageProvider';
 import { AppendOnlyAdapter } from './memory/AppendOnlyAdapter';
 import { CausalBrain, SentinelVariable } from './ai/CausalBrain';
+import { ExperienceReplay, TrainingExample } from './ai/ExperienceReplay';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -45,6 +46,25 @@ export interface LearningConfig {
   GAMMA: number;
 }
 
+interface StoredWeights {
+  weights: typeof REASONING_WEIGHTS;
+  learningRate: number;
+  adjustmentCount: number;
+  adamM?: Record<string, number>;
+  adamV?: Record<string, number>;
+  adamT?: number;
+  savedAt?: string;
+  version?: string;
+}
+
+interface StoredQTable {
+  qTable: QTable;
+}
+
+interface QDeltaEntry {
+  updates?: Record<string, Partial<Record<ActionType, number>>>;
+}
+
 // 🧠 ADAM OPTIMIZER CONFIG
 // Adam (Adaptive Moment Estimation) hyperparameters.
 // Replaces simple gradient descent for faster convergence in volatile markets.
@@ -80,13 +100,18 @@ export class ActiveLearning {
   private adjustmentCount = 0;
 
   // Persistence
-  private storage: AppendOnlyAdapter;
+  private storage: IStorageProvider;
   private readonly WEIGHTS_KEY = 'active_learning_weights.json';
   private readonly Q_TABLE_KEY = 'active_learning_q_table.json'; // New Brain Memory
   private readonly CAUSAL_KEY = 'active_learning_causal.json'; // Synaptic Map
   private readonly Q_DELTA_KEY = 'active_learning_q_delta.log';
   private readonly HISTORY_KEY = 'active_learning_history.log';
   private autoSaveEnabled = true;
+
+  // 🧠 DREAMING ENGINE: Experience Replay
+  private replayBuffer: ExperienceReplay;
+  private readonly REPLAY_KEY = 'active_learning_replay.json';
+
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private saveInFlight: Promise<void> | null = null;
   private pendingUpdates = 0;
@@ -112,8 +137,9 @@ export class ActiveLearning {
     this.config = config;
 
     // Default to AppendOnly (Local) for Phase 1
-    this.storage = (storage as AppendOnlyAdapter) || new AppendOnlyAdapter();
+    this.storage = storage ?? new AppendOnlyAdapter();
     this.cognitiveBrain = new CausalBrain();
+    this.replayBuffer = new ExperienceReplay(2000); // Capacity 2000
   }
 
   /**
@@ -172,6 +198,16 @@ export class ActiveLearning {
     // FIX Bug #16: Allow passing nextState for Temporal Difference learning
     this.updateQValue(decision.marketState, decision.action, reward, decision.marketState); // Using current state as next state approximate
 
+    // 🌠 DREAMING ENGINE: Store experience for later
+    this.replayBuffer.add({
+      state: decision.marketState,
+      action: decision.action,
+      reward,
+      nextState: decision.marketState, // Approximation
+      outcome,
+      timestamp: Date.now()
+    });
+
     // 🧠 THE BRAIN 3.0: Bayesian Causal Learning
     // We verify if our "Priors" held true.
     // 1. Whale Flow -> Price Delta
@@ -221,6 +257,37 @@ export class ActiveLearning {
 
     if (this.autoSaveEnabled) {
       this.scheduleAutoSave();
+    }
+  }
+
+  /**
+   * 🌠 DREAMING ENGINE: Offline Learning using Experience Replay
+   * 
+   * "Dreams are the brain's way of defragmenting reality."
+   * 
+   * When the market is quiet (low volatility), the agent enters a "Dream State".
+   * It replays past experiences to reinforce learning without risking capital.
+   * 
+   * @param batchSize Number of memories to dream about
+   */
+  public dream(batchSize: number = 32): void {
+    if (this.replayBuffer.size() < batchSize) return;
+
+    const memories = this.replayBuffer.sample(batchSize);
+    this.debug(`🌠 Dreaming about ${memories.length} past experiences...`);
+
+    for (const memory of memories) {
+      // Re-learn from the past.
+      // We can use the SAME updateQValue function, but potentially with a smaller learning rate?
+      // For now, we use the standard learning rate to reinforce.
+
+      // Q-Learning Update:
+      // We need nextState for the Bellman equation.
+      // Stored memory has nextState? Yes, we added it to TrainingExample.
+
+      // Note: updateQValue expects us to pass reward. 
+      // We just re-run the update.
+      this.updateQValue(memory.state, memory.action, memory.reward, memory.nextState);
     }
   }
 
@@ -376,7 +443,7 @@ export class ActiveLearning {
       if (!category || !key) return;
 
       // Gradient: how much this factor contributed to the outcome
-      const factorImpact = (factor as any).impact || 0;
+      const factorImpact = factor.impact || 0;
       const gradient = reward * multiplier * (factorImpact / 100);
 
       this.applyAdamUpdate(category, key, gradient);
@@ -428,9 +495,9 @@ export class ActiveLearning {
     // Adam update rule
     const weightUpdate = this.learningRate * mHat / (Math.sqrt(vHat) + ADAM_EPSILON);
 
-    const oldVal = (categoryWeights as any)[resolvedKey];
-    (categoryWeights as any)[resolvedKey] = oldVal + weightUpdate;
-    this.debug(`       Adam[${stateKey}]: ${oldVal.toFixed(4)} -> ${((categoryWeights as any)[resolvedKey]).toFixed(4)} (g=${gradient.toFixed(4)}, m̂=${mHat.toFixed(4)}, v̂=${vHat.toFixed(4)})`);
+    const oldVal = categoryWeights[resolvedKey] ?? 0;
+    categoryWeights[resolvedKey] = oldVal + weightUpdate;
+    this.debug(`       Adam[${stateKey}]: ${oldVal.toFixed(4)} -> ${categoryWeights[resolvedKey].toFixed(4)} (g=${gradient.toFixed(4)}, m̂=${mHat.toFixed(4)}, v̂=${vHat.toFixed(4)})`);
   }
 
   /**
@@ -584,6 +651,10 @@ export class ActiveLearning {
       this.pendingUpdates = 0;
 
       this.debug('💾 Brain State (Weights + Adam + Q-Table) saved to local memory');
+
+      // Save Replay Buffer (Dreams)
+      await this.storage.save(this.REPLAY_KEY, this.replayBuffer.export());
+
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       console.error('❌ Failed to save weights:', message);
@@ -598,7 +669,7 @@ export class ActiveLearning {
   public async loadFromDisk(): Promise<void> {
     try {
       // Load weights + Adam state
-      const saved = await this.storage.load<any>(this.WEIGHTS_KEY);
+      const saved = await this.storage.load<StoredWeights>(this.WEIGHTS_KEY);
 
       if (saved) {
         this.weights = saved.weights;
@@ -614,17 +685,23 @@ export class ActiveLearning {
       }
 
       // Load Q-Table
-      const savedQ = await this.storage.load<any>(this.Q_TABLE_KEY);
+      const savedQ = await this.storage.load<StoredQTable>(this.Q_TABLE_KEY);
       if (savedQ) {
         this.qTable = savedQ.qTable;
         this.debug(`🧠 Loaded Q - Table(Size: ${Object.keys(this.qTable).length} states)`);
       }
 
+      // Load Replay Buffer
+      const savedDreams = await this.storage.load<string>(this.REPLAY_KEY);
+      if (savedDreams) {
+        this.replayBuffer.import(savedDreams);
+        this.debug(`🌠 Loaded ${this.replayBuffer.size()} dreams from ReplayBuffer`);
+      }
+
       // Load Causal Brain
       await this.cognitiveBrain.loadSynapticMap(this.storage, this.CAUSAL_KEY);
 
-      // Replay Q-Delta log on top of snapshot.
-      const qDeltas = await this.storage.readLog(this.Q_DELTA_KEY);
+      const qDeltas = (await this.storage.readLog(this.Q_DELTA_KEY)) as QDeltaEntry[];
       if (qDeltas.length > 0) {
         for (const delta of qDeltas) {
           if (!delta?.updates || typeof delta.updates !== 'object') continue;
@@ -640,8 +717,7 @@ export class ActiveLearning {
         }
       }
 
-      // Load history from AppendLog (Limit to last 1000 to prevent OOM)
-      const logs = await this.storage.readLog(this.HISTORY_KEY, 1000);
+      const logs = (await this.storage.readLog(this.HISTORY_KEY, 1000)) as TradeOutcome[];
       if (logs.length > 0) {
         // Keep bounded working-set in memory
         this.tradeHistory = logs;
@@ -764,8 +840,9 @@ export class ActiveLearning {
     }
 
     this.saveInFlight = this.saveToDisk(forceSnapshot)
-      .catch((err: any) => {
-        console.error('⚠️ Failed to save weights:', err.message);
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('⚠️ Failed to save weights:', message);
       })
       .finally(() => {
         this.saveInFlight = null;

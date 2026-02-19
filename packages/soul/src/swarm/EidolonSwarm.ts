@@ -11,7 +11,7 @@ import { DirtyMask, DirtyTracker } from '@clawkit/core';
 export interface SwarmMessage {
     sourceAgentId: string;
     type: 'DISCOVERY' | 'GOSSIP' | 'DANGER';
-    payload: any;
+    payload: unknown;
     timestamp: number;
 }
 
@@ -112,26 +112,34 @@ export class EidolonSwarm extends EventEmitter {
 
     private setupOutgoing() {
         // High Priority Events to Gossip
-        const unsubOpportunity = this.bus.subscribe(EidolonEventType.OPPORTUNITY, (event: any) => {
+        const unsubOpportunity = this.bus.subscribe(EidolonEventType.OPPORTUNITY, (event) => {
             if (this.closed) return;
+            const payload = (event && typeof event === 'object' && 'payload' in event)
+                ? (event as { payload?: unknown }).payload
+                : event;
             this.broadcast({
                 sourceAgentId: this.agentId,
                 type: 'GOSSIP',
-                payload: event?.payload ?? event,
+                payload,
                 timestamp: Date.now()
             });
         });
 
-        const unsubTrauma = this.bus.subscribe(EidolonEventType.TRAUMA, (event: any) => {
+        const unsubTrauma = this.bus.subscribe(EidolonEventType.TRAUMA, (event) => {
             if (this.closed) return;
-            const source = event?.payload?.source;
+            const payload = (event && typeof event === 'object' && 'payload' in event)
+                ? (event as { payload?: unknown }).payload
+                : event;
+            const source = (payload && typeof payload === 'object' && 'source' in payload)
+                ? (payload as { source?: unknown }).source
+                : undefined;
             if (typeof source === 'string' && source.startsWith('SWARM:')) {
                 return;
             }
             this.broadcast({
                 sourceAgentId: this.agentId,
                 type: 'DANGER',
-                payload: event?.payload ?? event,
+                payload,
                 timestamp: Date.now()
             });
         });
@@ -533,7 +541,7 @@ export class EidolonSwarm extends EventEmitter {
     }
 
     private unpackMessage(raw: unknown): SwarmMessage | null {
-        if (raw && typeof raw === 'object' && 'type' in (raw as any) && 'sourceAgentId' in (raw as any)) {
+        if (raw && typeof raw === 'object' && 'type' in (raw as Record<string, unknown>) && 'sourceAgentId' in (raw as Record<string, unknown>)) {
             const msg = raw as Record<string, unknown>;
             return this.validateDecodedMessage(msg.sourceAgentId, msg.type, msg.timestamp, msg.payload);
         }

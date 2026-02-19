@@ -12,7 +12,7 @@ export * from './types/EidolonTypes';
 
 // Events
 export { EidolonBus, EidolonEventType } from './events/EidolonBus';
-export type { TradeExecutedEvent, WhaleEvent } from './events/EidolonBus';
+export type { EidolonEvent, TradeExecutedEvent, WhaleEvent } from './events/EidolonBus';
 export { EventRingBuffer } from './events/EventRingBuffer';
 
 // Memory / Storage

@@ -5,6 +5,7 @@ import { withRetry } from './utils/Resilience';
 import { BigMath, WAD } from './utils/BigMath';
 import { TokenAmount } from './math/TokenAmount';
 import { getPriceService } from './services/PriceService';
+import { ERC20_ALLOWANCE_ABI, ERC20_APPROVE_ABI, ERC20_BALANCE_OF_ABI, ERC20_DECIMALS_ABI } from './abi/erc20';
 
 const PANCAKE_V3_ROUTER_ABI = [
   {
@@ -49,6 +50,19 @@ const PANCAKE_V3_ROUTER_ABI = [
     type: 'function'
   }
 ] as const;
+
+interface PancakePoolInfo {
+  pid: number;
+  lpAddress: string;
+  symbol: string;
+  apr: number;
+}
+
+interface UserStakedPoolInfo {
+  pid: number;
+  stakedAmount: bigint;
+  pendingRewards: bigint;
+}
 
 export class DeFiModule {
 
@@ -96,9 +110,10 @@ export class DeFiModule {
         data: data as `0x${string}`,
         value,
       });
-    } catch (error: any) {
-      console.error('❌ Simulation Failed:', error.shortMessage || error.message);
-      throw new Error(`Simulation failed: ${error.shortMessage || error.message}`);
+    } catch (error: unknown) {
+      const message = this.getErrorMessage(error);
+      console.error('❌ Simulation Failed:', message);
+      throw new Error(`Simulation failed: ${message}`);
     }
   }
 
@@ -180,8 +195,8 @@ export class DeFiModule {
         throw new Error(`Thermodynamic Fail: Gas Cost ~$${gasCostUSD.toFixed(2)} > 10% of Trade Value $${(checkAmountUSD as number).toFixed(2)}`);
       }
 
-    } catch (error) {
-      if (typeof error === 'object' && error !== null && 'message' in error && (error as any).message.includes('Thermodynamic')) throw error;
+    } catch (error: unknown) {
+      if (this.getErrorMessage(error).includes('Thermodynamic')) throw error;
       console.warn("Thermodynamic check warning:", error);
       // If we can't estimate gas, we might fail open or closed determined by config?
       // Audit says fail-open was a risk. checking fails...
@@ -257,7 +272,7 @@ export class DeFiModule {
         // ⚡ CHECK 1: FLASH ACCOUNTING (Thermodynamics)
         try {
           await this.checkThermodynamics(router, data, value, amountIn, fromDecimals, emergencyMode, params.amountUSD);
-        } catch (err: any) {
+        } catch (err: unknown) {
           // FIX: Re-throw fatal thermodynamic errors
           if (String(err).includes('Thermodynamic Fail')) throw err;
           console.warn(`Thermodynamic check failed: ${this.getErrorMessage(err)}. Proceeding with caution.`);
@@ -280,7 +295,7 @@ export class DeFiModule {
           hash,
           amountOut: amountOutToken.toHuman(8)
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Swap pipeline failed:', this.getErrorMessage(err));
         if (approvalGranted && fromToken !== this.tokens.BNB.address) {
           console.warn('🔄 Revoking approval due to swap pipeline failure...');
@@ -289,7 +304,7 @@ export class DeFiModule {
         throw err;
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Swap error:', error);
       this.handleSwapError(error);
       throw error;
@@ -308,7 +323,22 @@ export class DeFiModule {
   }
 
   private getErrorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
+    if (typeof error === 'object' && error !== null && 'shortMessage' in error) {
+      const shortMessage = (error as { shortMessage?: unknown }).shortMessage;
+      if (typeof shortMessage === 'string' && shortMessage.length > 0) {
+        return shortMessage;
+      }
+    }
+    if (error instanceof Error) {
+      return error.message;
+    }
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+      const message = (error as { message?: unknown }).message;
+      if (typeof message === 'string') {
+        return message;
+      }
+    }
+    return String(error);
   }
 
   /**
@@ -325,7 +355,7 @@ export class DeFiModule {
     // Check current allowance
     const allowance = await this.publicClient.readContract({
       address: toAddress(tokenAddress),
-      abi: parseAbi(['function allowance(address owner, address spender) view returns (uint256)']),
+      abi: ERC20_ALLOWANCE_ABI,
       functionName: 'allowance',
       args: [toAddress(owner), toAddress(spender)]
     });
@@ -339,11 +369,9 @@ export class DeFiModule {
     if (allowance < amount) {
       console.info(`🔓 Approving ${tokenAddress} for ${spender} (mode=${this.config.approvalMode || 'BUFFERED'})...`);
 
-      // ERC20_ABI is not defined in the provided context, assuming it's available globally or imported.
-      // For a complete solution, it would need to be defined, e.g., `const ERC20_ABI = parseAbi(['function approve(address spender, uint256 amount) returns (bool)']);`
       const { request } = await this.publicClient.simulateContract({
         address: tokenAddress as `0x${string}`,
-        abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']), // Using parseAbi directly for ERC20 approve
+        abi: ERC20_APPROVE_ABI,
         functionName: 'approve',
         args: [toAddress(spender), approvalAmount],
         account: toAddress(this.walletClient.account.address), // Ensure account is `Address` type
@@ -388,7 +416,7 @@ export class DeFiModule {
     console.warn(`Warning: Revoking approval for ${tokenAddress} to ${spender}`);
 
     const data = encodeFunctionData({
-      abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
+      abi: ERC20_APPROVE_ABI,
       functionName: 'approve',
       args: [toAddress(spender), 0n]
     });
@@ -423,7 +451,7 @@ export class DeFiModule {
       try {
         const balance = await this.publicClient.readContract({
           address: toAddress(token.address),
-          abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
+          abi: ERC20_BALANCE_OF_ABI,
           functionName: 'balanceOf',
           args: [toAddress(this.walletClient.account.address)]
         }) as bigint;
@@ -443,9 +471,9 @@ export class DeFiModule {
           });
           results.push(`Sold ${token.symbol}: ${tx.hash}`);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(`❌ Failed to dump ${token.symbol}`, e);
-        results.push(`Failed ${token.symbol}: ${e.message}`);
+        results.push(`Failed ${token.symbol}: ${this.getErrorMessage(e)}`);
       }
     }
     return results;
@@ -516,8 +544,8 @@ export class DeFiModule {
           const multiHopResult = await this.getMultiHopQuote(tokenIn, tokenOut, wbnb, amountIn, slippage);
           console.info(`✅ Multi-hop quote found: ${multiHopResult.amountOutMin}`);
           return multiHopResult;
-        } catch (multiHopErr: any) {
-          console.warn('⚠️ Multi-hop routing also failed:', multiHopErr.message);
+        } catch (multiHopErr: unknown) {
+          console.warn('⚠️ Multi-hop routing also failed:', this.getErrorMessage(multiHopErr));
         }
       }
 
@@ -627,7 +655,7 @@ export class DeFiModule {
       // FIX P1: Read decimals dynamically
       const dec = await this.publicClient.readContract({
         address: toAddress(poolInfo.lpAddress),
-        abi: parseAbi(['function decimals() view returns (uint8)']),
+        abi: ERC20_DECIMALS_ABI,
         functionName: 'decimals'
       }) as number;
 
@@ -656,33 +684,29 @@ export class DeFiModule {
       console.info(`✅ Staked ${amount} ${pool} tokens`);
       return { hash };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Stake error:', error);
-      throw new Error(`Staking failed: ${error.message || 'Unknown error'}`);
+      throw new Error(`Staking failed: ${this.getErrorMessage(error)}`);
     }
   }
 
   /**
    * Get PancakeSwap pool info
    */
-  private async getPancakePoolInfo(poolSymbol: string): Promise<any> {
+  private async getPancakePoolInfo(poolSymbol: string): Promise<PancakePoolInfo | null> {
     try {
-      const response = await withRetry(() => axios.get('https://farms-api.pancakeswap.com/farms', {
+      const response = await withRetry(() => axios.get<unknown>('https://farms-api.pancakeswap.com/farms', {
         timeout: 5000
       }));
 
       if (response.data && Array.isArray(response.data)) {
-        const pool = response.data.find((p: any) =>
-          p.lpSymbol?.toLowerCase().includes(poolSymbol.toLowerCase())
-        );
+        const normalized = response.data
+          .map((entry) => this.toPancakePoolInfo(entry))
+          .filter((entry): entry is PancakePoolInfo => entry !== null);
 
+        const pool = normalized.find((entry) => entry.symbol.toLowerCase().includes(poolSymbol.toLowerCase()));
         if (pool) {
-          return {
-            pid: pool.pid,
-            lpAddress: pool.lpAddress,
-            symbol: pool.lpSymbol,
-            apr: pool.apr
-          };
+          return pool;
         }
       }
 
@@ -794,7 +818,7 @@ export class DeFiModule {
    * ⚡ MULTICALL UPGRADE: All userInfo queries in a single RPC round-trip.
    * Transforms O(N) sequential awaits into O(1) network latency.
    */
-  private async getUserStakedPools(address: string): Promise<any[]> {
+  private async getUserStakedPools(address: string): Promise<UserStakedPoolInfo[]> {
     const masterChef = this.contracts.pancakeMasterChef;
     const userInfoAbi = parseAbi(['function userInfo(uint256 pid, address user) view returns (uint256 amount, uint256 rewardDebt)']);
     const pendingCakeAbi = parseAbi(['function pendingCake(uint256 pid, address user) view returns (uint256)']);
@@ -852,8 +876,8 @@ export class DeFiModule {
         pendingRewards: pendingResults[i].status === 'success' ? (pendingResults[i].result as bigint) : 0n
       }));
 
-    } catch (e) {
-      console.warn('Failed to fetch staked pools', e);
+    } catch (e: unknown) {
+      console.warn('Failed to fetch staked pools', this.getErrorMessage(e));
       return [];
     }
   }
@@ -893,34 +917,30 @@ export class DeFiModule {
         reinvestedAmount: totalRewards
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Auto-compound error:', error);
-      throw new Error(`Auto-compound failed: ${error.message || 'Unknown error'}`);
+      throw new Error(`Auto-compound failed: ${this.getErrorMessage(error)}`);
     }
   }
 
   /**
    * Find pool with highest APY
    */
-  private async findBestAPYPool(): Promise<any> {
+  private async findBestAPYPool(): Promise<PancakePoolInfo | null> {
     try {
-      const response = await withRetry(() => axios.get('https://farms-api.pancakeswap.com/farms', {
+      const response = await withRetry(() => axios.get<unknown>('https://farms-api.pancakeswap.com/farms', {
         timeout: 5000
       }));
 
       if (response.data && Array.isArray(response.data)) {
         // Filter active pools and sort by APR
         const activePools = response.data
-          .filter((p: any) => p.apr > 0)
-          .sort((a: any, b: any) => b.apr - a.apr);
+          .map((entry) => this.toPancakePoolInfo(entry))
+          .filter((entry): entry is PancakePoolInfo => entry !== null && entry.apr > 0)
+          .sort((a, b) => b.apr - a.apr);
 
         if (activePools.length > 0) {
-          return {
-            symbol: activePools[0].lpSymbol,
-            apr: activePools[0].apr,
-            lpAddress: activePools[0].lpAddress,
-            pid: activePools[0].pid
-          };
+          return activePools[0];
         }
       }
 
@@ -1055,9 +1075,9 @@ export class DeFiModule {
         console.log(`✅ Supplied ${asset}. Hash: ${hash}`);
         return { hash };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Lend error:', error);
-      throw new Error(`Lend failed: ${error.message}`);
+      throw new Error(`Lend failed: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -1094,9 +1114,9 @@ export class DeFiModule {
 
       console.log(`✅ Borrowed ${asset}. Hash: ${hash}`);
       return { hash };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Borrow error:', error);
-      throw new Error(`Borrow failed: ${error.message}`);
+      throw new Error(`Borrow failed: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -1155,9 +1175,9 @@ export class DeFiModule {
         console.log(`✅ Repaid ${asset}. Hash: ${hash}`);
         return { hash };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Repay error:', error);
-      throw new Error(`Repay failed: ${error.message}`);
+      throw new Error(`Repay failed: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -1188,10 +1208,36 @@ export class DeFiModule {
 
       console.log('✅ Entered markets');
       return { hash };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Enter markets error:', error);
-      throw new Error(`Enter markets failed: ${error.message}`);
+      throw new Error(`Enter markets failed: ${this.getErrorMessage(error)}`);
     }
+  }
+
+  private toPancakePoolInfo(entry: unknown): PancakePoolInfo | null {
+    if (typeof entry !== 'object' || entry === null) {
+      return null;
+    }
+    const maybePool = entry as {
+      pid?: unknown;
+      lpAddress?: unknown;
+      lpSymbol?: unknown;
+      apr?: unknown;
+    };
+    if (typeof maybePool.lpAddress !== 'string' || typeof maybePool.lpSymbol !== 'string') {
+      return null;
+    }
+    const pid = typeof maybePool.pid === 'number' ? maybePool.pid : Number(maybePool.pid);
+    const apr = typeof maybePool.apr === 'number' ? maybePool.apr : Number(maybePool.apr);
+    if (!Number.isFinite(pid) || !Number.isFinite(apr)) {
+      return null;
+    }
+    return {
+      pid,
+      lpAddress: maybePool.lpAddress,
+      symbol: maybePool.lpSymbol,
+      apr
+    };
   }
 }
 

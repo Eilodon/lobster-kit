@@ -38,7 +38,7 @@ export class AppendOnlyAdapter implements IStorageProvider {
      * Writes to a temp file first, then renames it.
      * Prevents data corruption if process crashes during write.
      */
-    async save(key: string, data: any): Promise<void> {
+    async save<T = unknown>(key: string, data: T): Promise<void> {
         return this.lock.run(async () => {
             await this.ensureBaseDir(); // Lazy init safety
             const filePath = path.join(this.baseDir, key);
@@ -87,7 +87,7 @@ export class AppendOnlyAdapter implements IStorageProvider {
      * Appends a JSON line to the file.
      * Format: NDJSON (Newline Delimited JSON)
      */
-    async append(key: string, data: any): Promise<void> {
+    async append<T = unknown>(key: string, data: T): Promise<void> {
         return this.lock.run(async () => {
             await this.ensureBaseDir(); // Lazy init safety
             const filePath = path.join(this.baseDir, key);
@@ -123,9 +123,9 @@ export class AppendOnlyAdapter implements IStorageProvider {
      * @param limit Max number of recent entries to return (0 = all)
      * @param offset entries to skip
      */
-    async readLog(key: string, limit: number = 0, offset: number = 0): Promise<any[]> {
+    async readLog<T = unknown>(key: string, limit: number = 0, offset: number = 0): Promise<T[]> {
         const filePath = path.join(this.baseDir, key);
-        const entries: unknown[] = [];
+        const entries: T[] = [];
 
         try {
             const fileHandle = await fs.open(filePath, 'r');
@@ -144,7 +144,7 @@ export class AppendOnlyAdapter implements IStorageProvider {
             for await (const line of rl) {
                 if (!line.trim()) continue;
                 try {
-                    const parsed = JSON.parse(line);
+                    const parsed = JSON.parse(line) as { data?: T };
 
                     // Offset logic: Skip first N items if offset > 0
                     if (offset > 0) {
@@ -154,12 +154,12 @@ export class AppendOnlyAdapter implements IStorageProvider {
 
                     // Memory Safety: If limiting, maintain only the window
                     if (limit > 0) {
-                        entries.push(parsed.data);
+                        entries.push(parsed.data as T);
                         if (entries.length > limit) {
                             entries.shift(); // Remove oldest to keep memory usage constant
                         }
                     } else {
-                        entries.push(parsed.data);
+                        entries.push(parsed.data as T);
                     }
                 } catch {
                     // Skip corrupted log line.
@@ -201,7 +201,7 @@ export class AppendOnlyAdapter implements IStorageProvider {
      * READ LOG TAIL (Optimized)
      * Alias for readLog with limit
      */
-    async readLogTail(key: string, limit: number = 1000): Promise<any[]> {
+    async readLogTail<T = unknown>(key: string, limit: number = 1000): Promise<T[]> {
         return this.readLog(key, limit);
     }
 

@@ -15,6 +15,11 @@ interface Transaction {
   value?: bigint;
 }
 
+interface GasPriceOracle {
+  getBNBPrice?: () => Promise<number>;
+  fetchTokenPrices?: (symbols: string[]) => Promise<Record<string, number | undefined>>;
+}
+
 export class GasModule {
   // ⚠️ FIXED: Chainlink NOT available on opBNB L2
   // Using API-based price feeds with caching
@@ -30,13 +35,13 @@ export class GasModule {
     private walletClient: ClawKitWalletClient,
     private publicClient: PublicClient,
     private config: ClawKitConfig,
-    private oracle?: any // Loosely typed to avoid circular import hell, or use Interface
+    private oracle?: GasPriceOracle
   ) { }
 
   /**
    * Inject Oracle for GHOST Protocol (Privacy)
    */
-  public setOracle(oracle: any) {
+  public setOracle(oracle: GasPriceOracle) {
     this.oracle = oracle;
   }
 
@@ -126,8 +131,11 @@ export class GasModule {
         console.log(`✅ BNB price from CoinGecko: $${price.toFixed(2)}`);
         return price;
       }
-    } catch (error: any) {
-      if (error.response?.status === 429) {
+    } catch (error: unknown) {
+      const status = (typeof error === 'object' && error !== null && 'response' in error)
+        ? (error as { response?: { status?: number } }).response?.status
+        : undefined;
+      if (status === 429) {
         console.warn('⚠️ CoinGecko rate limit hit (429)');
 
         // Return stale cache if available
@@ -136,7 +144,8 @@ export class GasModule {
           return this.priceCache.value;
         }
       } else {
-        console.error('CoinGecko error:', error.message);
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('CoinGecko error:', message);
       }
     }
 
@@ -154,8 +163,9 @@ export class GasModule {
         console.log(`✅ BNB price from Binance: $${price.toFixed(2)}`);
         return price;
       }
-    } catch (error: any) {
-      console.error('Binance API error:', error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Binance API error:', message);
     }
 
     // Last resort: Use stale cached value

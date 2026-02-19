@@ -1,4 +1,4 @@
-import { WalletClient, PublicClient, encodeFunctionData, parseAbi, formatEther, parseEther } from 'viem';
+import { WalletClient, PublicClient, encodeFunctionData, parseAbi, formatEther, parseEther, formatUnits } from 'viem';
 import { ClawKitConfig, BATCH_EXECUTOR, ClawKitWalletClient, toAddress, assertDeployed } from './types';
 import axios from 'axios';
 
@@ -92,6 +92,20 @@ export class GasModule {
       return this.priceCache.value;
     }
 
+    // 🕸️ THERAPY 3: ON-CHAIN SENSORY (The Hearing Aid)
+    // If cache is stale/missing, try On-Chain reading BEFORE falling back to centralized APIs.
+    // This respects privacy (RPC only) and is robust against API downtimes.
+    try {
+      const onChainPrice = await this.getBNBPriceOnChain();
+      if (onChainPrice && onChainPrice > 0) {
+        this.priceCache = { value: onChainPrice, timestamp: Date.now() };
+        console.log(`✅ BNB price from On-Chain (Pancake V3): $${onChainPrice.toFixed(2)}`);
+        return onChainPrice;
+      }
+    } catch (e) {
+      console.warn('⚠️ On-Chain price sensing failed:', e);
+    }
+
     // Strict privacy: never call centralized HTTP feeds directly.
     if (strictPrivacy) {
       if (this.priceCache) {
@@ -102,7 +116,7 @@ export class GasModule {
       // FIX: Emergency Oxygen - Attempt to infer price from RPC if possible, or throw softer error
       // For now, we MUST throw if no source is available, but the cache check above handles the "stale" case.
       // If we are here, we have NO data.
-      console.error('⚠️ ASPHYXIATION WARNING: No internal oracle and no cache in STRICT mode.');
+      console.error('⚠️ ASPHYXIATION WARNING: No internal oracle, no On-Chain data, and no cache in STRICT mode.');
       throw new Error('PRIVACY_STRICT_MODE: Missing internal oracle/cached price. External HTTP feeds are disabled.');
     }
 
@@ -170,6 +184,57 @@ export class GasModule {
     console.error(`❌ All APIs failed to fetch BNB price. Using emergency fallback: $${emergencyFallback}`);
     this.priceCache = { value: emergencyFallback, timestamp: Date.now() };
     return emergencyFallback;
+  }
+
+  /**
+   * 🕸️ ON-CHAIN SENSORY: Query PancakeSwap V3 for WBNB/USDT price.
+   * This is the "Truth" of the blockchain, immune to API rate limits.
+   */
+  private async getBNBPriceOnChain(): Promise<number | null> {
+    const contracts = this.config.chainConfig?.contracts;
+    const tokens = this.config.chainConfig?.tokens;
+
+    if (!contracts?.pancakeQuoter || !tokens?.WBNB || !tokens?.USDT) {
+      // Missing config, cannot sense on-chain.
+      return null;
+    }
+
+    try {
+      // 1 WBNB -> USDT
+      const amountIn = parseEther('1');
+      const tokenIn = toAddress(tokens.WBNB.address);
+      const tokenOut = toAddress(tokens.USDT.address);
+      const fee = 500; // 0.05% typical for stable pairs like BNB/USDT on V3
+
+      const quoterAbi = parseAbi(['function quoteExactInputSingle((address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96) params) view returns (uint256 amountOut)']);
+
+      const amountOut = await this.publicClient.readContract({
+        address: toAddress(contracts.pancakeQuoter),
+        abi: quoterAbi,
+        functionName: 'quoteExactInputSingle',
+        args: [{
+          tokenIn,
+          tokenOut,
+          amountIn,
+          fee,
+          sqrtPriceLimitX96: 0n
+        }]
+      }) as bigint;
+
+      // USDT is 6 decimals? 18? Check config.
+      const usdtDecimals = tokens.USDT.decimals || 18;
+
+      // formatUnits returns string "600.5"
+      // If USDT is 6 decimals, 600000000 -> 600.0
+      // If USDT is 18 decimals, 600e18 -> 600.0
+      const price = parseFloat(formatUnits(amountOut, usdtDecimals));
+
+      return price;
+
+    } catch (e) {
+      // console.warn('On-Chain Price Check failed (might be no liquidity at 0.05% tier)', e);
+      return null;
+    }
   }
 
   /**

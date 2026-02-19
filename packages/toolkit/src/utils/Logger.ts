@@ -35,14 +35,14 @@ function normalizeContext(ctx: unknown): Record<string, unknown> {
     return ctx as Record<string, unknown>;
 }
 
-function redact(obj: any, depth = 0): any {
+function redact(obj: unknown, depth = 0): unknown {
     if (depth > 10 || obj === null || obj === undefined) return obj;
     if (typeof obj === 'bigint') return obj.toString();
     if (typeof obj !== 'object') return obj;
     if (Array.isArray(obj)) return obj.map(item => redact(item, depth + 1));
 
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj)) {
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
         out[k] = REDACTED_KEYS.has(k) ? '[REDACTED]' : redact(v, depth + 1);
     }
     return out;

@@ -1,0 +1,12 @@
+/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/debug/deps/async_lock-dbcab0e719b2abc9.d: /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/lib.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/barrier.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/mutex.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/once_cell.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock/futures.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock/raw.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/semaphore.rs
+
+/media/ybao/DATA/b1/clawkit-bnb/packages/soul/core-rust/target/debug/deps/libasync_lock-dbcab0e719b2abc9.rmeta: /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/lib.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/barrier.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/mutex.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/once_cell.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock/futures.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock/raw.rs /home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/semaphore.rs
+
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/lib.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/barrier.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/mutex.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/once_cell.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock/futures.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/rwlock/raw.rs:
+/home/ybao/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-lock-3.4.2/src/semaphore.rs:

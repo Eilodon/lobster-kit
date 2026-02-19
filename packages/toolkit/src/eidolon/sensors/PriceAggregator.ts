@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { PythAdapter } from '../oracles/PythAdapter';
-import { ClawKit } from '../../index';
+import { IClawKit } from '@clawkit/core';
 import { getTokenDecimals } from '../../types';
 import { formatUnits } from 'viem';
 
@@ -12,7 +12,7 @@ export interface PriceSource {
 
 export class PriceAggregator {
     constructor(
-        private kit: ClawKit,
+        private kit: IClawKit,
         private pyth: PythAdapter
     ) { }
 
@@ -72,8 +72,9 @@ export class PriceAggregator {
         try {
             const res = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${pair}`, { timeout: 3000 });
             return parseFloat(res.data.price);
-        } catch (e: any) {
-            throw new Error(`Binance API error: ${e.message}`);
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
+            throw new Error(`Binance API error: ${message}`);
         }
     }
 
@@ -85,11 +86,18 @@ export class PriceAggregator {
         const wbnb = 'WBNB';
         const usdt = 'USDT';
 
+        if (!this.kit.defi.getRealQuote) throw new Error('Defi module not available');
         const quote = await this.kit.defi.getRealQuote(wbnb, usdt, oneUnit, 0);
-        if (!quote?.amountOutMin) throw new Error('No DEX liquidity');
+        const amountOutMin = this.extractAmountOutMin(quote);
+        if (!amountOutMin) throw new Error('No DEX liquidity');
 
         const usdtDecimals = getTokenDecimals('USDT');
-        return Number(formatUnits(quote.amountOutMin, usdtDecimals));
+        return Number(formatUnits(amountOutMin, usdtDecimals));
+    }
+
+    private extractAmountOutMin(quote: Record<string, unknown> | null | undefined): bigint | null {
+        const maybeAmount = quote?.amountOutMin;
+        return typeof maybeAmount === 'bigint' ? maybeAmount : null;
     }
 
     private calculateConsensus(sources: PriceSource[]): number {

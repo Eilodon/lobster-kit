@@ -1,4 +1,5 @@
-import { IClawKit, EidolonBus, EidolonEventType, WhaleEvent } from '@clawkit/core';
+import { IClawKit, EidolonBus, EidolonEventType, PythConfig } from '@clawkit/core';
+import type { EidolonEvent } from '@clawkit/core';
 import { MarketState } from '@clawkit/core';
 import { PythAdapter } from '../oracles/PythAdapter';
 import { PriceAggregator } from './PriceAggregator';
@@ -21,16 +22,26 @@ export class ClawOracle {
     private readonly MEMORY_TTL = 300000; // 5 minutes
 
     constructor(private kit: IClawKit) {
-        this.pyth = new PythAdapter(kit.config.pythConfig as any);
+        const maybePythConfig = kit.config.pythConfig;
+        const pythConfig = (maybePythConfig && typeof maybePythConfig === 'object')
+            ? maybePythConfig as PythConfig
+            : undefined;
+        this.pyth = new PythAdapter(pythConfig);
         this.aggregator = new PriceAggregator(kit, this.pyth);
         this.bus = EidolonBus.getInstance();
 
         // 🎧 Listen for Whales
-        this.bus.subscribe(EidolonEventType.WHALE_MOVEMENT, (e: WhaleEvent) => {
+        this.bus.subscribe(EidolonEventType.WHALE_MOVEMENT, (event: EidolonEvent) => {
+            if (event.type !== EidolonEventType.WHALE_MOVEMENT) return;
+            if (!event.payload || typeof event.payload !== 'object') return;
+            const payload = event.payload as { amountUSD?: unknown; action?: unknown };
+            const amountUSD = typeof payload.amountUSD === 'number' ? payload.amountUSD : NaN;
+            const action = payload.action === 'BUY' || payload.action === 'SELL' ? payload.action : null;
+            if (!Number.isFinite(amountUSD) || !action) return;
             this.whaleMemory.push({
-                time: e.timestamp,
-                amount: e.payload.amountUSD,
-                action: e.payload.action
+                time: event.timestamp,
+                amount: amountUSD,
+                action
             });
             this.pruneMemory();
         });
@@ -46,6 +57,11 @@ export class ClawOracle {
         if (decimals === 18) return raw;
         if (decimals < 18) return raw * (10n ** BigInt(18 - decimals));
         return raw / (10n ** BigInt(decimals - 18));
+    }
+
+    private extractAmountOutMin(quote: Record<string, unknown>): bigint | null {
+        const value = quote.amountOutMin;
+        return typeof value === 'bigint' ? value : null;
     }
 
     public async getBNBPrice(): Promise<number> {
@@ -82,14 +98,16 @@ export class ClawOracle {
                 this.kit.defi.getRealQuote(wbnb, usdt, amountSmall, 0),
                 this.kit.defi.getRealQuote(wbnb, usdt, amountLarge, 0)
             ]);
-            if (!quoteSmall?.amountOutMin || !quoteLarge?.amountOutMin) {
+            const quoteSmallOut = quoteSmall ? this.extractAmountOutMin(quoteSmall) : null;
+            const quoteLargeOut = quoteLarge ? this.extractAmountOutMin(quoteLarge) : null;
+            if (!quoteSmallOut || !quoteLargeOut) {
                 return 'THIN';
             }
 
             // Calculate Price per WBNB
             const usdtDecimals = getTokenDecimals(usdt);
-            const quoteSmallWad = this.normalizeToWad(quoteSmall.amountOutMin, usdtDecimals);
-            const quoteLargeWad = this.normalizeToWad(quoteLarge.amountOutMin, usdtDecimals);
+            const quoteSmallWad = this.normalizeToWad(quoteSmallOut, usdtDecimals);
+            const quoteLargeWad = this.normalizeToWad(quoteLargeOut, usdtDecimals);
 
             // Human price ratio: (USDT out) / (WBNB in), both normalized to WAD.
             const priceSmall = BigMath.unitsToNumber(
@@ -170,8 +188,12 @@ export class ClawOracle {
         try {
             if (!this.kit.gas.getOptimalExecutionTime) return 'MEDIUM';
             const gas = await this.kit.gas.getOptimalExecutionTime();
+            const currentGasPrice = typeof gas.currentGasPrice === 'string' || typeof gas.currentGasPrice === 'number'
+                ? String(gas.currentGasPrice)
+                : '';
+            if (!currentGasPrice) return 'MEDIUM';
             // Heuristic: < 3 gwei is LOW, < 5 is MEDIUM, > 5 is HIGH on opBNB
-            const price = parseFloat(gas.currentGasPrice);
+            const price = parseFloat(currentGasPrice);
             if (price < 3) return 'LOW';  // < 3 Gwei = cheap on opBNB
             if (price < 5) return 'MEDIUM'; // 3-5 Gwei = moderate
             return 'HIGH';

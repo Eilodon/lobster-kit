@@ -5,6 +5,7 @@ import { withRetry } from './utils/Resilience';
 import { BigMath, WAD } from './utils/BigMath';
 import { TokenAmount } from './math/TokenAmount';
 import { getPriceService } from './services/PriceService';
+import { ERC20_ALLOWANCE_ABI, ERC20_APPROVE_ABI, ERC20_BALANCE_OF_ABI, ERC20_DECIMALS_ABI } from './abi/erc20';
 
 const PANCAKE_V3_ROUTER_ABI = [
   {
@@ -66,6 +67,9 @@ export class DeFiModule {
   // FIX P1: Inject Price Service
   private priceOracle?: { fetchTokenPrices: () => Promise<Record<string, number>> };
 
+  // FIX Therapy 1: Dynamic Decimals Cache (Thính Giác On-Chain)
+  private decimalsCache: Map<string, number> = new Map();
+
   public setPriceOracle(oracle: { fetchTokenPrices: () => Promise<Record<string, number>> }) {
     this.priceOracle = oracle;
   }
@@ -76,6 +80,55 @@ export class DeFiModule {
 
   private get tokens() {
     return this.config.chainConfig!.tokens;
+  }
+
+  /**
+   * 👂 DYNAMIC DECIMALS: Resolves token decimals on-chain if not in config.
+   * Caches results to minimize RPC calls.
+   */
+  public async getDynamicTokenDecimals(tokenOrSymbol: string): Promise<number> {
+    // 1. Check internal cache
+    const cached = this.decimalsCache.get(tokenOrSymbol.toUpperCase());
+    if (cached !== undefined) return cached;
+    const addrCached = this.decimalsCache.get(tokenOrSymbol.toLowerCase());
+    if (addrCached !== undefined) return addrCached;
+
+    // 2. Check static config (Fast path)
+    try {
+      const staticDecimals = getTokenDecimals(tokenOrSymbol);
+      this.decimalsCache.set(tokenOrSymbol.toUpperCase(), staticDecimals);
+      return staticDecimals;
+    } catch {
+      // Not in config, proceed to on-chain check
+    }
+
+    // 3. Resolve Address
+    let address: string = tokenOrSymbol;
+    // If it looks like a symbol (not 0x...), we can't resolve address if not in config.
+    // So we assume it IS an address if the config lookup failed.
+    // Or we fail if it's not a valid address format.
+    if (!tokenOrSymbol.startsWith('0x')) {
+      // It was a symbol, but getTokenDecimals failed, meaning it's unknown.
+      // We can't query on-chain without an address.
+      throw new Error(`UnknownTokenError: Cannot resolve address for symbol '${tokenOrSymbol}'. Please provide address.`);
+    }
+
+    // 4. Query On-Chain (The Hearing Aid)
+    try {
+      console.info(`👂 Resolving decimals on-chain for ${tokenOrSymbol}...`);
+      const decimals = await this.publicClient.readContract({
+        address: toAddress(tokenOrSymbol),
+        abi: ERC20_DECIMALS_ABI,
+        functionName: 'decimals'
+      }) as number;
+
+      this.decimalsCache.set(tokenOrSymbol.toLowerCase(), decimals);
+      console.info(`✅ Decimals resolved: ${decimals}`);
+      return decimals;
+    } catch (e) {
+      console.error(`❌ Failed to resolve decimals for ${tokenOrSymbol}`, e);
+      throw new Error(`Failed to resolve decimals for ${tokenOrSymbol}`);
+    }
   }
 
   /**
@@ -102,10 +155,6 @@ export class DeFiModule {
     }
   }
 
-  /**
-   * ⚡ FLASH ACCOUNTING: Thermodynamic Check
-   * Ensure we are not burning move energy (Gas) than the food is worth.
-   */
   /**
    * ⚡ FLASH ACCOUNTING: Thermodynamic Check
    * Ensure we are not burning move energy (Gas) than the food is worth.
@@ -200,8 +249,8 @@ export class DeFiModule {
     const fromToken = this.resolveTokenAddress(from);
     const toToken = this.resolveTokenAddress(to);
 
-    // FIX Bug #1: Dynamic Decimal Resolution
-    const fromDecimals = getTokenDecimals(from);
+    // FIX Bug #1 & Therapy 1: Dynamic Decimal Resolution
+    const fromDecimals = await this.getDynamicTokenDecimals(from);
     const amountInToken = TokenAmount.fromHuman(amount, fromDecimals, from);
     const amountIn = amountInToken.raw;
 
@@ -320,7 +369,7 @@ export class DeFiModule {
     // Check current allowance
     const allowance = await this.publicClient.readContract({
       address: toAddress(tokenAddress),
-      abi: parseAbi(['function allowance(address owner, address spender) view returns (uint256)']),
+      abi: ERC20_ALLOWANCE_ABI,
       functionName: 'allowance',
       args: [toAddress(owner), toAddress(spender)]
     });
@@ -334,11 +383,9 @@ export class DeFiModule {
     if (allowance < amount) {
       console.info(`🔓 Approving ${tokenAddress} for ${spender} (mode=${this.config.approvalMode || 'BUFFERED'})...`);
 
-      // ERC20_ABI is not defined in the provided context, assuming it's available globally or imported.
-      // For a complete solution, it would need to be defined, e.g., `const ERC20_ABI = parseAbi(['function approve(address spender, uint256 amount) returns (bool)']);`
       const { request } = await this.publicClient.simulateContract({
         address: tokenAddress as `0x${string}`,
-        abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']), // Using parseAbi directly for ERC20 approve
+        abi: ERC20_APPROVE_ABI,
         functionName: 'approve',
         args: [toAddress(spender), approvalAmount],
         account: toAddress(this.walletClient.account.address), // Ensure account is `Address` type
@@ -384,7 +431,7 @@ export class DeFiModule {
     console.warn(`Warning: Revoking approval for ${tokenAddress} to ${spender}`);
 
     const data = encodeFunctionData({
-      abi: parseAbi(['function approve(address spender, uint256 amount) returns (bool)']),
+      abi: ERC20_APPROVE_ABI,
       functionName: 'approve',
       args: [toAddress(spender), 0n]
     });
@@ -404,47 +451,62 @@ export class DeFiModule {
   }
 
   /**
-   * 🚨 EMERGENCY: DUMP ALL POSITIONS
+   * 🚨 EMERGENCY: DUMP ALL POSITIONS (PARALLEL EVACUATION)
    * Sells all known tokens in config to BNB/USDT.
    * Ignores slippage checks (Force Mode).
+   * NOW: Uses Parallel Execution (Promise.allSettled) to prevent blocking.
    */
   async dumpAllPositions(): Promise<string[]> {
-    console.error("🚨 EMERGENCY DUMP INITIATED: LIQUIDATING ALL ASSETS");
-    const results: string[] = [];
+    console.error("🚨 EMERGENCY DUMP INITIATED: LIQUIDATING ALL ASSETS (PARALLEL)");
     const tokens = Object.values(this.tokens);
+    const dumpPromises: Promise<string>[] = [];
 
     for (const token of tokens) {
       if (token.symbol === 'BNB' || token.symbol === 'WBNB' || token.symbol === 'USDT') continue;
 
-      try {
-        const balance = await this.publicClient.readContract({
-          address: toAddress(token.address),
-          abi: parseAbi(['function balanceOf(address) view returns (uint256)']),
-          functionName: 'balanceOf',
-          args: [toAddress(this.walletClient.account.address)]
-        }) as bigint;
+      const dumpTask = async () => {
+        try {
+          const balance = await this.publicClient.readContract({
+            address: toAddress(token.address),
+            abi: ERC20_BALANCE_OF_ABI,
+            functionName: 'balanceOf',
+            args: [toAddress(this.walletClient.account.address)]
+          }) as bigint;
 
-        if (balance > 0n) {
-          console.log(`📉 Dumping ${token.symbol}: ${balance.toString()}`);
-          const decimals = getTokenDecimals(token.symbol);
-          const amountHuman = formatUnits(balance, decimals);
+          if (balance > 0n) {
+            console.log(`📉 Dumping ${token.symbol}: ${balance.toString()}`);
+            // Therapy 1: Dynamic Decimals
+            const decimals = await this.getDynamicTokenDecimals(token.symbol).catch(() => token.decimals);
 
-          // Swap to USDT or BNB
-          const tx = await this.swap({
-            from: token.symbol,
-            to: 'USDT', // Default flight to safety
-            amount: amountHuman,
-            slippage: 10, // 10% slippage tolerance for emergency
-            emergencyMode: true
-          });
-          results.push(`Sold ${token.symbol}: ${tx.hash}`);
+            const amountHuman = formatUnits(balance, decimals);
+
+            // Swap to USDT or BNB
+            const tx = await this.swap({
+              from: token.symbol,
+              to: 'USDT', // Default flight to safety
+              amount: amountHuman,
+              slippage: 10, // 10% slippage tolerance for emergency
+              emergencyMode: true
+            });
+            return `Sold ${token.symbol}: ${tx.hash}`;
+          }
+          return `Skipped ${token.symbol}: No Balance`;
+        } catch (e: any) {
+          console.error(`❌ Failed to dump ${token.symbol}`, e);
+          throw new Error(`Failed ${token.symbol}: ${e.message}`);
         }
-      } catch (e: any) {
-        console.error(`❌ Failed to dump ${token.symbol}`, e);
-        results.push(`Failed ${token.symbol}: ${e.message}`);
-      }
+      };
+
+      dumpPromises.push(dumpTask());
     }
-    return results;
+
+    // Execute all concurrently
+    const results = await Promise.allSettled(dumpPromises);
+
+    return results.map(r => {
+      if (r.status === 'fulfilled') return r.value;
+      return r.reason.message || String(r.reason);
+    }).filter(msg => !msg.startsWith('Skipped'));
   }
 
   /**
@@ -620,12 +682,20 @@ export class DeFiModule {
         throw new Error(`Pool ${pool} not found`);
       }
 
-      // FIX P1: Read decimals dynamically
-      const dec = await this.publicClient.readContract({
-        address: toAddress(poolInfo.lpAddress),
-        abi: parseAbi(['function decimals() view returns (uint8)']),
-        functionName: 'decimals'
-      }) as number;
+      // FIX P1: Read decimals dynamically using Therapy 1 Cache
+      // Use getDynamicTokenDecimals instead of manual readContract
+      let dec = 18;
+      try {
+        // lpAddress is usually a standard token so it fits our model
+        dec = await this.getDynamicTokenDecimals(poolInfo.lpAddress);
+      } catch {
+        // Fallback to manual read if cache/resolution fails for some reason
+        dec = await this.publicClient.readContract({
+          address: toAddress(poolInfo.lpAddress),
+          abi: ERC20_DECIMALS_ABI,
+          functionName: 'decimals'
+        }) as number;
+      }
 
       const amountToStake = parseUnits(amount, dec);
       const lpTokenAddress = poolInfo.lpAddress;

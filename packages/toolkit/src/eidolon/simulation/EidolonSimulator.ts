@@ -7,7 +7,7 @@ export interface SimulationResult {
     gasUsed: bigint;
     revertReason?: string;
     logs: unknown[];
-    returnValue?: any;
+    returnValue?: unknown;
     simulatedValueUSD?: number; // Estimated value of output
     touchedAddresses?: string[]; // 🕵️ Footprint Analysis (Access List)
     estimatedGasLimit?: bigint;
@@ -19,7 +19,7 @@ export interface ShadowTransaction {
     value?: bigint;
     account: string;
     simulateAsWhale?: boolean;
-    stateOverride?: any; // 🛠️ GOD MODE: Alter reality (Users balance, Nonce, Code)
+    stateOverride?: StateOverrideMap; // 🛠️ GOD MODE: Alter reality (Users balance, Nonce, Code)
 }
 
 export interface RiskMatrixResult {
@@ -37,6 +37,20 @@ export interface RiskMatrixResult {
     };
     allPassed: boolean;
 }
+
+type HexAddress = `0x${string}`;
+
+type StateOverrideEntry = Record<string, unknown> & {
+    balance?: string;
+};
+
+type StateOverrideMap = Record<string, StateOverrideEntry>;
+
+type AccessListItem = { address?: string };
+
+type AccessListResult = {
+    accessList?: AccessListItem[];
+};
 
 /**
  * 🔮 EIDOLON SIMULATOR (Shadow Clones)
@@ -58,6 +72,17 @@ export class EidolonSimulator {
         this.client = kit.publicClient;
     }
 
+    private extractTouchedAddresses(accessList: unknown): string[] {
+        if (!accessList || typeof accessList !== 'object') return [];
+        const list = (accessList as AccessListResult).accessList;
+        if (!Array.isArray(list)) return [];
+        return this.dedupeAddresses(
+            list
+                .map((item) => String(item?.address ?? ''))
+                .filter((address) => address.length > 0)
+        );
+    }
+
     public async simulate(tx: ShadowTransaction): Promise<SimulationResult> {
         try {
             console.log(`🔮 SHADOW CLONE: Simulating tx to ${tx.to}...`);
@@ -77,7 +102,7 @@ export class EidolonSimulator {
                             data: tx.data as `0x${string}`,
                             value: tx.value || 0n,
                             stateOverride
-                        } as any)),
+                        } as Parameters<PublicClient['createAccessList']>[0])),
                         EidolonSimulator.RPC_TIMEOUT_MS,
                         'SIM_ACCESS_LIST_TIMEOUT'
                     ),
@@ -89,17 +114,18 @@ export class EidolonSimulator {
                     }
                 );
 
-                if (accessList && accessList.accessList) {
-                    touched = this.dedupeAddresses(accessList.accessList.map(a => a.address));
+                touched = this.extractTouchedAddresses(accessList);
+                if (touched.length > 0) {
                     console.log(`   🕵️ Footprint: Touched ${touched.length} contracts.`);
                 }
-            } catch (e: any) {
-                console.warn(`   ⚠️ Failed to generate Access List: ${e.message}`);
+            } catch (e: unknown) {
+                const message = e instanceof Error ? e.message : String(e);
+                console.warn(`   ⚠️ Failed to generate Access List: ${message}`);
                 // Keep simulate() permissive for compatibility; simulateRiskMatrix() is fail-closed.
             }
 
             // 3. Dry Run via Call (eth_call) with State Overrides
-            const { data: returnData } = await withRetry(
+            const callResult = await withRetry<Awaited<ReturnType<PublicClient['call']>>>(
                 () => withTimeout(
                     Promise.resolve(this.client.call({
                         account: tx.account as `0x${string}`,
@@ -107,7 +133,7 @@ export class EidolonSimulator {
                         data: tx.data as `0x${string}`,
                         value: tx.value || 0n,
                         stateOverride
-                    } as any)),
+                    } as Parameters<PublicClient['call']>[0])),
                     EidolonSimulator.RPC_TIMEOUT_MS,
                     'SIM_CALL_TIMEOUT'
                 ),
@@ -118,9 +144,10 @@ export class EidolonSimulator {
                     totalTimeoutMs: 12000
                 }
             );
+            const returnData = callResult?.data;
 
             // 4. Estimate Gas
-            const gasEstimate = await withRetry(
+            const gasEstimate: bigint = await withRetry(
                 () => withTimeout(
                     Promise.resolve(this.client.estimateGas({
                         account: tx.account as `0x${string}`,
@@ -128,7 +155,7 @@ export class EidolonSimulator {
                         data: tx.data as `0x${string}`,
                         value: tx.value || 0n,
                         stateOverride
-                    } as any)),
+                    } as Parameters<PublicClient['estimateGas']>[0])),
                     EidolonSimulator.RPC_TIMEOUT_MS,
                     'SIM_GAS_TIMEOUT'
                 ),
@@ -148,15 +175,20 @@ export class EidolonSimulator {
                 returnValue: returnData,
                 logs: [],
                 touchedAddresses: touched,
-                estimatedGasLimit: (gasEstimate * 120n) / 100n
+                estimatedGasLimit: (BigInt(gasEstimate) * 120n) / 100n
             };
 
-        } catch (error: any) {
-            console.warn(`   💀 Shadow Clone Died: ${error.shortMessage || error.message}`);
+        } catch (error: unknown) {
+            const shortMessage = typeof error === 'object' && error !== null && 'shortMessage' in error
+                ? String((error as { shortMessage?: unknown }).shortMessage ?? '')
+                : '';
+            const message = error instanceof Error ? error.message : String(error);
+            const combinedMessage = shortMessage || message;
+            console.warn(`   💀 Shadow Clone Died: ${combinedMessage}`);
             return {
                 success: false,
                 gasUsed: 0n,
-                revertReason: error.shortMessage || error.message,
+                revertReason: combinedMessage,
                 logs: []
             };
         }
@@ -173,8 +205,8 @@ export class EidolonSimulator {
         let touched: string[] = [];
         try {
             touched = await this.scanFootprint(tx);
-        } catch (error: any) {
-            footprintError = error?.message || 'Unknown footprint error';
+        } catch (error: unknown) {
+            footprintError = error instanceof Error ? error.message : 'Unknown footprint error';
         }
 
         const base = await this.simulate(tx);
@@ -217,7 +249,7 @@ export class EidolonSimulator {
                         data: tx.data as `0x${string}`,
                         value: tx.value || 0n,
                         stateOverride
-                    } as any)),
+                    } as Parameters<PublicClient['createAccessList']>[0])),
                     EidolonSimulator.RPC_TIMEOUT_MS,
                     'SCAN_FOOTPRINT_TIMEOUT'
                 ),
@@ -229,27 +261,29 @@ export class EidolonSimulator {
                 }
             );
 
-            return this.dedupeAddresses((accessList.accessList || []).map(item => item.address));
-        } catch (e: any) {
+            return this.extractTouchedAddresses(accessList);
+        } catch (e: unknown) {
             console.error('Footprint scan failed:', e);
-            throw new Error(`Footprint Scan Failed: ${e.message || 'Unknown error'}`);
+            const message = e instanceof Error ? e.message : 'Unknown error';
+            throw new Error(`Footprint Scan Failed: ${message}`);
         }
     }
 
-    private buildStateOverride(tx: ShadowTransaction): any | undefined {
+    private buildStateOverride(tx: ShadowTransaction): StateOverrideMap | undefined {
         const baseOverrides = tx.stateOverride ? { ...tx.stateOverride } : {};
         if (tx.simulateAsWhale !== true) {
             return Object.keys(baseOverrides).length > 0 ? baseOverrides : undefined;
         }
 
-        const accountOverride = { ...(baseOverrides[tx.account] || {}) };
+        const accountAddress = tx.account as HexAddress;
+        const accountOverride = { ...(baseOverrides[accountAddress] || {}) };
         if (accountOverride.balance === undefined) {
             accountOverride.balance = EidolonSimulator.WHALE_BALANCE;
         }
 
         return {
             ...baseOverrides,
-            [tx.account]: accountOverride
+            [accountAddress]: accountOverride
         };
     }
 

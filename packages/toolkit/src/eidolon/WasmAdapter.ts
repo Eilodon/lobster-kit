@@ -50,6 +50,29 @@ export interface AntiRug {
     compute_score(tokenAddress: string, tokenData: TokenSecurityData): SecurityScore;
 }
 
+type ValueInvariantCtor = new (
+    maxDrawdownPerBlock: number,
+    maxPositionSize: number,
+    circuitBreakerThreshold: number
+) => ValueInvariant;
+
+type AntiRugCtor = new () => AntiRug;
+type GenericCtor<T = unknown> = new (...args: unknown[]) => T;
+
+interface WasmCoreModule {
+    ValueInvariant?: ValueInvariantCtor;
+    AntiRug?: AntiRugCtor;
+    CausalGraph?: GenericCtor;
+    TraumaRegistry?: GenericCtor;
+    q64_96_mul?: (a: Uint8Array, b: Uint8Array) => Uint8Array;
+    q64_96_div?: (a: Uint8Array, b: Uint8Array) => Uint8Array;
+    sqrt_price_x96_to_price_wad?: (
+        sqrtPriceX96: Uint8Array,
+        token0Decimals: number,
+        token1Decimals: number
+    ) => Uint8Array;
+}
+
 class MockValueInvariant implements ValueInvariant {
     private lastSnapshot = 0;
 
@@ -125,11 +148,12 @@ class MockAntiRug implements AntiRug {
         };
     }
 
-    import_lists(data: any): void {
-        for (const addr of data?.whitelist ?? []) {
+    import_lists(data: unknown): void {
+        const listData = (data && typeof data === 'object') ? data as { whitelist?: unknown[]; blacklist?: unknown[] } : {};
+        for (const addr of listData.whitelist ?? []) {
             this.whitelist.add(String(addr).toLowerCase());
         }
-        for (const addr of data?.blacklist ?? []) {
+        for (const addr of listData.blacklist ?? []) {
             this.blacklist.add(String(addr).toLowerCase());
         }
     }
@@ -229,7 +253,7 @@ class MockAntiRug implements AntiRug {
  */
 export class WasmAdapter {
     private static instance: WasmAdapter;
-    private coreModule: any = null;
+    private coreModule: WasmCoreModule | null = null;
     private fallbackMode: boolean = true;
     private initialized: boolean = false;
 
@@ -247,7 +271,7 @@ export class WasmAdapter {
      * Useful for testing to ensure a clean state.
      */
     public static resetInstance(): void {
-        (WasmAdapter.instance as any) = null;
+        WasmAdapter.instance = null as unknown as WasmAdapter;
     }
 
     public async init(): Promise<void> {

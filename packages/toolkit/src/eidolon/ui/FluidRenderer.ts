@@ -237,14 +237,51 @@ void main () {
 }
 `;
 
+interface RenderTarget {
+    texture: WebGLTexture | null;
+    fbo: WebGLFramebuffer | null;
+    attach: (id: number) => number;
+}
+
+interface DoubleRenderTarget {
+    read: RenderTarget;
+    write: RenderTarget;
+    swap: () => void;
+}
+
+interface ProgramBundle {
+    program: WebGLProgram;
+    uniforms: Record<string, WebGLUniformLocation | null>;
+    bind: () => void;
+}
+
+type FluidProgramName =
+    | 'splat'
+    | 'curl'
+    | 'vorticity'
+    | 'divergence'
+    | 'clear'
+    | 'pressure'
+    | 'gradientSubtract'
+    | 'advection'
+    | 'display';
+
+interface FluidTextures {
+    velocity: DoubleRenderTarget;
+    density: DoubleRenderTarget;
+    divergence: RenderTarget;
+    curl: RenderTarget;
+    pressure: DoubleRenderTarget;
+}
+
 
 export class FluidRenderer {
     private canvas: HTMLCanvasElement;
     private gl: WebGL2RenderingContext;
     public config: FluidConfig;
 
-    private programs: any = {};
-    private textures: any = {};
+    private programs = {} as Record<FluidProgramName, ProgramBundle>;
+    private textures = {} as FluidTextures;
     private quadBuffer: WebGLBuffer | null = null;
 
     // State
@@ -297,8 +334,8 @@ export class FluidRenderer {
         this.contextRestoredHandler = () => {
             if (this.disposed) return;
             console.info('🌊 FluidRenderer context restored');
-            this.programs = {};
-            this.textures = {};
+            this.programs = {} as Record<FluidProgramName, ProgramBundle>;
+            this.textures = {} as FluidTextures;
             this.quadBuffer = null;
             this.initGeometry();
             this.initShaders();
@@ -489,7 +526,7 @@ export class FluidRenderer {
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
     }
 
-    private createProgram(vertexShader: string, fragmentShader: string) {
+    private createProgram(vertexShader: string, fragmentShader: string): ProgramBundle {
         const gl = this.gl;
         const program = gl.createProgram();
         if (!program) throw new Error("Failed to create program");
@@ -508,7 +545,7 @@ export class FluidRenderer {
         gl.deleteShader(vs);
         gl.deleteShader(fs);
 
-        const uniforms: any = {};
+        const uniforms: Record<string, WebGLUniformLocation | null> = {};
         const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
         for (let i = 0; i < count; i++) {
             const name = gl.getActiveUniform(program, i)?.name;
@@ -558,7 +595,7 @@ export class FluidRenderer {
         this.textures.pressure = this.createDoubleFBO(simRes, simRes, type);
     }
 
-    private createFBO(w: number, h: number, type: number) {
+    private createFBO(w: number, h: number, type: number): RenderTarget {
         const gl = this.gl;
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -585,7 +622,7 @@ export class FluidRenderer {
         };
     }
 
-    private createDoubleFBO(w: number, h: number, type: number) {
+    private createDoubleFBO(w: number, h: number, type: number): DoubleRenderTarget {
         const fbo1 = this.createFBO(w, h, type);
         const fbo2 = this.createFBO(w, h, type);
 
@@ -634,20 +671,29 @@ export class FluidRenderer {
         // Clean up WebGL resources
         const gl = this.gl;
         for (const key of Object.keys(this.programs)) {
-            gl.deleteProgram(this.programs[key]?.program);
+            const program = this.programs[key as FluidProgramName];
+            gl.deleteProgram(program?.program);
         }
-        this.programs = {};
+        this.programs = {} as Record<FluidProgramName, ProgramBundle>;
 
-        for (const key of Object.keys(this.textures)) {
-            const target = this.textures[key];
-            if (target?.read && target?.write) {
+        const textures = this.textures as Partial<FluidTextures>;
+        const textureTargets: Array<RenderTarget | DoubleRenderTarget | undefined> = [
+            textures.velocity,
+            textures.density,
+            textures.divergence,
+            textures.curl,
+            textures.pressure
+        ];
+        for (const target of textureTargets) {
+            if (!target) continue;
+            if ('read' in target && 'write' in target) {
                 this.deleteRenderTarget(target.read);
                 this.deleteRenderTarget(target.write);
             } else {
                 this.deleteRenderTarget(target);
             }
         }
-        this.textures = {};
+        this.textures = {} as FluidTextures;
 
         if (this.quadBuffer) {
             gl.deleteBuffer(this.quadBuffer);
@@ -659,7 +705,7 @@ export class FluidRenderer {
         console.log('🌊 FluidRenderer disposed');
     }
 
-    private deleteRenderTarget(target: any) {
+    private deleteRenderTarget(target: RenderTarget | null | undefined) {
         if (!target) return;
         const gl = this.gl;
         if (target.texture) {
@@ -676,7 +722,7 @@ export class FluidRenderer {
         this.canvas.height = this.canvas.clientHeight;
     }
 
-    private blit(destination: any) {
+    private blit(destination: RenderTarget | null) {
         const gl = this.gl;
         gl.bindFramebuffer(gl.FRAMEBUFFER, destination ? destination.fbo : null);
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);

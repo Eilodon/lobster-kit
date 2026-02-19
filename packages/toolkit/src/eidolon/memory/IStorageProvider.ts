@@ -17,7 +17,7 @@ export interface IStorageProvider {
      * @param key Filename or object key (e.g., 'emotional_core.json')
      * @param data JSON serializable data
      */
-    save(key: string, data: any): Promise<void>;
+    save<T = unknown>(key: string, data: T): Promise<void>;
 
     /**
      * Load data from a key
@@ -36,12 +36,12 @@ export interface IStorageProvider {
      * @param key Filename or object key
      * @param data JSON serializable data to append
      */
-    append(key: string, data: any): Promise<void>;
+    append<T = unknown>(key: string, data: T): Promise<void>;
 
     /**
      * Read all entries from a log file
      * @param key Filename or object key
      * @param limit Optional limit of recent entries to return (0 = all)
      */
-    readLog(key: string, limit?: number): Promise<any[]>;
+    readLog<T = unknown>(key: string, limit?: number): Promise<T[]>;
 }

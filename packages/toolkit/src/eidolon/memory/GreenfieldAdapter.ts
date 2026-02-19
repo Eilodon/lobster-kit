@@ -4,6 +4,7 @@ import { IStorageProvider } from "./IStorageProvider";
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
+import { AsyncLock } from '../../utils/AsyncLock';
 
 /**
  * 🟩 GREENFIELD ADAPTER (S3)
@@ -19,6 +20,7 @@ export class GreenfieldAdapter implements IStorageProvider {
     private bucketName: string;
     private useLocalFallback: boolean = false;
     private localDir: string = './data/memory';
+    private lock: AsyncLock;
 
     constructor(config: {
         endpoint?: string,
@@ -30,6 +32,7 @@ export class GreenfieldAdapter implements IStorageProvider {
     }) {
         this.bucketName = config.bucketName;
         this.useLocalFallback = config.useLocalFallback || false;
+        this.lock = new AsyncLock();
 
         if (!this.useLocalFallback && config.endpoint && config.accessKeyId && config.secretAccessKey) {
             this.client = new S3Client({
@@ -75,22 +78,31 @@ export class GreenfieldAdapter implements IStorageProvider {
     private async ensureLocalDir() {
         try {
             await fs.mkdir(this.localDir, { recursive: true });
-        } catch (e: any) {
-            if (e.code !== 'EEXIST') throw e;
+        } catch (e: unknown) {
+            const code = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code?: unknown }).code) : '';
+            if (code !== 'EEXIST') throw e;
         }
     }
 
-    async save(key: string, data: any): Promise<void> {
+    async save<T = unknown>(key: string, data: T): Promise<void> {
         const jsonString = JSON.stringify(data, null, 2);
 
         if (this.useLocalFallback) {
-            await this.ensureLocalDir();
-            const filePath = path.join(this.localDir, key);
-            const tempPath = `${filePath}.tmp`;
+            await this.lock.run(async () => {
+                await this.ensureLocalDir();
+                const filePath = path.join(this.localDir, key);
+                // FIX: Unique temp file to avoid collision
+                const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).substring(7)}.tmp`;
 
-            // Atomic Write: Write to tmp -> Rename
-            await fs.writeFile(tempPath, jsonString);
-            await fs.rename(tempPath, filePath);
+                try {
+                    // Atomic Write: Write to unique tmp -> Rename
+                    await fs.writeFile(tempPath, jsonString);
+                    await fs.rename(tempPath, filePath);
+                } catch (error) {
+                    if (existsSync(tempPath)) await fs.unlink(tempPath).catch(() => { });
+                    throw error;
+                }
+            });
             return;
         }
 
@@ -106,13 +118,20 @@ export class GreenfieldAdapter implements IStorageProvider {
         } catch (error) {
             console.error(`❌ Failed to save ${key} to Greenfield:`, error);
             // Fallback save to ensure no data loss
-            await this.ensureLocalDir();
-            const filePath = path.join(this.localDir, key);
-            const tempPath = `${filePath}.tmp`;
+            await this.lock.run(async () => {
+                await this.ensureLocalDir();
+                const filePath = path.join(this.localDir, key);
+                const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).substring(7)}.tmp`;
 
-            // Atomic Write: Write to tmp -> Rename
-            await fs.writeFile(tempPath, jsonString);
-            await fs.rename(tempPath, filePath);
+                try {
+                    // Atomic Write: Write to unique tmp -> Rename
+                    await fs.writeFile(tempPath, jsonString);
+                    await fs.rename(tempPath, filePath);
+                } catch (e) {
+                    if (existsSync(tempPath)) await fs.unlink(tempPath).catch(() => { });
+                    throw e;
+                }
+            });
         }
     }
 
@@ -139,8 +158,9 @@ export class GreenfieldAdapter implements IStorageProvider {
                 return JSON.parse(str);
             }
             return null;
-        } catch (error: any) {
-            if (error.name === 'NoSuchKey') return null;
+        } catch (error: unknown) {
+            const name = typeof error === 'object' && error !== null && 'name' in error ? String((error as { name?: unknown }).name) : '';
+            if (name === 'NoSuchKey') return null;
             console.error(`❌ Failed to load ${key} from Greenfield:`, error);
             // Try local backup
             const localPath = path.join(this.localDir, key);
@@ -194,26 +214,28 @@ export class GreenfieldAdapter implements IStorageProvider {
      * APPEND LOG (Hybrid)
      * Always writes logs to local disk first for speed/safety.
      */
-    async append(key: string, data: any): Promise<void> {
+    async append<T = unknown>(key: string, data: T): Promise<void> {
         // Logs are always local for low latency
-        const localPath = path.join(this.localDir, key);
-        try {
-            const entry = JSON.stringify({
-                ts: Date.now(),
-                data
-            }) + '\n';
+        await this.lock.run(async () => {
+            const localPath = path.join(this.localDir, key);
+            try {
+                const entry = JSON.stringify({
+                    ts: Date.now(),
+                    data
+                }) + '\n';
 
-            await this.ensureLocalDir();
-            await fs.appendFile(localPath, entry, 'utf-8');
-        } catch (e) {
-            console.error(`❌ Failed to append to ${key}`, e);
-            throw e;
-        }
+                await this.ensureLocalDir();
+                await fs.appendFile(localPath, entry, 'utf-8');
+            } catch (e) {
+                console.error(`❌ Failed to append to ${key}`, e);
+                throw e;
+            }
+        });
     }
 
-    async readLog(key: string, limit: number = 0, offset: number = 0): Promise<any[]> {
+    async readLog<T = unknown>(key: string, limit: number = 0, offset: number = 0): Promise<T[]> {
         const localPath = path.join(this.localDir, key);
-        const entries: unknown[] = [];
+        const entries: T[] = [];
 
         try {
             if (!existsSync(localPath)) return [];
@@ -229,7 +251,7 @@ export class GreenfieldAdapter implements IStorageProvider {
             });
 
             // Ring buffer implementation keeps latest N records with bounded memory.
-            const ringBuffer = new Array(limit > 0 ? limit : 0);
+            const ringBuffer: T[] = new Array(limit > 0 ? limit : 0);
             let ringIdx = 0;
             let totalEntries = 0;
             const useRing = limit > 0;
@@ -237,7 +259,7 @@ export class GreenfieldAdapter implements IStorageProvider {
             for await (const line of rl) {
                 if (!line.trim()) continue;
                 try {
-                    const parsed = JSON.parse(line);
+                    const parsed = JSON.parse(line) as { data?: T };
 
                     if (offset > 0) {
                         offset--;
@@ -245,11 +267,11 @@ export class GreenfieldAdapter implements IStorageProvider {
                     }
 
                     if (useRing) {
-                        ringBuffer[ringIdx % limit] = parsed.data;
+                        ringBuffer[ringIdx % limit] = parsed.data as T;
                         ringIdx++;
                         totalEntries++;
                     } else {
-                        entries.push(parsed.data);
+                        entries.push(parsed.data as T);
                     }
                 } catch {
                     // Skip corrupted log line.
@@ -267,7 +289,7 @@ export class GreenfieldAdapter implements IStorageProvider {
                 }
                 return result;
             }
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error(`❌ Failed to read log ${key}`, e);
         }
 

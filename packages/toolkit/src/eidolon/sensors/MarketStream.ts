@@ -23,9 +23,12 @@ export class MarketStream extends EventEmitter {
     }
 
     public override on(event: 'price', listener: (data: TickerData) => void): this;
-    public override on(event: string, listener: (...args: any[]) => void): this;
-    public override on(event: string, listener: (...args: any[]) => void): this {
-        return super.on(event, listener);
+    public override on(event: string | symbol, listener: (...args: unknown[]) => void): this;
+    public override on(
+        event: string | symbol,
+        listener: ((data: TickerData) => void) | ((...args: unknown[]) => void)
+    ): this {
+        return super.on(event, listener as (...args: unknown[]) => void);
     }
 
     public start(): void {
@@ -81,7 +84,7 @@ export class MarketStream extends EventEmitter {
                 this.ws?.close();
             });
 
-        } catch (e: any) {
+        } catch (e: unknown) {
             const message = e instanceof Error ? e.message : String(e);
             console.error('🌊 MarketStream Connection Failed:', message);
             this.scheduleReconnect();

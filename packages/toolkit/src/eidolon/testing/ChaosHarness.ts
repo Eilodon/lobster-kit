@@ -80,13 +80,14 @@ export class ChaosHarness {
         try {
             await this.withTimeout((signal) => this.deps.probeRpc(signal), this.config.rpcTimeoutMs);
             return this.alarm('RPC_OUTAGE', false, 'LOW', 'RPC probe healthy', 'No mitigation required.');
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'unknown';
             const elapsed = Date.now() - started;
             return this.alarm(
                 'RPC_OUTAGE',
                 true,
                 'CRITICAL',
-                `RPC unavailable or timed out after ${elapsed}ms (${err?.message || 'unknown'})`,
+                `RPC unavailable or timed out after ${elapsed}ms (${message})`,
                 'Fail over to backup RPC and force read-only mode for risky actions.'
             );
         }
@@ -118,12 +119,13 @@ export class ChaosHarness {
                     ? 'Switch to conservative pricing and widen slippage guardrails.'
                     : 'No mitigation required.'
             );
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'unknown';
             return this.alarm(
                 'ORACLE_DIVERGENCE',
                 true,
                 'HIGH',
-                `Oracle check failed (${err?.message || 'unknown'})`,
+                `Oracle check failed (${message})`,
                 'Freeze execution path relying on single-feed pricing.'
             );
         }
@@ -145,12 +147,13 @@ export class ChaosHarness {
                     ? 'Throttle aggressive actions and require elevated gas confidence.'
                     : 'No mitigation required.'
             );
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'unknown';
             return this.alarm(
                 'MEMPOOL_SPIKE',
                 true,
                 'MEDIUM',
-                `Mempool probe failed (${err?.message || 'unknown'})`,
+                `Mempool probe failed (${message})`,
                 'Fallback to static risk profile and slow-path execution.'
             );
         }

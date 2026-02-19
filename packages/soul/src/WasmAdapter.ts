@@ -50,6 +50,50 @@ export interface AntiRug {
     compute_score(tokenAddress: string, tokenData: TokenSecurityData): SecurityScore;
 }
 
+type ValueInvariantCtor = new (
+    maxDrawdownPerBlock: number,
+    maxPositionSize: number,
+    circuitBreakerThreshold: number
+) => ValueInvariant;
+
+type AntiRugCtor = new () => AntiRug;
+type GenericCtor<T = unknown> = new (...args: unknown[]) => T;
+
+interface WasmCoreModule {
+    ValueInvariant?: ValueInvariantCtor;
+    AntiRug?: AntiRugCtor;
+    CausalGraph?: GenericCtor;
+    TraumaRegistry?: GenericCtor;
+    q64_96_mul?: (a: Uint8Array, b: Uint8Array) => Uint8Array;
+    q64_96_div?: (a: Uint8Array, b: Uint8Array) => Uint8Array;
+    sqrt_price_x96_to_price_wad?: (
+        sqrtPriceX96: Uint8Array,
+        token0Decimals: number,
+        token1Decimals: number
+    ) => Uint8Array;
+    HyperMemory?: GenericCtor;
+    LiquidBrain?: GenericCtor;
+}
+
+export interface SearchResult {
+    id: string;
+    score: number;
+}
+
+export interface HyperMemory {
+    insert(id: string, vector: Float32Array | number[]): void;
+    search(query: Float32Array | number[], k: number): SearchResult[];
+    count(): number;
+    export_data(): unknown;
+    import_data(data: unknown): void;
+}
+
+export interface LiquidBrain {
+    forward(input: Float32Array | number[]): Float32Array;
+    reset(): void;
+    optimize(reward_signal: number): void;
+}
+
 class MockValueInvariant implements ValueInvariant {
     private lastSnapshot = 0;
 
@@ -125,11 +169,12 @@ class MockAntiRug implements AntiRug {
         };
     }
 
-    import_lists(data: any): void {
-        for (const addr of data?.whitelist ?? []) {
+    import_lists(data: unknown): void {
+        const listData = (data && typeof data === 'object') ? data as { whitelist?: unknown[]; blacklist?: unknown[] } : {};
+        for (const addr of listData.whitelist ?? []) {
             this.whitelist.add(String(addr).toLowerCase());
         }
-        for (const addr of data?.blacklist ?? []) {
+        for (const addr of listData.blacklist ?? []) {
             this.blacklist.add(String(addr).toLowerCase());
         }
     }
@@ -220,6 +265,79 @@ class MockAntiRug implements AntiRug {
     }
 }
 
+class MockHyperMemory implements HyperMemory {
+    private vectors: Map<string, number[]> = new Map();
+
+    constructor(private dimension: number) { }
+
+    insert(id: string, vector: Float32Array | number[]): void {
+        if (vector.length !== this.dimension) {
+            console.warn(`MockHyperMemory: Vector dimension mismatch ${vector.length} != ${this.dimension}`);
+            return;
+        }
+        this.vectors.set(id, Array.from(vector));
+    }
+
+    search(query: Float32Array | number[], k: number): SearchResult[] {
+        if (query.length !== this.dimension) return [];
+
+        const q = Array.from(query);
+        const scores: SearchResult[] = [];
+
+        for (const [id, vec] of this.vectors.entries()) {
+            const score = this.cosineSimilarity(q, vec);
+            scores.push({ id, score });
+        }
+
+        return scores.sort((a, b) => b.score - a.score).slice(0, k);
+    }
+
+    count(): number { return this.vectors.size; }
+
+    export_data(): unknown { return Array.from(this.vectors.entries()); }
+
+    import_data(data: unknown): void {
+        const entries = data as [string, number[]][];
+        this.vectors = new Map(entries);
+    }
+
+    private cosineSimilarity(a: number[], b: number[]): number {
+        let dot = 0, normA = 0, normB = 0;
+        for (let i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        if (normA === 0 || normB === 0) return 0;
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+}
+
+class MockLiquidBrain implements LiquidBrain {
+    private state: Float32Array;
+
+    constructor(private inputSize: number, private hiddenSize: number) {
+        this.state = new Float32Array(hiddenSize).fill(0);
+    }
+
+    forward(input: Float32Array | number[]): Float32Array {
+        // Simple mock dynamics: x_t = 0.9 * x_{t-1} + 0.1 * mean(input)
+        const val = (input as number[]).reduce((a, b) => a + b, 0) / this.inputSize;
+        for (let i = 0; i < this.hiddenSize; i++) {
+            this.state[i] = 0.9 * this.state[i] + 0.1 * val;
+        }
+        return new Float32Array(this.state);
+    }
+
+    reset(): void {
+        this.state.fill(0);
+    }
+
+    optimize(reward: number): void {
+        // No-op for mock
+    }
+}
+
 /**
  * 🦀 WASM ADAPTER
  * Bridges the gap between TypeScript (Brain) and Rust (Heart).
@@ -229,7 +347,7 @@ class MockAntiRug implements AntiRug {
  */
 export class WasmAdapter {
     private static instance: WasmAdapter;
-    private coreModule: any = null;
+    private coreModule: WasmCoreModule | null = null;
     private fallbackMode: boolean = true;
     private initialized: boolean = false;
 
@@ -247,7 +365,7 @@ export class WasmAdapter {
      * Useful for testing to ensure a clean state.
      */
     public static resetInstance(): void {
-        (WasmAdapter.instance as any) = null;
+        WasmAdapter.instance = null as unknown as WasmAdapter;
     }
 
     public async init(): Promise<void> {
@@ -357,6 +475,22 @@ export class WasmAdapter {
         const Ctor = this.coreModule?.TraumaRegistry;
         if (!Ctor) return null;
         return new Ctor();
+    }
+
+    public createHyperMemory(dimension: number): HyperMemory {
+        const Ctor = this.coreModule?.HyperMemory;
+        if (Ctor) {
+            return new Ctor(dimension) as HyperMemory;
+        }
+        return new MockHyperMemory(dimension);
+    }
+
+    public createLiquidBrain(inputSize: number, hiddenSize: number): LiquidBrain {
+        const Ctor = this.coreModule?.LiquidBrain;
+        if (Ctor) {
+            return new Ctor(inputSize, hiddenSize) as LiquidBrain;
+        }
+        return new MockLiquidBrain(inputSize, hiddenSize);
     }
 
     private bigintToBytes(val: bigint): Uint8Array {

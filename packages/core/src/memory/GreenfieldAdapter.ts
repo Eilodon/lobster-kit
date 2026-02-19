@@ -81,7 +81,7 @@ export class GreenfieldAdapter implements IStorageProvider {
         }
     }
 
-    async save(key: string, data: any): Promise<void> {
+    async save<T = unknown>(key: string, data: T): Promise<void> {
         const jsonString = JSON.stringify(data, null, 2);
 
         if (this.useLocalFallback) {
@@ -196,7 +196,7 @@ export class GreenfieldAdapter implements IStorageProvider {
      * APPEND LOG (Hybrid)
      * Always writes logs to local disk first for speed/safety.
      */
-    async append(key: string, data: any): Promise<void> {
+    async append<T = unknown>(key: string, data: T): Promise<void> {
         // Logs are always local for low latency
         const localPath = path.join(this.localDir, key);
         try {
@@ -213,9 +213,9 @@ export class GreenfieldAdapter implements IStorageProvider {
         }
     }
 
-    async readLog(key: string, limit: number = 0, offset: number = 0): Promise<any[]> {
+    async readLog<T = unknown>(key: string, limit: number = 0, offset: number = 0): Promise<T[]> {
         const localPath = path.join(this.localDir, key);
-        const entries: unknown[] = [];
+        const entries: T[] = [];
 
         try {
             if (!existsSync(localPath)) return [];
@@ -231,7 +231,7 @@ export class GreenfieldAdapter implements IStorageProvider {
             });
 
             // 🛡️ Ring Buffer Implementation (O(N) vs O(N^2))
-            const ringBuffer = new Array(limit > 0 ? limit : 0);
+            const ringBuffer: T[] = new Array(limit > 0 ? limit : 0);
             let ringIdx = 0;
             let totalEntries = 0;
             const useRing = limit > 0;
@@ -239,7 +239,7 @@ export class GreenfieldAdapter implements IStorageProvider {
             for await (const line of rl) {
                 if (!line.trim()) continue;
                 try {
-                    const parsed = JSON.parse(line);
+                    const parsed = JSON.parse(line) as { data?: T };
 
                     // Offset logic: Skip first N items
                     if (offset > 0) {
@@ -248,11 +248,11 @@ export class GreenfieldAdapter implements IStorageProvider {
                     }
 
                     if (useRing) {
-                        ringBuffer[ringIdx % limit] = parsed.data;
+                        ringBuffer[ringIdx % limit] = parsed.data as T;
                         ringIdx++;
                         totalEntries++;
                     } else {
-                        entries.push(parsed.data);
+                        entries.push(parsed.data as T);
                     }
                 } catch {
                     // Skip corrupted log line.
