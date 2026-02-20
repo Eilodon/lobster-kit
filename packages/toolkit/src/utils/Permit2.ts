@@ -12,7 +12,7 @@
  *   // Pass signature + permit to router/aggregator that supports Permit2
  */
 
-import { parseAbi } from 'viem';
+import { encodeAbiParameters, parseAbi } from 'viem';
 import { ClawKitWalletClient, toAddress } from '../types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -135,9 +135,44 @@ export async function signPermit2(
 /**
  * Encode a Permit2 permit + signature into calldata for routers
  * that accept permit data alongside swap parameters.
+ *
+ * Encodes as: abi.encode(PermitSingle, signature)
+ * Compatible with PancakeSwap SmartRouter and Uniswap UniversalRouter.
  */
 export function encodePermit2Data(sig: Permit2Signature): `0x${string}` {
-    // Simplified: return raw signature bytes
-    // In practice, routers accept the PermitSingle struct + signature packed
-    return sig.signature;
+    return encodeAbiParameters(
+        [
+            {
+                type: 'tuple',
+                components: [
+                    {
+                        type: 'tuple',
+                        name: 'details',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'amount', type: 'uint160' },
+                            { name: 'expiration', type: 'uint48' },
+                            { name: 'nonce', type: 'uint48' },
+                        ],
+                    },
+                    { name: 'spender', type: 'address' },
+                    { name: 'sigDeadline', type: 'uint256' },
+                ],
+            },
+            { type: 'bytes' },
+        ],
+        [
+            {
+                details: {
+                    token: sig.permit.details.token,
+                    amount: sig.permit.details.amount,
+                    expiration: sig.permit.details.expiration,
+                    nonce: sig.permit.details.nonce,
+                },
+                spender: sig.permit.spender,
+                sigDeadline: sig.permit.sigDeadline,
+            },
+            sig.signature,
+        ]
+    );
 }

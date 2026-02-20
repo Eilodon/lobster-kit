@@ -39,7 +39,10 @@ impl TraumaRegistry {
 
         if let Some(hit) = self.records.get_mut(&key) {
             hit.count += 1;
-            let hours = (1u32 << (hit.count.min(10) - 1)).min(24);
+            // Use checked_shl to prevent overflow. Cap shift at 10 (2^9 = 512 hours).
+            // count starts at 1, so (count.min(10) - 1) is safe [0..9]
+            let shift_amt = hit.count.min(10).saturating_sub(1);
+            let hours = 1u32.checked_shl(shift_amt).unwrap_or(24).min(24);
             hit.inhibit_until_ts_ms = now_ts_ms + (hours as i64) * 60 * 60 * 1000;
             hit.sev_eff = (hit.sev_eff * (1.0 - alpha) + clamped * alpha).clamp(0.0, 5.0);
             hit.last_ts_ms = now_ts_ms;

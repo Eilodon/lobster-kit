@@ -159,10 +159,24 @@ export class ExternalAPIGateway {
         throw lastError ?? new Error(`Request to ${url} failed`);
     }
 
-    async post<T = unknown>(url: string, body: unknown, axiosConfig?: AxiosRequestConfig): Promise<T> {
+    async post<T = unknown>(
+        url: string,
+        body: unknown,
+        options?: AxiosRequestConfig | { idempotent?: boolean; axiosConfig?: AxiosRequestConfig }
+    ): Promise<T> {
         const isStrict = this.config.privacyMode === 'strict';
         if (isStrict) {
             throw new Error(`🔒 PRIVACY_BLOCKED: External call to ${url} blocked in 'strict' mode.`);
+        }
+
+        // Backwards-compatible: if 'idempotent' key absent, treat entire options as AxiosRequestConfig
+        let idempotent = false;
+        let axiosConfig: AxiosRequestConfig | undefined;
+        if (options && 'idempotent' in options) {
+            idempotent = (options as { idempotent?: boolean }).idempotent ?? false;
+            axiosConfig = (options as { axiosConfig?: AxiosRequestConfig }).axiosConfig;
+        } else {
+            axiosConfig = options as AxiosRequestConfig | undefined;
         }
 
         const domain = this.getDomain(url);
@@ -172,12 +186,38 @@ export class ExternalAPIGateway {
 
         await this.waitForToken(domain);
 
-        const res: AxiosResponse<T> = await axios.post<T>(url, body, {
-            timeout: 8000,
-            ...axiosConfig,
-        });
-        this.recordSuccess(domain);
-        return res.data;
+        // FIX: retry support for idempotent POSTs (default: single attempt)
+        const maxAttempts = idempotent ? 3 : 1;
+        let lastError: Error | undefined;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                const res: AxiosResponse<T> = await axios.post<T>(url, body, {
+                    timeout: 8000,
+                    ...axiosConfig,
+                });
+                this.recordSuccess(domain);
+                return res.data;
+            } catch (err: unknown) {
+                lastError = err instanceof Error ? err : new Error(String(err));
+                const status = (typeof err === 'object' && err !== null && 'response' in err)
+                    ? (err as { response?: { status?: number } }).response?.status
+                    : undefined;
+
+                if (status && status >= 400 && status < 500 && status !== 429) {
+                    this.recordFailure(domain);
+                    throw lastError;
+                }
+
+                if (attempt < maxAttempts - 1) {
+                    const backoff = 500 * Math.pow(2, attempt);
+                    console.warn(`⚠️ [Gateway] POST ${domain} attempt ${attempt + 1} failed, retrying in ${backoff}ms…`);
+                    await new Promise(r => setTimeout(r, backoff));
+                }
+            }
+        }
+
+        this.recordFailure(domain);
+        throw lastError ?? new Error(`POST to ${url} failed`);
     }
 }
 

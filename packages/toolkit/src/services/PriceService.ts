@@ -71,7 +71,7 @@ export class PriceService {
         return typeof value === 'number'
             && Number.isFinite(value)
             && value > 0
-            && value <= 100_000;
+            && value <= 1_000_000; // FIX: raised from $100k → $1M to handle BTC/ETH peaks
     }
 
     private getConfiguredFallbackBNBPrice(): number | undefined {
@@ -176,8 +176,9 @@ export class PriceService {
                 console.info(`✅ [PriceService] BNB from Pyth Hermes: $${pythPrice.toFixed(2)}`);
                 return pythPrice;
             }
-        } catch (err: any) {
-            console.warn(`[PriceService] Pyth Hermes failed: ${err.message}`);
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[PriceService] Pyth Hermes failed: ${msg}`);
         }
 
         throw new Error('PriceService: All BNB price sources failed');
@@ -273,7 +274,14 @@ export class PriceService {
         if (!ids) return results;
 
         const isStrict = this.config.privacyMode === 'strict';
-        if (isStrict) return results; // Return partial results in strict mode
+        if (isStrict) {
+            // FIX: warn caller that results are partial in strict mode
+            const missing2 = symbols.filter(s => !(s in results));
+            if (missing2.length > 0) {
+                console.warn(`⚠️ [PriceService] Strict mode: no price for symbols [${missing2.join(', ')}] — returning partial map`);
+            }
+            return results;
+        }
 
         const gateway = getGateway(this.config);
 

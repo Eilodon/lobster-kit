@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import { Logger } from '@clawkit/core';
 
 export interface InvariantCheckResult {
     safe: boolean;
@@ -703,66 +704,80 @@ export class WasmAdapter {
         if (this.initialized) return;
 
         try {
-            // FIX: Use dynamic import for ESM support and correct path
-            // Path relative to dist/eidolon/WasmAdapter.js might be different than src
-            // But usually bundlers handle this. For Node execution:
-            // src/eidolon -> ../../core-rust/pkg/core_rust.js
+            // STRATEGY 1: NodeJS Dynamic Import (Relative to this file)
+            // Used in: Vitest, ts-node, standard Node execution
             try {
-                // 1. Import the JS Wrapper (ESM)
-                // Need to use absolute path resolution for stability in tests/node
-                // Check if we are in dist or src. 
-                // If __dirname contains 'src', we go up 2 levels to root.
-                // If __dirname contains 'dist', we go up 2 levels to root.
-                // Safest is to find 'core-rust' relative to this file.
+                // Try finding the pkg directory relative to this file
+                // When running from src: ../../core-rust/pkg
+                // When running from dist: ../pkg (if copied) or ../../core-rust/pkg (workspace)
 
-                const pkgPath = path.resolve(__dirname, '../pkg');
-                const jsPath = path.join(pkgPath, 'core_rust.js');
-                const wasmPath = path.join(pkgPath, 'core_rust_bg.wasm');
+                // We search for the JS wrapper first
+                const candidates = [
+                    // Dist/Prod layout
+                    path.resolve(__dirname, '../pkg/core_rust.js'),
+                    // Monorepo Source layout (from src/eidolon or src root)
+                    path.resolve(__dirname, '../../core-rust/pkg/core_rust.js'),
+                    path.resolve(__dirname, '../../../core-rust/pkg/core_rust.js'), // If deeply nested
+                    // Absolute fallback (rare but possible in Docker)
+                    path.resolve(process.cwd(), 'packages/soul/core-rust/pkg/core_rust.js')
+                ];
 
-                if (fs.existsSync(jsPath)) {
+                let jsPath: string | null = null;
+                for (const candidate of candidates) {
+                    if (fs.existsSync(candidate)) {
+                        jsPath = candidate;
+                        break;
+                    }
+                }
+
+                if (jsPath) {
+                    const wasmPath = jsPath.replace('.js', '_bg.wasm');
                     const module = await import(jsPath);
 
-                    // Case 1: Node/Vitest where default is the exports object
-                    if (module.default && typeof module.default !== 'function' && module.default.ValueInvariant) {
+                    // Case 1A: Node/Vitest where default is the exports object
+                    if (module.default && typeof module.default !== 'function' && (module.default.ValueInvariant || module.default.CausalGraph)) {
                         this.coreModule = module.default;
                         this.fallbackMode = false;
-                        console.log('🦀 WASM Core Loaded (Node/Vitest Mode)');
+                        Logger.info(`🦀 WASM Core Loaded (Node/Vitest Mode) from ${jsPath}`);
                     }
-                    // Case 2: Direct exports (ESM/CJS mixed)
-                    else if (module.ValueInvariant) {
+                    // Case 1B: Direct exports (ESM/CJS mixed)
+                    else if (module.ValueInvariant || module.CausalGraph) {
                         this.coreModule = module;
                         this.fallbackMode = false;
-                        console.log('🦀 WASM Core Loaded (Direct Mode)');
+                        Logger.info(`🦀 WASM Core Loaded (Direct Mode) from ${jsPath}`);
                     }
-                    // 2. Initialize WASM memory with Binary (Web/Bundler support)
+                    // Case 1C: Initialize WASM memory with Binary (Web/Bundler support)
                     else if (fs.existsSync(wasmPath)) {
                         const buffer = fs.readFileSync(wasmPath);
-                        // Call default export (init) with the buffer
                         if (typeof module.default === 'function') {
                             await module.default(buffer);
                             this.coreModule = module;
                             this.fallbackMode = false;
-                            console.log('🦀 WASM Core Loaded & Initialized');
+                            Logger.info(`🦀 WASM Core Loaded & Initialized from ${wasmPath}`);
                         } else {
-                            console.warn('⚠️ WASM module default export missing');
+                            Logger.warn('⚠️ WASM module default export missing');
                             this.fallbackMode = true;
                         }
                     } else {
-                        console.warn('⚠️ WASM binary not found at', wasmPath);
+                        Logger.warn('⚠️ WASM binary not found at', wasmPath);
                         this.fallbackMode = true;
                     }
                 } else {
-                    console.warn('⚠️ WASM JS wrapper not found at', jsPath);
+                    // STRATEGY 2: Bundler/Web (Result to fallback if FS fails)
+                    // If we are in a bundler environment (Next.js/Webpack), fs might be empty shim.
+                    // We can try a direct import if the bundler is configured to handle .wasm
+                    // But here we just log and fallback.
+                    Logger.warn(`⚠️ WASM JS wrapper not found in candidates: ${candidates.join(', ')}`);
                     this.coreModule = null;
                     this.fallbackMode = true;
                 }
             } catch (e1) {
-                console.warn('⚠️ WASM load failed:', e1);
+                Logger.warn('⚠️ WASM load failed:', e1);
                 this.coreModule = null; // Fallback
                 this.fallbackMode = true;
             }
         } catch (error) {
-            console.warn('⚠️ WASM core unavailable. Falling back to deterministic TS mocks.', error);
+            Logger.warn('⚠️ WASM core unavailable. Falling back to deterministic TS mocks.', error);
             this.fallbackMode = true;
         } finally {
             this.initialized = true;

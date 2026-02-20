@@ -101,6 +101,9 @@ export class EidolonBus extends EventEmitter {
     public static getInstance(config?: { maxListeners?: number }): EidolonBus {
         if (!EidolonBus.instance) {
             EidolonBus.instance = new EidolonBus(config);
+        } else if (config) {
+            // FIX: warn instead of silently ignoring config on subsequent calls
+            console.warn('⚠️ [EidolonBus] getInstance() called with config but instance already exists. Config ignored — configure at bootstrap only.');
         }
         return EidolonBus.instance;
     }

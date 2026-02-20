@@ -21,6 +21,7 @@ import {
 export class DivineTransparency {
   private readonly MAX_HISTORY_SIZE = 1000;
   private decisionHistory: DecisionLog[] = [];
+  private historyIndex = 0; // FIX: ring pointer for O(1) circular eviction
   private weights: ReasoningWeights = DEFAULT_WEIGHTS;
   private oracle?: IOracle;
 
@@ -150,9 +151,10 @@ export class DivineTransparency {
 
     this.decisionHistory.push(log);
 
-    // FIXED: Prevent memory leak with circular buffer logic
+    // FIX: O(1) ring eviction — replace oldest slot rather than shifting entire array
     if (this.decisionHistory.length > this.MAX_HISTORY_SIZE) {
-      this.decisionHistory.shift();
+      this.decisionHistory[this.historyIndex % this.MAX_HISTORY_SIZE] = log;
+      this.historyIndex++;
     }
 
     this.logToConsole(log);

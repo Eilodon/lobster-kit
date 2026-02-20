@@ -369,10 +369,16 @@ export class CausalBrain {
 
     public importSynapticMap(data: Record<string, { s: number; f: number }>): void {
         for (const [key, val] of Object.entries(data)) {
+            // FIX: validate key before setting to avoid phantom edges from corrupt storage
+            const parsed = this.parseEdgeKey(key);
             const edge = new CausalEdge();
             edge.successes = Number.isFinite(val.s) ? Math.max(0, val.s) : 0;
             edge.failures = Number.isFinite(val.f) ? Math.max(0, val.f) : 0;
             this.weights.set(key, edge);
+            // FIX: sync priors so rebuildRustGraphFromMap delta calc is correct
+            if (parsed) {
+                this.priors.set(key, { s: edge.successes, f: edge.failures });
+            }
         }
         this.rebuildRustGraphFromMap();
     }

@@ -18,7 +18,7 @@ export class GreenfieldAdapter implements IStorageProvider {
     private client: S3Client | null = null;
     private bucketName: string;
     private useLocalFallback: boolean = false;
-    private localDir: string = './data/memory';
+    private readonly localDir: string; // FIX: resolved absolute path, readonly
 
     constructor(config: {
         endpoint?: string,
@@ -30,6 +30,8 @@ export class GreenfieldAdapter implements IStorageProvider {
     }) {
         this.bucketName = config.bucketName;
         this.useLocalFallback = config.useLocalFallback || false;
+        // FIX: always resolve to absolute path to avoid cwd-dependent bugs
+        this.localDir = path.resolve(config.useLocalFallback ? './data/memory' : './data/memory');
 
         if (!this.useLocalFallback && config.endpoint && config.accessKeyId && config.secretAccessKey) {
             this.client = new S3Client({

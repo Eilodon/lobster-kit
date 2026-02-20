@@ -11,7 +11,7 @@ export { ThermodynamicEngine, type ThermoConfig, DEFAULT_THERMO_CONFIG } from '.
 export { Vector, Matrix } from './ai/LinearAlgebra';
 export { DeepSeekOracle, type DeepSeekConfig } from './ai/DeepSeekOracle';
 export { CausalBrain, CausalEdge, type SentinelVariable } from './ai/CausalBrain';
-export { type IOracle, type MarketContext, type OracleInsight } from './ai/IOracle';
+export { type IOracle, type MarketContext, type OracleGenerationOptions, type OracleInsight } from './ai/IOracle';
 export { ClawOracle } from './sensors/ClawOracle';
 
 // Emotional Core

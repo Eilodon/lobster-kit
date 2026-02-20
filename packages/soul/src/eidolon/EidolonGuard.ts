@@ -301,6 +301,14 @@ export class EidolonGuard {
         this.trauma.recordTrauma(mode, action, severity);
     }
 
+    /**
+     * 🚨 PANIC BUTTON: Manually induce emotional panic.
+     * Accessible via MCP or Admin tools.
+     */
+    public inducePanic(reason: string): void {
+        this.soul.inducePanic(reason);
+    }
+
     public async validateAction(
         action: ActionType,
         context: {
@@ -316,13 +324,20 @@ export class EidolonGuard {
 
         // 🛑 FIX 2: Stale State Syndrome (Fail-Closed)
         // 15 seconds TTL. If snapshot is older, we are blind.
+        // ATOMIC FIX: Attempt synchronous update before failing
         if (this.lastSnapshotTime > 0 && (Date.now() - this.lastSnapshotTime > 15000)) {
-            return {
-                approved: false,
-                riskScore: 100,
-                confidence: 0,
-                reason: `💀 STALE STATE: Data is ${((Date.now() - this.lastSnapshotTime) / 1000).toFixed(1)}s old. Limit 15s.`
-            };
+            this.debug('⚠️ State stale. Attempting synchronous snapshot update...');
+            await this.updateSnapshot();
+
+            // Re-check after update
+            if (Date.now() - this.lastSnapshotTime > 15000) {
+                return {
+                    approved: false,
+                    riskScore: 100,
+                    confidence: 0,
+                    reason: `💀 STALE STATE: Data is ${((Date.now() - this.lastSnapshotTime) / 1000).toFixed(1)}s old. Limit 15s. Sync update failed.`
+                };
+            }
         }
 
         try {

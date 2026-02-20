@@ -290,6 +290,14 @@ export class EmotionalCore {
     this.tick(this.state.volatility); // Force update
   }
 
+  /**
+   * 🚨 Manually induce panic state (max cortisol/arousal).
+   */
+  public inducePanic(reason: string) {
+    this.debug(`🚨 PANIC INDUCED: ${reason}`);
+    this.stimulate(100, 'DANGER'); // Max severity
+  }
+
   feed(amount: number = 30) {
     this.state.glucose = Math.min(BioParametersConfig.limits.maxHormoneLevel, this.state.glucose + amount);
     this.state.dopamine = Math.min(BioParametersConfig.limits.maxHormoneLevel, this.state.dopamine + 5);

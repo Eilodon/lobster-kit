@@ -131,33 +131,29 @@ export class AppendOnlyAdapter implements IStorageProvider {
             const fileHandle = await fs.open(filePath, 'r');
             const stream = fileHandle.createReadStream({ encoding: 'utf-8' });
 
-            // Basic line reader implementation to avoid external deps
-            // For production robustness with huge files, a specialized library or 'readline' module is better
-            // But 'readline' with Node streams is standard.
-
             const readline = await import('readline');
-            const rl = readline.createInterface({
-                input: stream,
-                crlfDelay: Infinity
-            });
+            const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+            // FIX: Ring buffer — O(N) not O(N^2) (same approach as GreenfieldAdapter)
+            const useRing = limit > 0;
+            const ringBuffer: T[] = useRing ? new Array(limit) : [];
+            let ringIdx = 0;
+            let totalEntries = 0;
 
             for await (const line of rl) {
                 if (!line.trim()) continue;
                 try {
                     const parsed = JSON.parse(line) as { data?: T };
 
-                    // Offset logic: Skip first N items if offset > 0
                     if (offset > 0) {
                         offset--;
                         continue;
                     }
 
-                    // Memory Safety: If limiting, maintain only the window
-                    if (limit > 0) {
-                        entries.push(parsed.data as T);
-                        if (entries.length > limit) {
-                            entries.shift(); // Remove oldest to keep memory usage constant
-                        }
+                    if (useRing) {
+                        ringBuffer[ringIdx % limit] = parsed.data as T;
+                        ringIdx++;
+                        totalEntries++;
                     } else {
                         entries.push(parsed.data as T);
                     }
@@ -167,6 +163,16 @@ export class AppendOnlyAdapter implements IStorageProvider {
             }
 
             await fileHandle.close();
+
+            if (useRing) {
+                const count = Math.min(totalEntries, limit);
+                const result = new Array(count);
+                const start = totalEntries > limit ? ringIdx % limit : 0;
+                for (let i = 0; i < count; i++) {
+                    result[i] = ringBuffer[(start + i) % limit];
+                }
+                return result;
+            }
         } catch (e: unknown) {
             const code = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code?: unknown }).code) : '';
             if (code !== 'ENOENT') {

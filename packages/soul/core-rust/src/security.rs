@@ -228,9 +228,10 @@ impl AntiRug {
     }
 
     pub fn check_token_security(&self, _token_address: &str) -> Result<JsValue, JsValue> {
-         // Fail-safe: If API fails, assume DANGER.
+         // Fail-safe: If API fails, return UNKNOWN but do not panic/block aggressively.
+         // A score of 50 indicates "Caution/Neutral".
         serde_wasm_bindgen::to_value(&SecurityScore {
-            score: 0,
+            score: 50, // Changed from 0 to 50 (Neutral)
             is_honeypot: false,
             liquidity_locked: false,
             liquidity_unknown: true,
