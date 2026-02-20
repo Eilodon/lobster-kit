@@ -1,4 +1,4 @@
-import { PublicClient } from 'viem';
+
 import { IClawKit } from '@clawkit/core';
 import { withRetry, withTimeout } from '@clawkit/core';
 
@@ -64,12 +64,12 @@ export class EidolonSimulator {
     private static readonly RPC_TIMEOUT_MS = 8000;
     private static readonly MAX_TOUCHED_ADDRESSES = 50;
 
-    private client: PublicClient;
+    private client: any; // IReadClient — uses viem PublicClient APIs at runtime
     private kit: IClawKit;
 
     constructor(kit: IClawKit) {
         this.kit = kit;
-        this.client = kit.publicClient;
+        this.client = (kit as any).publicClient ?? kit.readClient;
     }
 
     private extractTouchedAddresses(accessList: unknown): string[] {
@@ -102,7 +102,7 @@ export class EidolonSimulator {
                             data: tx.data as `0x${string}`,
                             value: tx.value || 0n,
                             stateOverride
-                        } as Parameters<PublicClient['createAccessList']>[0])),
+                        } as any)),
                         EidolonSimulator.RPC_TIMEOUT_MS,
                         'SIM_ACCESS_LIST_TIMEOUT'
                     ),
@@ -125,7 +125,7 @@ export class EidolonSimulator {
             }
 
             // 3. Dry Run via Call (eth_call) with State Overrides
-            const callResult = await withRetry<Awaited<ReturnType<PublicClient['call']>>>(
+            const callResult = await withRetry<any>(
                 () => withTimeout(
                     Promise.resolve(this.client.call({
                         account: tx.account as `0x${string}`,
@@ -133,7 +133,7 @@ export class EidolonSimulator {
                         data: tx.data as `0x${string}`,
                         value: tx.value || 0n,
                         stateOverride
-                    } as Parameters<PublicClient['call']>[0])),
+                    } as any)),
                     EidolonSimulator.RPC_TIMEOUT_MS,
                     'SIM_CALL_TIMEOUT'
                 ),
@@ -155,7 +155,7 @@ export class EidolonSimulator {
                         data: tx.data as `0x${string}`,
                         value: tx.value || 0n,
                         stateOverride
-                    } as Parameters<PublicClient['estimateGas']>[0])),
+                    } as any)),
                     EidolonSimulator.RPC_TIMEOUT_MS,
                     'SIM_GAS_TIMEOUT'
                 ),
@@ -249,7 +249,7 @@ export class EidolonSimulator {
                         data: tx.data as `0x${string}`,
                         value: tx.value || 0n,
                         stateOverride
-                    } as Parameters<PublicClient['createAccessList']>[0])),
+                    } as any)),
                     EidolonSimulator.RPC_TIMEOUT_MS,
                     'SCAN_FOOTPRINT_TIMEOUT'
                 ),

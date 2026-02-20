@@ -31,9 +31,13 @@ import { EidolonGuard } from '../src/eidolon/EidolonGuard';
 import { ClawKit } from '../src/index';
 
 // Mock Dependencies
+const mockPublicClient = { getBalance: vi.fn().mockResolvedValue(1000n) };
+const mockWalletClient = { account: { address: '0x123' } };
 const mockKit = {
-    publicClient: { getBalance: vi.fn().mockResolvedValue(1000n) },
-    walletClient: { account: { address: '0x123' } },
+    publicClient: mockPublicClient,
+    readClient: mockPublicClient,
+    walletClient: mockWalletClient,
+    writeClient: mockWalletClient,
     config: { deepSeekConfig: { apiKey: 'test' } },
     public: {}
 } as unknown as ClawKit;

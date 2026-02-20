@@ -1,4 +1,23 @@
-import { formatUnits, parseUnits } from 'viem';
+// Native BigInt formatUnits/parseUnits — zero external dependencies
+function formatUnits(value: bigint, decimals: number): string {
+    const divisor = 10n ** BigInt(decimals);
+    const negative = value < 0n;
+    const abs = negative ? -value : value;
+    const intPart = abs / divisor;
+    const fracPart = abs % divisor;
+    const fracStr = fracPart.toString().padStart(decimals, '0').replace(/0+$/, '');
+    const sign = negative ? '-' : '';
+    return fracStr ? `${sign}${intPart}.${fracStr}` : `${sign}${intPart}`;
+}
+
+function parseUnits(value: string, decimals: number): bigint {
+    const negative = value.startsWith('-');
+    const unsigned = negative ? value.slice(1) : value;
+    const [intPart = '0', fracPart = ''] = unsigned.split('.');
+    const paddedFrac = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
+    const raw = BigInt(intPart + paddedFrac);
+    return negative ? -raw : raw;
+}
 
 export const WAD = 1_000_000_000_000_000_000n; // 1e18
 export const RAY = 1_000_000_000_000_000_000_000_000_000n; // 1e27

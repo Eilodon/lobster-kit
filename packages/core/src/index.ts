@@ -6,8 +6,8 @@
 
 // Interfaces
 export { IClawKit } from './interfaces/IClawKit';
-export type { ISensorHub } from './interfaces/ISensorHub';
-export type { IActuatorHub } from './interfaces/IActuatorHub';
+export type { ISensorHub, IReadClient } from './interfaces/ISensorHub';
+export type { IActuatorHub, IWriteClient } from './interfaces/IActuatorHub';
 export type { IMemoryHub } from './interfaces/IMemoryHub';
 
 // Types

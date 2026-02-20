@@ -1,4 +1,4 @@
-import { PublicClient, WalletClient } from 'viem';
+import type { IReadClient, IWriteClient } from '@clawkit/core';
 import * as fs from 'fs';
 import * as path from 'path';
 import { IClawKit, AppendOnlyAdapter, BigMath, withTimeout, Logger, RiskConfigPreset } from '@clawkit/core';
@@ -50,8 +50,8 @@ export interface ValidationResult {
 }
 
 export class EidolonGuard {
-    private client: PublicClient;
-    private wallet: WalletClient;
+    private client: any; // IReadClient — uses viem PublicClient APIs at runtime
+    private wallet: any; // IWriteClient — uses viem WalletClient APIs at runtime
     private kit: IClawKit;
     private config: GuardConfig;
     private wasmAdapter: WasmAdapter; // [NEW]
@@ -105,8 +105,8 @@ export class EidolonGuard {
         }
     ) {
         this.kit = kit;
-        this.client = kit.publicClient;
-        this.wallet = kit.walletClient;
+        this.client = (kit as any).publicClient ?? kit.readClient;
+        this.wallet = (kit as any).walletClient ?? kit.writeClient;
         this.config = config;
 
         // FIX U1: Wire DeepSeek Oracle

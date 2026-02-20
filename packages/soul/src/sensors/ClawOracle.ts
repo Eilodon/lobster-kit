@@ -69,8 +69,8 @@ export class ClawOracle {
 
             // Run probes in parallel
             const [quoteSmall, quoteLarge] = await Promise.all([
-                this.kit.defi?.getRealQuote!(wbnb, usdt, amountSmall, 0),
-                this.kit.defi?.getRealQuote!(wbnb, usdt, amountLarge, 0)
+                (this.kit as any).defi?.getRealQuote!(wbnb, usdt, amountSmall, 0),
+                (this.kit as any).defi?.getRealQuote!(wbnb, usdt, amountLarge, 0)
             ]);
             const quoteSmallOut = quoteSmall ? this.extractAmountOutMin(quoteSmall) : null;
             const quoteLargeOut = quoteLarge ? this.extractAmountOutMin(quoteLarge) : null;
@@ -133,8 +133,8 @@ export class ClawOracle {
 
     private async getGasState(): Promise<'LOW' | 'MEDIUM' | 'HIGH'> {
         try {
-            if (!this.kit.gas?.getOptimalExecutionTime) return 'MEDIUM';
-            const gas = await this.kit.gas.getOptimalExecutionTime();
+            if (!(this.kit as any).gas?.getOptimalExecutionTime) return 'MEDIUM';
+            const gas = await (this.kit as any).gas.getOptimalExecutionTime();
             const currentGasPrice = typeof gas.currentGasPrice === 'string' || typeof gas.currentGasPrice === 'number'
                 ? String(gas.currentGasPrice)
                 : '';

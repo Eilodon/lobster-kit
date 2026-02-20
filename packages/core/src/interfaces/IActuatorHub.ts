@@ -8,12 +8,30 @@
  * not the full IClawKit. This enables safe, testable actuator mocking.
  */
 
-import { WalletClient } from 'viem';
 import { CapabilityAction, ActionResult } from '../types/CapabilityAction';
 
+/**
+ * Generic transaction signing / write client.
+ * viem's WalletClient satisfies this interface automatically.
+ */
+export interface IWriteClient {
+    getAddresses(): Promise<string[]>;
+    getChainId(): Promise<number>;
+    signTypedData?(args: unknown): Promise<string>;
+    writeContract?(args: unknown): Promise<string>;
+    sendTransaction?(args: unknown): Promise<string>;
+    [key: string]: unknown; // Allow domain-specific extensions
+}
+
 export interface IActuatorHub {
-    /** Low-level transaction signing client (viem WalletClient). */
-    readonly walletClient: WalletClient;
+    /** Generic write client — any signer that implements IWriteClient. */
+    readonly writeClient: IWriteClient;
+
+    /**
+     * @deprecated Use `writeClient` instead. Kept for backward compatibility.
+     * Alias for writeClient — returns the same underlying client.
+     */
+    readonly walletClient?: IWriteClient;
 
     /**
      * Execute a generic domain action.
@@ -29,7 +47,7 @@ export interface IActuatorHub {
 
     /**
      * Returns the primary wallet address associated with this hub.
-     * Equivalent to `walletClient.getAddresses()[0]`.
+     * Equivalent to `writeClient.getAddresses()[0]`.
      */
     getAddress(): Promise<string>;
 }

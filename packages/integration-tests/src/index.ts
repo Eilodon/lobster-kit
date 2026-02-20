@@ -24,6 +24,9 @@ export class ClawKit {
 
   public readonly walletClient: ClawKitWalletClient;
   public readonly publicClient: PublicClient;
+  /** Generic aliases for IClawKit compatibility */
+  public readonly readClient: PublicClient;
+  public readonly writeClient: ClawKitWalletClient;
   public readonly config: ClawKitConfig;
 
   private marketStream?: MarketStream;
@@ -40,6 +43,8 @@ export class ClawKit {
       chain: opBNB,
       transport: http(this.config.rpcUrl || 'https://opbnb-mainnet-rpc.bnbchain.org')
     });
+    this.readClient = this.publicClient;
+    this.writeClient = walletClient;
 
     this.defi = new DeFiModule(walletClient, this.publicClient, this.config);
     this.nft = new NFTModule(walletClient, this.publicClient, this.config);

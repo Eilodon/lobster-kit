@@ -86,8 +86,8 @@ export class PriceAggregator {
         const wbnb = 'WBNB';
         const usdt = 'USDT';
 
-        if (!this.kit.defi?.getRealQuote) throw new Error('Defi module not available');
-        const quote = await this.kit.defi.getRealQuote(wbnb, usdt, oneUnit, 0);
+        if (!(this.kit as any).defi?.getRealQuote) throw new Error('Defi module not available');
+        const quote = await (this.kit as any).defi.getRealQuote(wbnb, usdt, oneUnit, 0);
         const amountOutMin = this.extractAmountOutMin(quote);
         if (!amountOutMin) throw new Error('No DEX liquidity');
 

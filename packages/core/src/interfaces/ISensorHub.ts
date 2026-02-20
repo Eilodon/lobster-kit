@@ -8,12 +8,29 @@
  * not the full IClawKit. This minimizes coupling.
  */
 
-import { PublicClient } from 'viem';
+/**
+ * Generic read-only client for world state queries.
+ * viem's PublicClient satisfies this interface automatically.
+ */
+export interface IReadClient {
+    readContract(args: unknown): Promise<unknown>;
+    getBlock?(args?: unknown): Promise<unknown>;
+    getBalance?(args: unknown): Promise<bigint>;
+    getChainId?(): Promise<number>;
+    [key: string]: unknown; // Allow domain-specific extensions
+}
+
 import { WorldState } from '../types/WorldState';
 
 export interface ISensorHub {
-    /** Low-level blockchain read client (viem PublicClient). */
-    readonly publicClient: PublicClient;
+    /** Generic read client — any provider that implements IReadClient. */
+    readonly readClient: IReadClient;
+
+    /**
+     * @deprecated Use `readClient` instead. Kept for backward compatibility.
+     * Alias for readClient — returns the same underlying client.
+     */
+    readonly publicClient?: IReadClient;
 
     /** Runtime configuration. */
     readonly config: {

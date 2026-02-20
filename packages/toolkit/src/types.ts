@@ -1,4 +1,9 @@
 import { WalletClient, Transport, Chain, Account } from 'viem';
+
+// ═══════════════════════════════════════════════════════
+//  GENERIC DOMAIN TYPES (Universal — no chain dependency)
+// ═══════════════════════════════════════════════════════
+
 export interface SwapParams {
   from: string; // Token symbol or address
   to: string;   // Token symbol or address
@@ -58,7 +63,7 @@ export interface ApprovalInfo {
 
 export interface GasEstimate {
   estimatedGas: bigint;
-  estimatedCost: string; // in BNB
+  estimatedCost: string;
   estimatedCostUSD: string;
   suggestedGasPrice: bigint;
 }
@@ -87,41 +92,39 @@ export interface Position {
 }
 
 export interface TransferParams {
-  token?: string; // Token address, undefined for BNB
+  token?: string; // Token address, undefined for native currency
   to: string;
   amount: string;
 }
 
-// ClawKit config — no plaintext private key (FIX M8 partial)
-// ClawKit config — consolidated definition
+// ═══════════════════════════════════════════════════════
+//  CONFIG TYPES (Generic)
+// ═══════════════════════════════════════════════════════
 
 export interface PythConfig {
   endpoint: string;
-  priceFeedIds: {
-    BNB: string;
-    USDT: string;
-  };
+  priceFeedIds: Record<string, string>;
 }
 
 export interface ClawKitConfig {
   privateKey?: string; // Optional if WalletClient provided with account
-  chainId?: number; // default: 204 (opBNB)
+  chainId?: number;
   rpcUrl?: string;
-  proxyUrl?: string; // [NEW] Ghost Protocol Proxy URL
+  proxyUrl?: string;
   gasMultiplier?: number;
-  privacyMode?: 'strict' | 'balanced'; // strict => no direct external price feeds
-  thermodynamicFailPolicy?: 'OPEN' | 'CLOSED'; // OPEN = warn only, CLOSED = throw error (default)
+  privacyMode?: 'strict' | 'balanced';
+  thermodynamicFailPolicy?: 'OPEN' | 'CLOSED';
   approvalMode?: 'EXACT' | 'BUFFERED' | 'MAX';
-  approvalBufferBps?: number; // Used when approvalMode=BUFFERED (default 12000 = 1.2x)
-  usePermit2?: boolean;       // [P3] Use Permit2 gasless approvals instead of on-chain approve()
-  contracts?: Partial<typeof CLAWKIT_CONTRACTS>;
-  chainConfig?: ChainConfig; // Inject chain specific config
-  fallbackBNBPrice?: number; // User-defined fallback price used when live feeds fail
-  pythConfig?: PythConfig; // [NEW] Pyth Network Configuration
+  approvalBufferBps?: number;
+  usePermit2?: boolean;
+  contracts?: Record<string, string>;
+  chainConfig?: ChainConfig;
+  fallbackBNBPrice?: number;
+  pythConfig?: PythConfig;
   configIntegrity?: {
     expectedHash: string;
     algorithm?: 'sha256';
-    strict?: boolean; // default true
+    strict?: boolean;
   };
   deepSeekConfig?: {
     apiKey: string;
@@ -130,26 +133,18 @@ export interface ClawKitConfig {
   [key: string]: unknown;
 }
 
-
-// Strict WalletClient type enforcing Account presence
+// Strict WalletClient type enforcing Account presence (viem-specific)
 export type ClawKitWalletClient = WalletClient<Transport, Chain, Account>;
 
 // ═══════════════════════════════════════════════════════
-//  CHAIN CONFIGURATION (FIX F4 + F5)
+//  CHAIN CONFIGURATION (Generic)
 // ═══════════════════════════════════════════════════════
 
 export interface ChainConfig {
   name: string;
   chainId: number;
   tokens: Record<string, TokenInfo>;
-  contracts: {
-    pancakeRouter: string;
-    pancakeQuoter: string;
-    pancakeMasterChef: string; // V3
-    venusComptroller?: string; // Optional (not yet on opBNB?)
-    venusMarkets?: Record<string, string>;
-    batchExecutor?: string; // [NEW] For optimized txs
-  };
+  contracts: Record<string, string | undefined | Record<string, string>>;
 }
 
 export interface TokenInfo {
@@ -159,130 +154,8 @@ export interface TokenInfo {
 }
 
 /**
- * OPBNB CONFIGURATION (Verified 2026)
- * Sources: pancakeswap.finance, binance.org
- */
-export const OPBNB_CONFIG: ChainConfig = {
-  name: 'opBNB',
-  chainId: 204,
-  tokens: {
-    BNB: {
-      address: '0x0000000000000000000000000000000000000000',
-      decimals: 18,
-      symbol: 'BNB',
-    },
-    WBNB: {
-      address: '0x4200000000000000000000000000000000000006',
-      decimals: 18,
-      symbol: 'WBNB',
-    },
-    USDT: {
-      address: '0x9e5AAC1Ba1a2e6aEd6b32689DFcF62A509Ca96f3',
-      decimals: 6,
-      symbol: 'USDT',
-    },
-    USDC: {
-      address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // Verified opBNB USDC (Bridged)
-      decimals: 6,
-      symbol: 'USDC',
-    },
-    CAKE: {
-      address: '0x152649eA73beAb28c5b49B26eb48f7EAD6d4c898', // CAKE on opBNB
-      decimals: 18,
-      symbol: 'CAKE',
-    },
-  },
-  contracts: {
-    // PancakeSwap V3 Smart Router
-    pancakeRouter: '0x678Aa4bF4E210cf2166753e054d5b7c31cc7fa86',
-    // PancakeSwap V3 Quoter
-    pancakeQuoter: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997',
-    // PancakeSwap V3 MasterChef
-    pancakeMasterChef: '0x556B9306565093C855AEA9AE92A594704c2Cd59e',
-    // Venus not yet fully verified on opBNB, leaving undefined to prevent loss
-    venusComptroller: undefined,
-    venusMarkets: {}
-  }
-};
-
-// Deprecated global exports kept for checking, but logic should use config
-export const TOKENS = OPBNB_CONFIG.tokens;
-export const PANCAKE_ROUTER = OPBNB_CONFIG.contracts.pancakeRouter;
-export const PANCAKE_QUOTER = OPBNB_CONFIG.contracts.pancakeQuoter;
-
-// ═══════════════════════════════════════════════════════
-//  CONTRACT ADDRESSES (FIX F4)
-// ═══════════════════════════════════════════════════════
-
-/**
- * ClawKit helper contracts — MUST be deployed before use.
- * Run `npx hardhat run scripts/deploy.ts --network opbnb` to deploy.
- * Addresses are auto-populated by the deploy script.
- */
-export const CLAWKIT_CONTRACTS = {
-  DynamicBadge: '0x0000000000000000000000000000000000000000' as string,
-  BatchExecutor: '0x0000000000000000000000000000000000000000' as string,
-  ApprovalRevoker: '0x0000000000000000000000000000000000000000' as string,
-};
-
-/**
- * FIX F4: Validate that a contract address has been deployed.
- * Throws if the address is zero (not deployed yet).
- */
-export function assertDeployed(name: keyof typeof CLAWKIT_CONTRACTS): string {
-  const addr = CLAWKIT_CONTRACTS[name];
-  if (!addr || addr === '0x0000000000000000000000000000000000000000') {
-    throw new Error(
-      `${name} contract not deployed. Run: npx hardhat run scripts/deploy.ts --network opbnb`
-    );
-  }
-  return addr;
-}
-
-/**
- * FIX H4: Resolve token decimals from symbol or address.
- */
-export function getTokenDecimals(tokenOrSymbol: string): number {
-  // Check by symbol
-  const bySymbol = TOKENS[tokenOrSymbol.toUpperCase()];
-  if (bySymbol) return bySymbol.decimals;
-
-  // Check by address
-  const byAddr = Object.values(TOKENS).find(
-    (t) => t.address.toLowerCase() === tokenOrSymbol.toLowerCase()
-  );
-  if (byAddr) return byAddr.decimals;
-
-  // 🛑 SECURITY FIX: Do not default to 18 for unknown tokens.
-  // This prevents order-of-magnitude errors (e.g. USDC is 6 decimals, defaulting to 18 is 10^12 error).
-  throw new Error(`UnknownTokenError: Decimals unknown for ${tokenOrSymbol}. Add to config or provide explicitly.`);
-}
-
-/**
- * Resolve token address from symbol
- */
-export function resolveTokenAddress(tokenOrSymbol: string): string {
-  const bySymbol = TOKENS[tokenOrSymbol.toUpperCase()];
-  if (bySymbol) return bySymbol.address;
-
-  // FIX: Validate format. Don't just return garbage.
-  // 0x + 40 hex chars
-  if (!/^0x[a-fA-F0-9]{40}$/.test(tokenOrSymbol)) {
-    throw new Error(`InvalidTokenError: "${tokenOrSymbol}" is neither a known symbol nor a valid address.`);
-  }
-
-  return tokenOrSymbol;
-}
-
-// Aliases for backward compatibility
-export const BATCH_EXECUTOR = CLAWKIT_CONTRACTS.BatchExecutor;
-export const APPROVAL_REVOKER = CLAWKIT_CONTRACTS.ApprovalRevoker;
-
-export type TokenSymbol = keyof typeof TOKENS;
-
-/**
  * Cast a string to viem's Address type.
- * Single validation point — use this instead of scattering `as \`0x...\`` everywhere.
+ * Single validation point.
  */
 export function toAddress(addr: string): `0x${string}` {
   if (!addr.startsWith('0x')) {
@@ -290,3 +163,21 @@ export function toAddress(addr: string): `0x${string}` {
   }
   return addr as `0x${string}`;
 }
+
+// ═══════════════════════════════════════════════════════
+//  BNB-SPECIFIC RE-EXPORTS (Backward Compatibility)
+// ═══════════════════════════════════════════════════════
+
+export {
+  OPBNB_CONFIG,
+  TOKENS,
+  PANCAKE_ROUTER,
+  PANCAKE_QUOTER,
+  CLAWKIT_CONTRACTS,
+  BATCH_EXECUTOR,
+  APPROVAL_REVOKER,
+  assertDeployed,
+  getTokenDecimals,
+  resolveTokenAddress,
+  type TokenSymbol,
+} from './chains/opbnb';
