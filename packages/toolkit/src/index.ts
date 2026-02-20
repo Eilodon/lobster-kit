@@ -118,6 +118,10 @@ export * from './utils/ApiGateway';
 
 export * from './connectors';
 export * from './adapters';
+export * from './utils/ConfigIntegrity';
+export * from './utils/Permit2';
+export * from './utils/Resilience';
+export * from './utils/Logger';
 
 // Default export
 export default ClawKit;

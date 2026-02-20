@@ -2,7 +2,7 @@ import { IClawKit } from '@clawkit/core';
 import { MarketState } from '../eidolon/EidolonTypes';
 import { PythAdapter } from '../oracles/PythAdapter';
 import { PriceAggregator } from './PriceAggregator';
-import { BigMath, getTokenDecimals } from '@clawkit/core';
+import { BigMath } from '@clawkit/core';
 import { PythConfig } from '../config/PythConfig';
 
 /**
@@ -80,7 +80,7 @@ export class ClawOracle {
             }
 
             // Calculate Price per WBNB
-            const usdtDecimals = getTokenDecimals(usdt);
+            const usdtDecimals = 6; // USDT standard decimals
             const quoteSmallWad = this.normalizeToWad(quoteSmallOut, usdtDecimals);
             const quoteLargeWad = this.normalizeToWad(quoteLargeOut, usdtDecimals);
 

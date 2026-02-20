@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { PythAdapter } from '../oracles/PythAdapter';
 import { IClawKit } from '@clawkit/core';
-import { getTokenDecimals } from '@clawkit/core';
+
 import { formatUnits } from 'viem';
 
 export interface PriceSource {
@@ -91,7 +91,7 @@ export class PriceAggregator {
         const amountOutMin = this.extractAmountOutMin(quote);
         if (!amountOutMin) throw new Error('No DEX liquidity');
 
-        const usdtDecimals = getTokenDecimals('USDT');
+        const usdtDecimals = 6; // USDT standard decimals
         return Number(formatUnits(amountOutMin, usdtDecimals));
     }
 

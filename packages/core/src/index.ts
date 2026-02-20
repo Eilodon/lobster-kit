@@ -43,15 +43,7 @@ export { ChaosHarness, type ChaosHarnessDeps, type ChaosHarnessConfig, type Chao
 // Utilities
 export { AsyncLock } from './utils/AsyncLock';
 export { Logger } from './utils/Logger';
-export { withRetry, withTimeout, type RetryConfig } from './utils/Resilience';
+export { withRetry, withTimeout, CircuitBreaker, type RetryConfig, type CircuitBreakerOptions } from './utils/Resilience';
 export { BigMath, WAD, RAY, HALF_WAD, HALF_RAY } from './utils/BigMath';
 export { BioParametersConfig, RiskConfigPreset, type BioParameters, type RiskConfig } from './config';
 
-// Token helpers (minimal stub — full implementation in @clawkit/defi-bnb)
-export function getTokenDecimals(tokenOrSymbol: string): number {
-    const decimals: Record<string, number> = {
-        'USDT': 6, 'USDC': 6, 'BUSD': 18, 'WBNB': 18, 'BNB': 18,
-        'CAKE': 18, 'ETH': 18, 'BTCB': 18, 'DAI': 18,
-    };
-    return decimals[tokenOrSymbol.toUpperCase()] ?? 18;
-}
