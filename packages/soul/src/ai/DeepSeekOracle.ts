@@ -98,6 +98,85 @@ export class DeepSeekOracle implements IOracle {
         return this.deterministicEmbedding(payload, this.config.embeddingDimensions ?? 64);
     }
 
+    public async interpretConversation(
+        messages: string,
+        current_mode: number,
+        user_profile?: unknown
+    ): Promise<unknown> {
+        if (!this.config.apiKey) {
+            // Fallback mock
+            return {
+                user_expertise_signal: 'novice',
+                user_intent: 'get_validation',
+                user_frustration_level: 0.1,
+                context_depth: 'sparse',
+                thermo_state: [0.5, 0.5, 0.3, 0.5, 0.3]
+            };
+        }
+
+        const prompt = `
+        ANALYZE CONVERSATION STATE
+        Current Mode: ${current_mode}
+        User Profile: ${JSON.stringify(user_profile || {})}
+        Messages:
+        ${messages.slice(-2000)}
+
+        Return JSON matching ConversationSensory:
+        {
+            "user_expertise_signal": "expert" | "intermediate" | "novice",
+            "user_intent": "share_and_be_heard" | "get_validation" | "brainstorm_together" | "debug_problem" | "learn_something" | "vent",
+            "user_frustration_level": number (0.0-1.0),
+            "context_depth": "rich" | "sparse",
+            "thermo_state": [engagement, trust, cognitive_load, rapport, momentum] (0.0-1.0)
+        }
+        `;
+
+        const response = await this.callLLM(prompt, { jsonOnly: true });
+        try {
+            return JSON.parse(response);
+        } catch {
+            return {
+                user_expertise_signal: 'novice',
+                user_intent: 'share_and_be_heard',
+                user_frustration_level: 0.1,
+                context_depth: 'sparse',
+                thermo_state: [0.5, 0.5, 0.5, 0.5, 0.5]
+            };
+        }
+    }
+
+    public async counterfactual(
+        actual_pattern: string,
+        hypothetical_pattern: string,
+        context: unknown
+    ): Promise<{ would_have_been_better: boolean; delta: number; reasoning: string }> {
+        if (!this.config.apiKey) {
+            return { would_have_been_better: false, delta: 0, reasoning: "Oracle offline" };
+        }
+
+        const prompt = `
+        COUNTERFACTUAL ANALYSIS
+        Context: ${JSON.stringify(context)}
+        Actual Action: ${actual_pattern}
+        Hypothetical Action: ${hypothetical_pattern}
+
+        Did the hypothetical action have a better expected outcome?
+        Return JSON:
+        {
+            "would_have_been_better": boolean,
+            "delta": number (-1.0 to 1.0, positive means better),
+            "reasoning": "string"
+        }
+        `;
+
+        const response = await this.callLLM(prompt, { jsonOnly: true });
+        try {
+            return JSON.parse(response);
+        } catch {
+            return { would_have_been_better: false, delta: 0, reasoning: "Oracle JSON Parse Error" };
+        }
+    }
+
     public async refine(draft: string, critique: CriticResult): Promise<string> {
         if (!this.config.apiKey) {
             return this.refineDeterministic(draft, critique);

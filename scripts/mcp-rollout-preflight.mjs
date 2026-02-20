@@ -93,8 +93,11 @@ function getConfig(values) {
     contextCompressionEnabled: parseBoolean(values.CONTEXT_COMPRESSION_ENABLED, true),
     orchestratorEnabled: parseBoolean(values.ORCHESTRATOR_ENABLED, false),
     toolGenExperimentalEnabled: parseBoolean(values.TOOL_GEN_EXPERIMENTAL_ENABLED, false),
+    toolGenOracleExecution: parseBoolean(values.TOOL_GEN_ORACLE_EXECUTION, false),
     generatedToolMax: Math.floor(parseNumber(values.TOOL_GEN_MAX_DYNAMIC_TOOLS, 32)),
     canaryPercent: parseNumber(values.COGNITIVE_CANARY_PERCENT, 100),
+    shadowModeEnabled: parseBoolean(values.COGNITIVE_SHADOW_MODE_ENABLED, false),
+    shadowSamplePercent: parseNumber(values.COGNITIVE_SHADOW_SAMPLE_PERCENT, 100),
     rollbackErrorRate: parseNumber(values.COGNITIVE_AUTO_ROLLBACK_ERROR_RATE, 0.35),
     rollbackP95Ms: parseNumber(values.COGNITIVE_AUTO_ROLLBACK_P95_MS, 3000),
     rollbackMinCalls: Math.floor(parseNumber(values.COGNITIVE_AUTO_ROLLBACK_MIN_CALLS, 20)),
@@ -107,6 +110,9 @@ function validate(profile, cfg) {
 
   if (cfg.canaryPercent < 0 || cfg.canaryPercent > 100) {
     errors.push('COGNITIVE_CANARY_PERCENT must be within [0, 100].');
+  }
+  if (cfg.shadowSamplePercent < 0 || cfg.shadowSamplePercent > 100) {
+    errors.push('COGNITIVE_SHADOW_SAMPLE_PERCENT must be within [0, 100].');
   }
   if (cfg.rollbackErrorRate <= 0 || cfg.rollbackErrorRate >= 1) {
     errors.push('COGNITIVE_AUTO_ROLLBACK_ERROR_RATE must be within (0, 1).');
@@ -136,8 +142,17 @@ function validate(profile, cfg) {
   if (profile === 'production' && cfg.canaryPercent > 10) {
     warnings.push('Production canary is above 10%; consider gradual increase only after stable telemetry.');
   }
+  if (profile !== 'development' && !cfg.shadowModeEnabled) {
+    errors.push('COGNITIVE_SHADOW_MODE_ENABLED must be true outside development.');
+  }
+  if (cfg.shadowModeEnabled && cfg.shadowSamplePercent < 50 && profile !== 'development') {
+    warnings.push('Shadow sample below 50% may hide regressions during rollout.');
+  }
   if (profile !== 'development' && cfg.toolGenExperimentalEnabled) {
     errors.push('TOOL_GEN_EXPERIMENTAL_ENABLED must be false outside development.');
+  }
+  if (profile !== 'development' && cfg.toolGenOracleExecution) {
+    errors.push('TOOL_GEN_ORACLE_EXECUTION must be false outside development.');
   }
   if (profile === 'production' && cfg.orchestratorEnabled) {
     warnings.push('ORCHESTRATOR_ENABLED=true in production is risky; keep disabled by default.');
@@ -160,8 +175,11 @@ function printSummary(profile, source, cfg, warnings, errors) {
   console.log(`- CONTEXT_COMPRESSION_ENABLED=${cfg.contextCompressionEnabled}`);
   console.log(`- ORCHESTRATOR_ENABLED=${cfg.orchestratorEnabled}`);
   console.log(`- TOOL_GEN_EXPERIMENTAL_ENABLED=${cfg.toolGenExperimentalEnabled}`);
+  console.log(`- TOOL_GEN_ORACLE_EXECUTION=${cfg.toolGenOracleExecution}`);
   console.log(`- TOOL_GEN_MAX_DYNAMIC_TOOLS=${cfg.generatedToolMax}`);
   console.log(`- COGNITIVE_CANARY_PERCENT=${cfg.canaryPercent}`);
+  console.log(`- COGNITIVE_SHADOW_MODE_ENABLED=${cfg.shadowModeEnabled}`);
+  console.log(`- COGNITIVE_SHADOW_SAMPLE_PERCENT=${cfg.shadowSamplePercent}`);
   console.log(`- COGNITIVE_AUTO_ROLLBACK_ERROR_RATE=${cfg.rollbackErrorRate}`);
   console.log(`- COGNITIVE_AUTO_ROLLBACK_P95_MS=${cfg.rollbackP95Ms}`);
   console.log(`- COGNITIVE_AUTO_ROLLBACK_MIN_CALLS=${cfg.rollbackMinCalls}`);

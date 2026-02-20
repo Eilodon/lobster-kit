@@ -1,8 +1,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EidolonGuard } from '../src/eidolon/EidolonGuard';
-import { WasmAdapter } from '../src/eidolon/WasmAdapter';
-import { ClawKit } from '../src/index';
+import { WasmAdapter } from '../src/WasmAdapter';
+// import { ClawKit } from '../src/index'; // Unused
 
 // Mock dependencies
 const mockKit = {
@@ -17,8 +17,8 @@ const mockValueInvariant = {
 };
 
 const mockAntiRug = {
-    check_token_security: vi.fn().mockResolvedValue({ is_honeypot: false, score: 0, contract_verified: true }),
-    compute_score: vi.fn()
+    check_token_security: vi.fn().mockReturnValue({ is_honeypot: false, score: 0, contract_verified: true }),
+    compute_score: vi.fn().mockReturnValue({ is_honeypot: false, score: 0, contract_verified: true })
 };
 
 const mockWasmAdapter = {
@@ -28,6 +28,15 @@ const mockWasmAdapter = {
 
 // Mock Singleton
 vi.spyOn(WasmAdapter, 'getInstance').mockReturnValue(mockWasmAdapter as any);
+
+// Mock GoPlusSecurity to prevent real API calls
+vi.mock('../src/oracles/GoPlusSecurity', () => {
+    return {
+        GoPlusSecurity: vi.fn().mockImplementation(() => ({
+            checkToken: vi.fn().mockResolvedValue({ is_honeypot: false, score: 0 })
+        }))
+    };
+});
 
 describe('EidolonGuard: Rust Integration', () => {
     let guard: EidolonGuard;

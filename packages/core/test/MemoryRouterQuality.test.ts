@@ -99,5 +99,63 @@ describe('MemoryRouter quality and scale', () => {
         expect(largeMs).toBeLessThan(2500);
         expect(largeMs).toBeLessThan(Math.max(35, smallMs * 35));
     });
-});
 
+    it('rebuilds ANN index when embeddings change without id/order changes', async () => {
+        const queryVector = vectorize('critical rollout incident');
+        const oracle = {
+            async embed(_state: { sensory: Record<string, unknown> }) {
+                return queryVector;
+            },
+        };
+        const graph = new MemoryGraph();
+        const now = Date.now();
+        const entries = [
+            {
+                id: 'a',
+                content: 'critical rollout incident',
+                embedding: queryVector.slice(),
+                stability: 1,
+                last_accessed: now,
+                created_at: now,
+                importance: 0.7,
+            },
+            {
+                id: 'b',
+                content: 'generic memory',
+                embedding: vectorize('generic memory'),
+                stability: 1,
+                last_accessed: now - 1,
+                created_at: now - 1,
+                importance: 0.5,
+            },
+            {
+                id: 'c',
+                content: 'misc note',
+                embedding: vectorize('misc note'),
+                stability: 1,
+                last_accessed: now - 2,
+                created_at: now - 2,
+                importance: 0.3,
+            },
+        ];
+
+        const router = new MemoryRouter(
+            oracle as any,
+            graph,
+            async () => entries,
+            async () => []
+        );
+
+        const worldState = createWorldState('conversation', { query: 'critical rollout incident' });
+        const first = await router.query({ query: 'critical rollout incident', worldState });
+        expect(first[0]?.id).toBe('a');
+
+        entries[0].content = 'gardening tips and recipes';
+        entries[0].embedding = vectorize('gardening tips and recipes');
+        entries[1].content = 'critical rollout incident mirrored';
+        entries[1].embedding = queryVector.slice();
+
+        const second = await router.query({ query: 'critical rollout incident', worldState });
+        expect(second[0]?.id).toBe('b');
+    });
+});

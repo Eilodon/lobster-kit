@@ -28,11 +28,6 @@ export interface IOracle {
     analyze(context: MarketContext): Promise<OracleInsight>;
 
     /**
-     * Produce a domain-agnostic embedding for memory and routing layers.
-     */
-    embed<T extends object>(worldState: WorldState<T>): Promise<number[]>;
-
-    /**
      * Optional response refinement hook used by Critic/Verifier loops.
      */
     refine?(draft: string, critique: CriticResult): Promise<string>;
@@ -41,6 +36,34 @@ export interface IOracle {
      * Optional generation hook for reasoning/orchestration/tool generation modules.
      */
     generate?(prompt: string, options?: OracleGenerationOptions): Promise<string>;
+
+    /**
+     * Produce a domain-agnostic embedding for memory and routing layers.
+     * Follow DeepSeekOracle.sanitizeContext() pattern.
+     */
+    embed<T extends object>(
+        worldState: WorldState<T>,
+        dimension?: number   // default 64
+    ): Promise<number[]>;
+
+    /**
+     * P1: Conversation interpretation
+     */
+    interpretConversation(
+        messages: string,
+        // using imported types if available or specific params
+        current_mode: number, // ConversationMode enum value
+        user_profile?: unknown
+    ): Promise<unknown>; // ConversationSensory
+
+    /**
+     * P1: Counterfactual query — wraps Intervenable
+     */
+    counterfactual(
+        actual_pattern: string,
+        hypothetical_pattern: string,
+        context: unknown // ConversationSensory
+    ): Promise<{ would_have_been_better: boolean; delta: number; reasoning: string }>;
 
     /**
      * Get a human-readable name for the oracle (e.g., "DeepSeek-V3", "GPT-5")

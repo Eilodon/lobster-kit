@@ -1,28 +1,33 @@
 import {
-    ContextCompressor,
-    ContextRouter,
     ConversationTransparency,
     createWorldState,
     MemoryDecayManager,
     MemoryGraph,
     MemoryRouter,
-    ReasoningChain,
-    SwarmOrchestrator,
     ToolGenerator,
     ToolPerformanceTracker,
 } from '@clawkit/core';
 import type {
-    ConversationSensory,
     GeneratedToolSpec,
     IOracle,
     MemoryEntry,
-    Message,
-    UserSensory,
     WorldState
 } from '@clawkit/core';
-import { TraumaRegistry } from '@clawkit/soul';
+import {
+    TraumaRegistry,
+    CognitiveArbiter,
+    ConversationMode,
+    ReasoningChain,
+    SwarmOrchestrator,
+    ContextCompressor,
+    ContextRouter,
+    type ConversationSensory,
+    type Message,
+    type UserSensory
+} from '@clawkit/soul';
 import { IMcpTool, McpToolResult } from './IMcpTool';
 import { SQLiteLearningStore } from '@clawkit/core';
+import { runSandboxedGeneratedTool } from './generatedToolSandbox';
 
 type FeatureFlags = {
     reasonChainEnabled: boolean;
@@ -33,6 +38,7 @@ type FeatureFlags = {
 
 type DynamicRegister = (tool: IMcpTool) => void;
 type OracleGenerator = Pick<IOracle, 'generate'>;
+type OracleEmbedder = Pick<IOracle, 'embed'>;
 
 export interface CognitiveToolDeps {
     flags: FeatureFlags;
@@ -49,10 +55,12 @@ export interface CognitiveToolDeps {
     toolGenerator: ToolGenerator;
     toolPerformance: ToolPerformanceTracker;
     oracleGenerator?: OracleGenerator;
+    embeddingOracle?: OracleEmbedder;
     generatedToolMax?: number;
     listTools: () => string[];
     recommendTools: (task: string, available?: string[]) => Promise<string[]>;
     registerDynamicTool: DynamicRegister;
+    arbiter: CognitiveArbiter;
 }
 
 function asText(value: unknown, fallback = ''): string {
@@ -62,14 +70,6 @@ function asText(value: unknown, fallback = ''): string {
 function asNumber(value: unknown, fallback = 0): number {
     const n = typeof value === 'number' ? value : Number(value);
     return Number.isFinite(n) ? n : fallback;
-}
-
-function extractScoreFromNotes(notes: string[], prefix: string): number | null {
-    const note = notes.find((entry) => entry.startsWith(prefix));
-    if (!note) return null;
-    const raw = note.slice(prefix.length).trim();
-    const value = Number(raw);
-    return Number.isFinite(value) ? value : null;
 }
 
 function extractJsonPayload(raw: string): string | null {
@@ -182,6 +182,12 @@ class GeneratedSandboxTool implements IMcpTool {
     }
 
     async execute(args: Record<string, unknown>): Promise<McpToolResult> {
+        const requestedDomain = this.resolveRequestedDomain(args);
+        if (!this.spec.sandbox.allowed_domains.includes(requestedDomain)) {
+            throw new Error(
+                `Generated tool "${this.spec.name}" blocked for domain "${requestedDomain}".`
+            );
+        }
         const payload = this.extractPayload(args);
         const result = await this.processPayload(payload, args);
         return {
@@ -195,6 +201,7 @@ class GeneratedSandboxTool implements IMcpTool {
                 mode: result.mode,
                 output: result.output,
                 confidence: result.confidence,
+                requested_domain: requestedDomain,
                 payload_echo: payload.slice(0, 800),
                 sandboxed: true,
                 capabilities: this.spec.capabilities,
@@ -212,7 +219,8 @@ class GeneratedSandboxTool implements IMcpTool {
         payload: string,
         args: Record<string, unknown>
     ): Promise<{ mode: 'oracle' | 'heuristic'; output: string; confidence: number }> {
-        if (this.oracle?.generate) {
+        const oracleExecutionEnabled = process.env.TOOL_GEN_ORACLE_EXECUTION === 'true';
+        if (oracleExecutionEnabled && this.oracle?.generate) {
             const prompt = [
                 'You execute a read-only MCP generated tool.',
                 'Return JSON ONLY: {"output": string, "confidence": number}',
@@ -245,36 +253,21 @@ class GeneratedSandboxTool implements IMcpTool {
     }
 
     private heuristicProcess(payload: string): { mode: 'heuristic'; output: string; confidence: number } {
-        const text = payload.trim();
-        const lowerNeed = this.need.toLowerCase();
-        const caps = new Set(this.spec.capabilities.map((c) => c.toLowerCase()));
+        return runSandboxedGeneratedTool(payload, this.need, this.spec.capabilities);
+    }
 
-        if (caps.has('summarization') || lowerNeed.includes('summary') || lowerNeed.includes('summarize')) {
-            const output = text.length <= 360
-                ? text
-                : `${text.slice(0, 180)} ... ${text.slice(-140)}`;
-            return { mode: 'heuristic', output, confidence: 0.6 };
+    private resolveRequestedDomain(args: Record<string, unknown>): string {
+        if (typeof args.domain === 'string' && args.domain.trim()) {
+            return args.domain.trim();
         }
-
-        if (caps.has('classification') || lowerNeed.includes('classify') || lowerNeed.includes('label')) {
-            const lowered = text.toLowerCase();
-            let label = 'neutral';
-            if (/(error|fail|incident|critical|urgent|panic)/.test(lowered)) label = 'high_risk';
-            else if (/(warn|slow|delay|retry|degraded)/.test(lowered)) label = 'medium_risk';
-            else if (/(ok|done|stable|success)/.test(lowered)) label = 'low_risk';
-            return { mode: 'heuristic', output: `classification=${label}`, confidence: 0.55 };
+        const worldState = args.world_state;
+        if (worldState && typeof worldState === 'object' && !Array.isArray(worldState)) {
+            const domain = (worldState as Record<string, unknown>).domain;
+            if (typeof domain === 'string' && domain.trim()) {
+                return domain.trim();
+            }
         }
-
-        if (caps.has('transformation') || lowerNeed.includes('extract') || lowerNeed.includes('transform')) {
-            const lines = text.split('\n').map((line) => line.trim()).filter(Boolean).slice(0, 10);
-            return { mode: 'heuristic', output: lines.join(' | ').slice(0, 4_000), confidence: 0.5 };
-        }
-
-        return {
-            mode: 'heuristic',
-            output: text.slice(0, 4_000) || 'No payload provided.',
-            confidence: 0.45,
-        };
+        return 'general';
     }
 }
 
@@ -329,16 +322,31 @@ export class ClawkitSenseIntentTool implements IMcpTool {
             },
             required: ['sensory'],
         },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+        },
     };
 
     constructor(private readonly deps: CognitiveToolDeps) { }
 
     async execute(args: Record<string, unknown>): Promise<McpToolResult> {
         const messages = asMessageArray(args.messages);
+        // We only use the last message for now as Arbiter.sense takes a single string found in the prompt,
+        // but Arbiter.sense logic might need full context later.
+        // For now, let's join messages or take the last user message.
+        const lastMsg = messages.filter(m => m.role === 'user').pop()?.content || '';
+
         const currentPattern = asText(args.current_pattern, 'default');
         const user = (args.user && typeof args.user === 'object') ? args.user as UserSensory : undefined;
-        const base = this.deps.conversationTransparency.senseIntent(messages, currentPattern, user);
-        const sensory = await this.enrichSensoryWithOracle(base, messages, currentPattern, user);
+
+        // Delegate to CognitiveArbiter
+        const sensory = await this.deps.arbiter.sense(lastMsg, user);
+
+        // Arbiters sense might not return all fields expected by the tool output yet, 
+        // merging with transparency checks if needed, but Arbiter should eventually supersede.
         return {
             content: [{ type: 'text', text: `Intent sensed: ${sensory.user_intent}` }],
             structuredContent: { sensory },
@@ -373,23 +381,23 @@ export class ClawkitSenseIntentTool implements IMcpTool {
                 ...base,
                 user_expertise_signal: this.pickEnum(
                     parsed.user_expertise_signal,
-                    ['novice', 'intermediate', 'expert'],
+                    ['novice', 'intermediate', 'expert'] as const,
                     base.user_expertise_signal
                 ),
                 user_intent: this.pickEnum(
                     parsed.user_intent,
-                    ['share_and_be_heard', 'get_validation', 'debug_problem', 'learn_something', 'brainstorm_together', 'vent'],
+                    ['share_and_be_heard', 'get_validation', 'debug_problem', 'learn_something', 'brainstorm_together', 'vent'] as const,
                     base.user_intent
                 ),
                 user_frustration_level: this.pickNumber(parsed.user_frustration_level, base.user_frustration_level),
                 conversation_momentum: this.pickEnum(
                     parsed.conversation_momentum,
-                    ['neutral', 'building', 'deteriorating'],
-                    base.conversation_momentum
+                    ['neutral', 'building', 'deteriorating'] as const,
+                    base.conversation_momentum ?? 'neutral'
                 ),
-                context_depth: this.pickEnum(parsed.context_depth, ['sparse', 'rich'], base.context_depth),
-                pattern_is_appropriate: this.pickBoolean(parsed.pattern_is_appropriate, base.pattern_is_appropriate),
-                pattern_drift_detected: !this.pickBoolean(parsed.pattern_is_appropriate, base.pattern_is_appropriate),
+                context_depth: this.pickEnum(parsed.context_depth, ['sparse', 'rich'] as const, base.context_depth),
+                pattern_is_appropriate: this.pickBoolean(parsed.pattern_is_appropriate, base.pattern_is_appropriate ?? true),
+                pattern_drift_detected: !this.pickBoolean(parsed.pattern_is_appropriate, base.pattern_is_appropriate ?? true),
             };
         } catch {
             return base;
@@ -423,6 +431,12 @@ export class ClawkitCheckPatternTool implements IMcpTool {
             },
             required: ['patterns'],
         },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+        },
     };
 
     constructor(private readonly deps: CognitiveToolDeps) { }
@@ -430,16 +444,44 @@ export class ClawkitCheckPatternTool implements IMcpTool {
     async execute(args: Record<string, unknown>): Promise<McpToolResult> {
         const mode = asText(args.mode, 'ZEN');
         const patterns = Array.isArray(args.patterns) ? args.patterns.map((p) => String(p)) : [];
+
+        // 1. Check TraumaRegistry (Inhibition)
         const blocked = patterns
             .filter((pattern) => this.deps.traumaRegistry.isInhibited(mode, pattern))
             .map((pattern) => ({
                 pattern,
+                reason: 'trauma_inhibition',
                 remaining_ms: this.deps.traumaRegistry.getRemainingInhibition(mode, pattern),
             }));
 
+        // 2. Check Causal Validity (Arbiter)
+        const causalChecks = patterns.map(pattern => {
+            // Heuristic: Split pattern into cause->effect if possible, or check against self-consistency
+            // For now, we assume the pattern string might be "CauseVar->EffectVar" or just "PatternName"
+            // If it's a name, we might validate it against a known list or default to valid.
+            // Let's assume input might be complex, but for V3 let's just valid existence.
+
+            // If checking a specific causal link:
+            const parts = pattern.split('->');
+            if (parts.length === 2) {
+                const check = this.deps.arbiter.checkPattern(parts[0].trim(), parts[1].trim());
+                return { pattern, ...check };
+            }
+            return { pattern, valid: true, probability: 1, samples: 0, reasoning: 'implicitly_valid' };
+        });
+
+        const invalid = causalChecks.filter(c => !c.valid);
+
         return {
-            content: [{ type: 'text', text: blocked.length === 0 ? 'No pattern blocked.' : `${blocked.length} pattern(s) blocked.` }],
-            structuredContent: { blocked, mode },
+            content: [{
+                type: 'text',
+                text: `Checked ${patterns.length} patterns. Blocked: ${blocked.length}. Invalid: ${invalid.length}.`
+            }],
+            structuredContent: {
+                mode,
+                blocked,
+                causal_checks: causalChecks
+            },
         };
     }
 }
@@ -466,11 +508,12 @@ export class ClawkitCommitPatternTool implements IMcpTool {
         const reasoning = asText(args.reasoning);
         const importance = asNumber(args.importance, 0.5);
         const id = `pattern_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const embedding = await this.resolveEmbedding(chosenPattern, reasoning);
 
         const memoryEntry: MemoryEntry = {
             id,
             content: `[${chosenPattern}] ${reasoning}`,
-            embedding: new Array(64).fill(0),
+            embedding,
             stability: 1,
             last_accessed: Date.now(),
             created_at: Date.now(),
@@ -489,6 +532,30 @@ export class ClawkitCommitPatternTool implements IMcpTool {
             content: [{ type: 'text', text: `Pattern committed: ${chosenPattern}` }],
             structuredContent: { id, chosen_pattern: chosenPattern },
         };
+    }
+
+    private async resolveEmbedding(chosenPattern: string, reasoning: string): Promise<number[]> {
+        if (this.deps.embeddingOracle?.embed) {
+            try {
+                const raw = await this.deps.embeddingOracle.embed(
+                    createWorldState('pattern_commit', { chosen_pattern: chosenPattern, reasoning })
+                );
+                if (Array.isArray(raw) && raw.length > 0) {
+                    const cleaned = raw.map((value) => (Number.isFinite(value) ? value : 0));
+                    if (cleaned.some((value) => value !== 0)) return cleaned;
+                }
+            } catch {
+                // Fallback below keeps commit path resilient when embedding provider is unavailable.
+            }
+        }
+
+        const fallback = new Array<number>(64).fill(0);
+        const text = `${chosenPattern} ${reasoning}`;
+        for (let i = 0; i < text.length; i++) {
+            const idx = (text.charCodeAt(i) + i) % fallback.length;
+            fallback[idx] += 1;
+        }
+        return fallback;
     }
 }
 
@@ -542,6 +609,12 @@ export class ClawkitRecallSimilarTool implements IMcpTool {
                 world_state: { type: 'object' },
             },
             required: ['query'],
+        },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
         },
     };
 
@@ -659,16 +732,7 @@ export class ClawkitReasonChainTool implements IMcpTool {
         const latencyBudgetMs = Math.max(0, Math.floor(asNumber(args.latency_budget_ms, 0)));
         const context = (args.context && typeof args.context === 'object')
             ? args.context as ConversationSensory
-            : {
-                user_expertise_signal: 'intermediate',
-                user_intent: 'share_and_be_heard',
-                agent_current_pattern: 'default',
-                pattern_is_appropriate: true,
-                pattern_drift_detected: false,
-                user_frustration_level: 0.2,
-                conversation_momentum: 'neutral',
-                context_depth: 'sparse',
-            } as ConversationSensory;
+            : this.mockContext(); // Use the new mockContext method
 
         const verified = await this.deps.reasoningChain.run(draft, context, {
             mode,
@@ -676,7 +740,7 @@ export class ClawkitReasonChainTool implements IMcpTool {
         });
         const latencyMs = Date.now() - started;
         const notes = verified.trace?.notes ?? [];
-        const baselineFastScore = extractScoreFromNotes(notes, 'baseline_fast_score=');
+        const baselineFastScore = this.extractScoreFromNotes(notes, 'baseline_fast_score=');
         const abMetrics = {
             mode,
             baseline_fast_score: baselineFastScore ?? verified.final_score,
@@ -714,6 +778,26 @@ export class ClawkitReasonChainTool implements IMcpTool {
                 ab_metrics: abMetrics,
             },
         };
+    }
+    private extractScoreFromNotes(notes: string[], prefix: string): number | null {
+        const line = notes.find((n) => n.startsWith(prefix));
+        if (!line) return null;
+        const val = parseFloat(line.split('=')[1]);
+        return Number.isFinite(val) ? val : null;
+    }
+
+    private mockContext(): ConversationSensory {
+        return {
+            user_expertise_signal: 'intermediate',
+            user_intent: 'share_and_be_heard',
+            agent_current_pattern: 'sympathetic_listener',
+            pattern_is_appropriate: true,
+            pattern_drift_detected: false,
+            user_frustration_level: 0.2,
+            conversation_momentum: 'neutral',
+            context_depth: 'sparse',
+            thermo_state: [0.5, 0.5, 0.5, 0.5, 0.5]
+        } as ConversationSensory;
     }
 }
 
@@ -795,8 +879,15 @@ export class ClawkitCompressContextTool implements IMcpTool {
                 target_tokens: { type: 'number' },
                 preserve_recent: { type: 'number' },
                 importance_threshold: { type: 'number' },
+                model_profile: { type: 'object', description: 'Optional model profile for budget planning.' },
             },
             required: ['messages', 'target_tokens'],
+        },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
         },
     };
 
@@ -813,7 +904,14 @@ export class ClawkitCompressContextTool implements IMcpTool {
         const targetTokens = Math.max(256, Math.floor(asNumber(args.target_tokens, 50000)));
         const preserveRecent = Math.max(1, Math.floor(asNumber(args.preserve_recent, 10)));
         const importanceThreshold = Math.max(0, Math.min(1, asNumber(args.importance_threshold, 0)));
-        const compressed = await this.deps.contextCompressor.compress(messages, targetTokens, preserveRecent);
+        const modelProfile = (args.model_profile && typeof args.model_profile === 'object')
+            ? args.model_profile as Record<string, unknown>
+            : undefined;
+        const compressed = await this.deps.contextCompressor.compress(messages, targetTokens, preserveRecent, {
+            context_window: typeof modelProfile?.context_window === 'number' ? modelProfile.context_window : undefined,
+            reserve_response_tokens: typeof modelProfile?.reserve_response_tokens === 'number' ? modelProfile.reserve_response_tokens : undefined,
+            compression_floor: typeof modelProfile?.compression_floor === 'number' ? modelProfile.compression_floor : undefined,
+        });
 
         if (importanceThreshold > 0) {
             const summaries = compressed.summaries.filter((item) => item.importance >= importanceThreshold);
@@ -845,6 +943,43 @@ export class ClawkitCompressContextTool implements IMcpTool {
     }
 }
 
+export class ClawkitSimulateResponseTool implements IMcpTool {
+    readonly definition = {
+        name: 'clawkit_simulate_response',
+        description: 'Simulate the outcome of a potential response action (OODA Simulation).',
+        inputSchema: {
+            type: 'object' as const,
+            properties: {
+                actionPattern: { type: 'string', description: 'The response pattern to simulate.' },
+                mode: { type: 'number', description: 'ConversationMode enum (0=Zen, 1=Peer, etc).' },
+                intrusiveness: { type: 'number', description: 'Estimated intrusiveness (0.0-1.0).' }
+            },
+            required: ['actionPattern', 'mode', 'intrusiveness'],
+        },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+        },
+    };
+
+    constructor(private readonly deps: CognitiveToolDeps) { }
+
+    async execute(args: Record<string, unknown>): Promise<McpToolResult> {
+        const actionPattern = asText(args.actionPattern);
+        const mode = asNumber(args.mode, 0) as ConversationMode;
+        const intrusiveness = asNumber(args.intrusiveness, 0.5);
+
+        const result = await this.deps.arbiter.simulateAction(actionPattern, mode, intrusiveness);
+
+        return {
+            content: [{ type: 'text', text: `Simulation complete. Approved: ${result.approved}` }],
+            structuredContent: { result },
+        };
+    }
+}
+
 export class ClawkitMemoryQueryTool implements IMcpTool {
     readonly definition = {
         name: 'clawkit_memory_query',
@@ -856,6 +991,12 @@ export class ClawkitMemoryQueryTool implements IMcpTool {
                 world_state: { type: 'object' },
             },
             required: ['query'],
+        },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
         },
     };
 
@@ -966,6 +1107,12 @@ export class ClawkitToolRecommendTool implements IMcpTool {
             },
             required: ['task'],
         },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+        },
     };
 
     constructor(private readonly deps: CognitiveToolDeps) { }
@@ -1003,5 +1150,6 @@ export function createCognitiveTools(deps: CognitiveToolDeps): IMcpTool[] {
         new ClawkitMemoryQueryTool(deps),
         new ClawkitGenerateToolTool(deps),
         new ClawkitToolRecommendTool(deps),
+        new ClawkitSimulateResponseTool(deps),
     ];
 }

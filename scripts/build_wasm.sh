@@ -6,7 +6,14 @@ set -e
 # Just usage: pnpm build:wasm (from soul)
 
 echo "🏗️ Building WASM package..."
-wasm-pack build --target nodejs --release --out-dir pkg core-rust
+WASM_TARGET="${WASM_TARGET:-nodejs}"
+if [ "${WASM_ENABLE_SIMD:-0}" = "1" ]; then
+  echo "⚡ SIMD enabled (simd128 + bulk-memory)"
+  RUSTFLAGS="${RUSTFLAGS:-} -C target-feature=+simd128,+bulk-memory" \
+    wasm-pack build --target "${WASM_TARGET}" --release --out-dir pkg core-rust
+else
+  wasm-pack build --target "${WASM_TARGET}" --release --out-dir pkg core-rust
+fi
 
 # Clean up
 echo "🧹 Cleaning up..."

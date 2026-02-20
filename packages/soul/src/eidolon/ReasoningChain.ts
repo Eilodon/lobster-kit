@@ -5,7 +5,7 @@ import type {
     ThoughtNode,
     UserSensory,
     VerifiedResponse
-} from '../types/CognitiveTypes';
+} from './CognitiveTypes';
 
 type OracleGenerator = Pick<IOracle, 'refine' | 'generate'>;
 

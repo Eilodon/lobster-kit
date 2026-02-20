@@ -801,6 +801,10 @@ export class EidolonGuard {
         this.kpi.recordSwarmBandwidthSample(baselineBytes, optimizedBytes);
     }
 
+    public getEmotionalState(): EmotionalState {
+        return this.soul.getCurrentState();
+    }
+
     public getBrain(): ActiveLearning {
         return this.brain;
     }

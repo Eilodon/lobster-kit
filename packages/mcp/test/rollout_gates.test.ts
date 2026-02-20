@@ -31,6 +31,64 @@ class LegacyOkTool implements IMcpTool {
     }
 }
 
+class TypedCountTool implements IMcpTool {
+    readonly definition = {
+        name: 'eidolon_typed_count',
+        description: 'Requires numeric count argument.',
+        inputSchema: {
+            type: 'object' as const,
+            properties: {
+                count: { type: 'number' },
+            },
+            required: ['count'],
+        },
+    };
+
+    async execute(_args: Record<string, unknown>): Promise<McpToolResult> {
+        return {
+            content: [{ type: 'text', text: 'ok' }],
+        };
+    }
+}
+
+class CognitiveCounterTool implements IMcpTool {
+    public calls = 0;
+    readonly definition = {
+        name: 'clawkit_counter_tool',
+        description: 'Mutating cognitive tool for shadow safety checks.',
+        inputSchema: { type: 'object' as const, properties: {} },
+    };
+
+    async execute(_args: Record<string, unknown>): Promise<McpToolResult> {
+        this.calls += 1;
+        return {
+            content: [{ type: 'text', text: 'counted' }],
+        };
+    }
+}
+
+class ReadOnlyShadowProbeTool implements IMcpTool {
+    public sawShadow = false;
+    readonly definition = {
+        name: 'clawkit_shadow_probe',
+        description: 'Read-only tool should execute in shadow mode.',
+        inputSchema: { type: 'object' as const, properties: {} },
+        annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+        },
+    };
+
+    async execute(args: Record<string, unknown>): Promise<McpToolResult> {
+        this.sawShadow = args.__shadow === true;
+        return {
+            content: [{ type: 'text', text: 'ok' }],
+        };
+    }
+}
+
 describe('MCP rollout gates', () => {
     it('gates cognitive tools by canary percent without impacting legacy tools', async () => {
         const registry = new McpToolRegistry({
@@ -68,5 +126,72 @@ describe('MCP rollout gates', () => {
         expect(afterRollback.content[0]?.text.toLowerCase()).toContain('rollout disabled');
         expect(status.state.disabled).toBe(true);
         expect(legacy.isError).toBeFalsy();
+    });
+
+    it('runs shadow execution for canary-gated cognitive tools when enabled', async () => {
+        const registry = new McpToolRegistry({
+            canaryPercent: 0,
+            shadowModeEnabled: true,
+            shadowSamplePercent: 100,
+        });
+        registry.register(new CognitiveFailTool());
+
+        const response = await registry.dispatch('clawkit_fail_tool', { user_id: 'shadow-user' });
+        expect(response.isError).toBe(true);
+        expect(response.structuredContent).toMatchObject({
+            code: 'canary_rollout_gated',
+            shadow_mode_enabled: true,
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const shadow = registry.getTelemetry().getRecord('shadow:clawkit_fail_tool');
+        expect(shadow?.call_count).toBeGreaterThan(0);
+    });
+
+    it('skips non-read-only shadow execution to avoid side effects', async () => {
+        const registry = new McpToolRegistry({
+            canaryPercent: 0,
+            shadowModeEnabled: true,
+            shadowSamplePercent: 100,
+        });
+        const counterTool = new CognitiveCounterTool();
+        registry.register(counterTool);
+
+        const response = await registry.dispatch('clawkit_counter_tool', { user_id: 'shadow-safe' });
+        expect(response.isError).toBe(true);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        const shadow = registry.getTelemetry().getRecord('shadow:clawkit_counter_tool');
+        expect(shadow?.call_count).toBeGreaterThan(0);
+        expect(counterTool.calls).toBe(0);
+    });
+
+    it('executes read-only tools in shadow mode with __shadow marker', async () => {
+        const registry = new McpToolRegistry({
+            canaryPercent: 0,
+            shadowModeEnabled: true,
+            shadowSamplePercent: 100,
+        });
+        const probe = new ReadOnlyShadowProbeTool();
+        registry.register(probe);
+
+        const response = await registry.dispatch('clawkit_shadow_probe', { user_id: 'shadow-probe' });
+        expect(response.isError).toBe(true);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(probe.sawShadow).toBe(true);
+    });
+
+    it('rejects invalid payload shape before tool execution', async () => {
+        const registry = new McpToolRegistry();
+        registry.register(new TypedCountTool());
+
+        const invalid = await registry.dispatch('eidolon_typed_count', { count: 'not-a-number' });
+        expect(invalid.isError).toBe(true);
+        expect(invalid.content[0]?.text).toContain('Invalid args');
+        expect(invalid.structuredContent).toMatchObject({
+            code: 'invalid_tool_arguments',
+            tool: 'eidolon_typed_count',
+        });
     });
 });

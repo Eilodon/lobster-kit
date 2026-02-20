@@ -74,6 +74,12 @@ interface WasmCoreModule {
     ) => Uint8Array;
     HyperMemory?: GenericCtor;
     LiquidBrain?: GenericCtor;
+    ConversationDomainConfig?: GenericCtor<ConversationDomainConfig> & {
+        peer(): ConversationDomainConfig;
+        advisory(): ConversationDomainConfig;
+        discovery(): ConversationDomainConfig;
+    };
+    Intervenable?: GenericCtor;
 }
 
 export interface SearchResult {
@@ -463,6 +469,64 @@ class MockTraumaRegistry implements TraumaRegistry {
     }
 }
 
+// New Cognitive Interfaces
+export interface ConversationDomainConfig {
+    intrusiveness_threshold: number;
+    trust_decay_rate: number;
+    trauma_severity_scale: number;
+    dagma_trigger_episodes: number;
+    thermo_dt: number;
+}
+
+export interface CounterfactualResult {
+    actual_prob: number;
+    hypothetical_prob: number;
+    would_have_been_better: boolean;
+    delta: number;
+}
+
+export interface Intervenable {
+    do_intervention(graph: CausalGraph, intervention_var: number, intervention_value: number, query_var: number): number;
+    counterfactual(graph: CausalGraph, actual_var: number, hypothetical_var: number, query_var: number): CounterfactualResult;
+}
+
+class MockConversationConfig implements ConversationDomainConfig {
+    constructor(
+        public intrusiveness_threshold: number,
+        public trust_decay_rate: number,
+        public trauma_severity_scale: number,
+        public dagma_trigger_episodes: number,
+        public thermo_dt: number
+    ) { }
+
+    static peer(): MockConversationConfig {
+        return new MockConversationConfig(0.3, 0.05, 1.0, 50, 0.1);
+    }
+    static advisory(): MockConversationConfig {
+        return new MockConversationConfig(0.6, 0.02, 1.5, 100, 0.1);
+    }
+    static discovery(): MockConversationConfig {
+        return new MockConversationConfig(0.2, 0.1, 0.5, 20, 0.2);
+    }
+}
+
+class MockIntervenable implements Intervenable {
+    do_intervention(graph: CausalGraph, _ivar: number, _ival: number, query_var: number): number {
+        // Mock intervention: just return a simple prediction
+        return graph.predict(query_var, []);
+    }
+
+    counterfactual(graph: CausalGraph, _avar: number, _hvar: number, query_var: number): CounterfactualResult {
+        const p = graph.predict(query_var, []);
+        return {
+            actual_prob: p,
+            hypothetical_prob: p,
+            would_have_been_better: false,
+            delta: 0
+        };
+    }
+}
+
 class MockLiquidBrain implements LiquidBrain {
     private state: Float32Array;
 
@@ -670,6 +734,32 @@ class WasmTraumaRegistryProxy implements TraumaRegistry {
 }
 
 /**
+ * WasmIntervenableProxy — wraps raw WASM Intervenable
+ * Needed because Intervenable expects raw WASM CausalGraph, not WasmCausalGraphProxy.
+ */
+class WasmIntervenableProxy implements Intervenable {
+    constructor(private readonly raw: any) { }
+
+    do_intervention(graph: CausalGraph, intervention_var: number, intervention_value: number, query_var: number): number {
+        // Unwrap proxy to get raw WASM graph
+        const rawGraph = (graph as any)['raw'];
+        if (!rawGraph) {
+            console.warn('WasmIntervenableProxy: graph is not a WasmCausalGraphProxy, using fallback mock logic');
+            return 0; // or mock behavior
+        }
+        return this.raw.do_intervention(rawGraph, intervention_var, intervention_value, query_var);
+    }
+
+    counterfactual(graph: CausalGraph, actual_var: number, hypothetical_var: number, query_var: number): CounterfactualResult {
+        const rawGraph = (graph as any)['raw'];
+        if (!rawGraph) {
+            return { actual_prob: 0, hypothetical_prob: 0, would_have_been_better: false, delta: 0 };
+        }
+        return this.raw.counterfactual(rawGraph, actual_var, hypothetical_var, query_var);
+    }
+}
+
+/**
  * 🦀 WASM ADAPTER
 
  * Bridges the gap between TypeScript (Brain) and Rust (Heart).
@@ -711,11 +801,13 @@ export class WasmAdapter {
                 // When running from src: ../../core-rust/pkg
                 // When running from dist: ../pkg (if copied) or ../../core-rust/pkg (workspace)
 
-                // We search for the JS wrapper first
                 const candidates = [
+                    // Built to src/wasm (Current preferred)
+                    path.resolve(__dirname, './wasm/core_rust.js'),
                     // Dist/Prod layout
                     path.resolve(__dirname, '../pkg/core_rust.js'),
                     // Monorepo Source layout (from src/eidolon or src root)
+                    path.resolve(__dirname, '../core-rust/pkg/core_rust.js'),
                     path.resolve(__dirname, '../../core-rust/pkg/core_rust.js'),
                     path.resolve(__dirname, '../../../core-rust/pkg/core_rust.js'), // If deeply nested
                     // Absolute fallback (rare but possible in Docker)
@@ -799,6 +891,47 @@ export class WasmAdapter {
         }
         return new MockValueInvariant(maxDrawdownPerBlock, maxPositionSize, circuitBreakerThreshold);
     }
+
+    public createConversationConfig(preset: 'peer' | 'advisory' | 'discovery' | 'custom', custom?: ConversationDomainConfig): ConversationDomainConfig {
+        const Module = this.coreModule?.ConversationDomainConfig;
+        if (Module) {
+            if (preset === 'peer') return Module.peer();
+            if (preset === 'advisory') return Module.advisory();
+            if (preset === 'discovery') return Module.discovery();
+            if (preset === 'custom' && custom) {
+                return new Module(
+                    custom.intrusiveness_threshold,
+                    custom.trust_decay_rate,
+                    custom.trauma_severity_scale,
+                    custom.dagma_trigger_episodes,
+                    custom.thermo_dt
+                );
+            }
+        }
+        // Fallback
+        if (preset === 'peer') return MockConversationConfig.peer();
+        if (preset === 'advisory') return MockConversationConfig.advisory();
+        if (preset === 'discovery') return MockConversationConfig.discovery();
+        return custom ? new MockConversationConfig(
+            custom.intrusiveness_threshold,
+            custom.trust_decay_rate,
+            custom.trauma_severity_scale,
+            custom.dagma_trigger_episodes,
+            custom.thermo_dt
+        ) : MockConversationConfig.peer();
+    }
+
+    public createIntervenable(): Intervenable {
+        const Ctor = this.coreModule?.Intervenable;
+        if (Ctor) {
+            return new WasmIntervenableProxy(new Ctor());
+        }
+        return new MockIntervenable();
+    }
+
+    // Legacy getters
+    public get isFallbackMode(): boolean { return this.fallbackMode; }
+    public get core(): WasmCoreModule | null { return this.coreModule; }
 
     /**
      * Create a new AntiRug instance (Rust)

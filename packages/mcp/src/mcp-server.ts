@@ -2,16 +2,12 @@
 
 
 import {
-    ContextCompressor,
-    ContextRouter,
     ConversationTransparency,
     Logger,
     MemoryDecayManager,
     MemoryGraph,
     MemoryRouter,
-    ReasoningChain,
     SQLiteLearningStore,
-    SwarmOrchestrator,
     ToolGenerator,
     ToolPerformanceTracker,
     createWorldState,
@@ -32,7 +28,7 @@ import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { opBNB } from 'viem/chains';
 
-import { EidolonGuard, ClawOracle, DeepSeekOracle, TraumaRegistry } from "@clawkit/soul";
+import { EidolonGuard, ClawOracle, DeepSeekOracle, TraumaRegistry, CognitiveArbiter, ReasoningChain, SwarmOrchestrator, ContextCompressor, ContextRouter } from "@clawkit/soul";
 import { McpToolRegistry } from './tools/McpToolRegistry';
 import { MCP_COMPATIBILITY_CONTRACT } from './contracts/mcpCompatibilityContract';
 import { normalizeCallToolRequest } from './tools/callToolCompat';
@@ -60,6 +56,7 @@ class EidolonServer {
     private kit: ClawKit;
     private defiKit: DeFiClawKit;
     private guard: EidolonGuard;       // 🛡️ The Exocortex Defender
+    private arbiter!: CognitiveArbiter; // 🧠 The Cognitive OODA Loop
     private toolRegistry!: McpToolRegistry; // 🔌 Dynamic Tool Dispatcher
     private readonly featureFlags = {
         cognitiveToolsEnabled: this.parseBooleanEnv('COGNITIVE_TOOLS_ENABLED', true),
@@ -73,6 +70,8 @@ class EidolonServer {
         rollbackErrorRate: this.parseNumberEnv('COGNITIVE_AUTO_ROLLBACK_ERROR_RATE', 0.35),
         rollbackP95Ms: this.parseNumberEnv('COGNITIVE_AUTO_ROLLBACK_P95_MS', 3000),
         rollbackMinCalls: this.parseNumberEnv('COGNITIVE_AUTO_ROLLBACK_MIN_CALLS', 20),
+        shadowModeEnabled: this.parseBooleanEnv('COGNITIVE_SHADOW_MODE_ENABLED', false),
+        shadowSamplePercent: this.parseNumberEnv('COGNITIVE_SHADOW_SAMPLE_PERCENT', 100),
         generatedToolMax: this.parseNumberEnv('TOOL_GEN_MAX_DYNAMIC_TOOLS', 32),
     };
     private readonly cognitiveStore = new SQLiteLearningStore();
@@ -164,6 +163,10 @@ class EidolonServer {
 
             // 🛡️ INITIALIZE GUARD
             this.guard = new EidolonGuard(this.kit);
+
+            // 🧠 INITIALIZE ARBITER
+            this.arbiter = new CognitiveArbiter(this.embeddingOracle, this.guard);
+
             // We await init() in run() or let it lazy load, but best to init here if async implies it.
             // Guard.init() is async, so we'll call it in run().
 
@@ -228,6 +231,8 @@ class EidolonServer {
             rollbackErrorRate: this.rolloutConfig.rollbackErrorRate,
             rollbackP95Ms: this.rolloutConfig.rollbackP95Ms,
             rollbackMinCalls: this.rolloutConfig.rollbackMinCalls,
+            shadowModeEnabled: this.rolloutConfig.shadowModeEnabled,
+            shadowSamplePercent: this.rolloutConfig.shadowSamplePercent,
         }).registerAll([
             new OracleSenseTool(callDefi),
             new DefiQuoteTool(callDefi),
@@ -263,12 +268,14 @@ class EidolonServer {
                 toolGenerator: this.toolGenerator,
                 toolPerformance: this.toolPerformance,
                 oracleGenerator: this.embeddingOracle,
+                embeddingOracle: this.embeddingOracle,
                 generatedToolMax: this.rolloutConfig.generatedToolMax,
                 listTools: () => registry.listToolNames(),
                 recommendTools: (task, available) => registry.recommend(task, available),
                 registerDynamicTool: (tool) => {
                     registry.register(tool, true);
                 },
+                arbiter: this.arbiter,
             });
             registry.registerAll(cognitiveTools);
         }

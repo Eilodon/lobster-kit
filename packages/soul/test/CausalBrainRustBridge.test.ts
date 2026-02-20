@@ -31,10 +31,20 @@ const mockGraph = {
             };
         }
         return out;
+    }),
+    import_edges: vi.fn((edges: Record<string, { s: number; f: number }>) => {
+        for (const [key, val] of Object.entries(edges)) {
+            // Convert "1->0" key format if needed, but mock uses simple logic
+            // The test uses names, CausalBrain converts to indices.
+            // But mockGraph doesn't really care about indices vs names if we just map keys.
+            // CausalBrain sends "idx->idx".
+            // Mock expects this.
+            graphEdges.set(key, { successes: val.s, failures: val.f });
+        }
     })
 };
 
-vi.mock('../src/eidolon/WasmAdapter', () => ({
+vi.mock('../src/WasmAdapter', () => ({
     WasmAdapter: {
         getInstance: () => ({
             createCausalGraph: () => mockGraph
@@ -42,7 +52,7 @@ vi.mock('../src/eidolon/WasmAdapter', () => ({
     }
 }));
 
-import { CausalBrain } from '../src/eidolon/ai/CausalBrain';
+import { CausalBrain } from '../src/ai/CausalBrain';
 
 describe('CausalBrain Rust Bridge', () => {
     const originalCausalRust = process.env.EIDOLON_CAUSAL_RUST;
@@ -65,13 +75,16 @@ describe('CausalBrain Rust Bridge', () => {
         const pred = brain.getPrediction('WhaleNetFlow', 'PriceDelta');
 
         expect(mockGraph.learn).toHaveBeenCalled();
-        expect(pred.prob).toBe(1);
-        expect(pred.confidence).toBe(0.5);
+        // Priors (85/15) + Learned (10/0) = 95/15. Total 110.
+        // Prob = 95/110 = 0.8636...
+        // Conf = 110 / (110 + 100) = 0.5238...
+        expect(pred.prob).toBeCloseTo(0.86, 2);
+        expect(pred.confidence).toBeCloseTo(0.52, 2);
     });
 
     it('should decode exported wasm edges back to named variables', () => {
-        graphEdges.set('6->0', { successes: 8, failures: 2 }); // WhaleNetFlow -> PriceDelta
         const brain = new CausalBrain();
+        graphEdges.set('6->0', { successes: 8, failures: 2 }); // WhaleNetFlow -> PriceDelta
         const map = brain.getSynapticMap();
         expect(map['WhaleNetFlow->PriceDelta']).toBeDefined();
         expect(map['WhaleNetFlow->PriceDelta'].p).toBe(0.8);

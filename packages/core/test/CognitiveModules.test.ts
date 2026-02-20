@@ -1,18 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
-    ContextCompressor,
     ConversationTransparency,
     MemoryDecayManager,
-    ReasoningChain,
-    SwarmOrchestrator,
     ToolGenerator,
     ToolPerformanceTracker,
     createWorldState,
-    type IOracle,
+    type IOracle as CoreOracle,
 } from '../src';
+import {
+    ContextCompressor,
+    ReasoningChain,
+    SwarmOrchestrator,
+    type IOracle as SoulOracle,
+} from '@clawkit/soul';
 
 describe('Core Cognitive Modules', () => {
-    const oracle: IOracle = {
+    const oracle: SoulOracle = {
         async analyze() {
             return {
                 weights: {
@@ -86,7 +89,7 @@ describe('Core Cognitive Modules', () => {
     });
 
     it('uses oracle-backed critique for fast mode when available', async () => {
-        const oracleBacked: IOracle = {
+        const oracleBacked: SoulOracle = {
             ...oracle,
             async generate(prompt, options) {
                 if (options?.json && prompt.includes('strict response critic')) {
@@ -209,7 +212,7 @@ describe('Core Cognitive Modules', () => {
     });
 
     it('generates richer tool specs from oracle output when available', async () => {
-        const oracleBacked: IOracle = {
+        const oracleBacked: CoreOracle = {
             ...oracle,
             async generate(prompt, options) {
                 if (options?.json && prompt.includes('Design a read-only MCP tool spec')) {
@@ -243,7 +246,7 @@ describe('Core Cognitive Modules', () => {
     });
 
     it('delegates through oracle-backed orchestrator', async () => {
-        const oracleBacked: IOracle = {
+        const oracleBacked: SoulOracle = {
             ...oracle,
             async generate(prompt, options) {
                 if (options?.json && prompt.includes('autonomous sub-agent')) {

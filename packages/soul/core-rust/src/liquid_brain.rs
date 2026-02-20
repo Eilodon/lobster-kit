@@ -15,6 +15,8 @@ pub struct LiquidBrain {
     weights_hh: Vec<f32>,
     bias: Vec<f32>,
     state: Vec<f32>,
+    // Pre-allocated buffer used by forward() to avoid per-step heap allocations.
+    next_state_buffer: Vec<f32>,
     input_size: usize,
     hidden_size: usize,
     time_constant: f32,
@@ -24,18 +26,20 @@ pub struct LiquidBrain {
 impl LiquidBrain {
     #[wasm_bindgen(constructor)]
     pub fn new(input_size: usize, hidden_size: usize) -> LiquidBrain {
-        // Initialize random weights (Xavier-like)
+        // Initialize with deterministic small weights.
         let size = input_size * hidden_size;
         let weights_ih = vec![0.01; size]; 
         let weights_hh = vec![0.01; hidden_size * hidden_size];
         let bias = vec![0.0; hidden_size];
         let state = vec![0.0; hidden_size];
+        let next_state_buffer = vec![0.0; hidden_size];
 
         LiquidBrain {
             weights_ih,
             weights_hh,
             bias,
             state,
+            next_state_buffer,
             input_size,
             hidden_size,
             time_constant: 1.0, 
@@ -44,13 +48,11 @@ impl LiquidBrain {
 
     pub fn forward(&mut self, input: Vec<f32>) -> Vec<f32> {
         if input.len() != self.input_size {
-            return vec![]; // Error handling simplified
+            return Vec::new();
         }
 
-        let mut next_state = vec![0.0; self.hidden_size];
-
         // x_t = x_{t-1} + dt * (-(x_{t-1} - tanh(W*u + U*x_{t-1} + b)) / tau)
-        
+        // Write into the pre-allocated buffer, then swap buffers in O(1).
         for h in 0..self.hidden_size {
             let mut pre_act = self.bias[h];
             
@@ -71,15 +73,16 @@ impl LiquidBrain {
             // Continuous adaptation: Time constant could also be dynamic!
             // For now, fixed.
             
-            next_state[h] = current + delta; // dt=1.0 derived
+            self.next_state_buffer[h] = current + delta; // dt=1.0 derived
         }
 
-        self.state = next_state.clone();
-        next_state
+        std::mem::swap(&mut self.state, &mut self.next_state_buffer);
+        self.state.clone()
     }
     
     pub fn reset(&mut self) {
-        self.state = vec![0.0; self.hidden_size];
+        self.state.fill(0.0);
+        self.next_state_buffer.fill(0.0);
     }
     
     // Plasticity: Hebbian-like update
@@ -100,7 +103,7 @@ impl LiquidBrain {
                 self.weights_hh[idx] += change;
                 
                 // Clamp to avoid explosion
-                self.weights_hh[idx] = self.weights_hh[idx].max(-1.0).min(1.0);
+                self.weights_hh[idx] = self.weights_hh[idx].clamp(-1.0, 1.0);
             }
         }
     }

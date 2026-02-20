@@ -6,7 +6,7 @@ import type {
     ConsensusResult,
     Resolution,
     TaskResult
-} from '../types/CognitiveTypes';
+} from '../eidolon/CognitiveTypes';
 
 type OracleGenerator = Pick<IOracle, 'generate'>;
 

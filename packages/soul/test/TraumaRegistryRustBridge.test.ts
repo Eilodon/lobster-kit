@@ -24,7 +24,7 @@ const rustRegistry = {
     })
 };
 
-vi.mock('../src/eidolon/WasmAdapter', () => ({
+vi.mock('../src/WasmAdapter', () => ({
     WasmAdapter: {
         getInstance: () => ({
             createTraumaRegistry: () => rustRegistry

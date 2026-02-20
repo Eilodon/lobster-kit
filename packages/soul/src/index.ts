@@ -43,4 +43,10 @@ export {
     type EidolonEvent,
     type TradeExecutedEvent
 } from './events/EidolonBus';
-export { KpiTracker, type KpiSnapshot } from './metrics/KpiTracker';
+// Cognitive Core (Phase 1 & 2)
+export { CognitiveArbiter } from './eidolon/CognitiveArbiter';
+export * from './eidolon/CognitiveTypes';
+export { ConversationSimulator } from './simulation/ConversationSimulator';
+export { ReasoningChain, CriticModule, TreeOfThoughts, VerifierLoop } from './eidolon/ReasoningChain';
+export { ContextCompressor, ContextRouter } from './eidolon/ContextCompressor';
+export { SwarmOrchestrator } from './swarm/SwarmOrchestrator';

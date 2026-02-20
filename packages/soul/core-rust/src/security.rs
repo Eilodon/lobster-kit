@@ -1,6 +1,34 @@
 use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::ptr::write_volatile;
+
+/// Ephemeral in-memory secret that is zeroed on drop.
+///
+/// This is intended for short-lived sensitive material (e.g. API token bytes)
+/// inside Rust memory. It does not protect data copied outside this buffer.
+pub struct VolatileSecret {
+    data: Vec<u8>,
+}
+
+impl VolatileSecret {
+    pub fn new(secret: &[u8]) -> Self {
+        Self { data: secret.to_vec() }
+    }
+
+    pub fn expose(&self) -> &[u8] {
+        &self.data
+    }
+}
+
+impl Drop for VolatileSecret {
+    fn drop(&mut self) {
+        for byte in self.data.iter_mut() {
+            // Volatile write prevents the compiler from removing zeroization.
+            unsafe { write_volatile(byte, 0) };
+        }
+    }
+}
 
 // ==========================================
 // 🛡️ VALUE INVARIANT (The Citadel)

@@ -95,7 +95,7 @@ export class CausalBrain {
 
     constructor() {
         this.loadPriors();
-        this.initializeWasmGraph();
+        this.reinitWasmGraph();
     }
 
     private parseBooleanFlag(value: string | undefined, defaultValue: boolean): boolean {

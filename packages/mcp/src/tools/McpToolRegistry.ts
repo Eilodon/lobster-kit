@@ -19,6 +19,7 @@
 
 import { IMcpTool, McpToolDefinition, McpToolResult } from './IMcpTool';
 import { ToolPerformanceTracker, SQLiteLearningStore } from '@clawkit/core';
+import { validateArgsAgainstSchema } from './toolInputValidation';
 
 export interface RolloutOptions {
     cognitivePrefix?: string;
@@ -26,6 +27,8 @@ export interface RolloutOptions {
     rollbackErrorRate?: number;
     rollbackP95Ms?: number;
     rollbackMinCalls?: number;
+    shadowModeEnabled?: boolean;
+    shadowSamplePercent?: number;
 }
 
 type RolloutState = {
@@ -40,6 +43,8 @@ const DEFAULT_ROLLOUT: Required<RolloutOptions> = {
     rollbackErrorRate: 0.35,
     rollbackP95Ms: 3000,
     rollbackMinCalls: 20,
+    shadowModeEnabled: false,
+    shadowSamplePercent: 100,
 };
 
 function clampPercent(v: number | undefined, fallback: number): number {
@@ -69,6 +74,8 @@ export class McpToolRegistry {
             rollbackErrorRate: typeof rollout?.rollbackErrorRate === 'number' ? Math.max(0, Math.min(1, rollout.rollbackErrorRate)) : DEFAULT_ROLLOUT.rollbackErrorRate,
             rollbackP95Ms: typeof rollout?.rollbackP95Ms === 'number' ? Math.max(1, rollout.rollbackP95Ms) : DEFAULT_ROLLOUT.rollbackP95Ms,
             rollbackMinCalls: typeof rollout?.rollbackMinCalls === 'number' ? Math.max(1, Math.floor(rollout.rollbackMinCalls)) : DEFAULT_ROLLOUT.rollbackMinCalls,
+            shadowModeEnabled: typeof rollout?.shadowModeEnabled === 'boolean' ? rollout.shadowModeEnabled : DEFAULT_ROLLOUT.shadowModeEnabled,
+            shadowSamplePercent: clampPercent(rollout?.shadowSamplePercent, DEFAULT_ROLLOUT.shadowSamplePercent),
         };
     }
 
@@ -99,30 +106,56 @@ export class McpToolRegistry {
      * or execution fails, so the MCP protocol stays clean.
      */
     async dispatch(toolName: string, args: Record<string, unknown>): Promise<McpToolResult> {
-        if (this.isCognitiveTool(toolName) && this.rolloutState.disabled) {
-            await this.telemetry.record(toolName, false, 0, { fallbackUsed: true });
-            return {
-                content: [{ type: 'text', text: `Cognitive rollout disabled: ${this.rolloutState.reason ?? 'rollback triggered'}` }],
-                isError: true,
-            };
-        }
-
-        if (this.isCognitiveTool(toolName) && !this.isCanaryAllowed(toolName, args)) {
-            await this.telemetry.record(toolName, false, 0, { fallbackUsed: true });
-            return {
-                content: [{ type: 'text', text: `Tool "${toolName}" currently gated by canary rollout (${this.rollout.canaryPercent}%).` }],
-                isError: true,
-            };
-        }
-
         const tool = this.tools.get(toolName);
         if (!tool) {
             await this.telemetry.record(toolName, false, 0, { fallbackUsed: true });
             return {
                 content: [{ type: 'text', text: `Unknown tool: "${toolName}"` }],
                 isError: true,
+                structuredContent: { code: 'tool_not_found', tool: toolName },
             };
         }
+
+        if (this.isCognitiveTool(toolName) && this.rolloutState.disabled) {
+            await this.telemetry.record(toolName, false, 0, { fallbackUsed: true });
+            return {
+                content: [{ type: 'text', text: `Cognitive rollout disabled: ${this.rolloutState.reason ?? 'rollback triggered'}` }],
+                isError: true,
+                structuredContent: { code: 'cognitive_rollout_disabled', reason: this.rolloutState.reason ?? null },
+            };
+        }
+
+        if (this.isCognitiveTool(toolName) && !this.isCanaryAllowed(toolName, args)) {
+            if (this.shouldRunShadow(toolName, args)) {
+                // Fire-and-forget shadow execution for non-canary traffic.
+                void this.dispatchShadow(toolName, tool, args);
+            }
+            await this.telemetry.record(toolName, false, 0, { fallbackUsed: true });
+            return {
+                content: [{ type: 'text', text: `Tool "${toolName}" currently gated by canary rollout (${this.rollout.canaryPercent}%).` }],
+                isError: true,
+                structuredContent: {
+                    code: 'canary_rollout_gated',
+                    canary_percent: this.rollout.canaryPercent,
+                    shadow_mode_enabled: this.rollout.shadowModeEnabled,
+                },
+            };
+        }
+
+        const validation = validateArgsAgainstSchema(tool.definition.inputSchema, args);
+        if (!validation.ok) {
+            await this.telemetry.record(toolName, false, 0, { fallbackUsed: true });
+            return {
+                content: [{ type: 'text', text: `Invalid args for "${toolName}".` }],
+                isError: true,
+                structuredContent: {
+                    code: 'invalid_tool_arguments',
+                    tool: toolName,
+                    errors: validation.errors,
+                },
+            };
+        }
+
         const started = Date.now();
         try {
             const result = await tool.execute(args);
@@ -138,6 +171,11 @@ export class McpToolRegistry {
             return {
                 content: [{ type: 'text', text: `Error: ${message}` }],
                 isError: true,
+                structuredContent: {
+                    code: 'tool_execution_error',
+                    tool: toolName,
+                    message,
+                },
             };
         }
     }
@@ -223,5 +261,45 @@ export class McpToolRegistry {
                 reason: `auto-rollback on ${toolName}: errorRate=${errorRate.toFixed(3)} p95=${Math.round(p95)}ms`,
             };
         }
+    }
+
+    private shouldRunShadow(toolName: string, args: Record<string, unknown>): boolean {
+        if (!this.rollout.shadowModeEnabled) return false;
+        if (this.rollout.shadowSamplePercent <= 0) return false;
+        if (this.rollout.shadowSamplePercent >= 100) return true;
+        const seed = `${this.canarySeed(toolName, args)}:shadow`;
+        return this.hash(seed) % 100 < this.rollout.shadowSamplePercent;
+    }
+
+    private async dispatchShadow(toolName: string, tool: IMcpTool, args: Record<string, unknown>): Promise<void> {
+        const shadowToolName = `shadow:${toolName}`;
+        const started = Date.now();
+        try {
+            if (!this.isShadowSafe(tool)) {
+                await this.telemetry.record(shadowToolName, true, Date.now() - started, {
+                    fallbackUsed: true,
+                });
+                return;
+            }
+
+            const validation = validateArgsAgainstSchema(tool.definition.inputSchema, args);
+            if (!validation.ok) {
+                await this.telemetry.record(shadowToolName, false, Date.now() - started, { fallbackUsed: true });
+                return;
+            }
+
+            const result = await tool.execute({ ...args, __shadow: true });
+            await this.telemetry.record(shadowToolName, !result.isError, Date.now() - started, {
+                fallbackUsed: Boolean(result.isError),
+            });
+        } catch {
+            await this.telemetry.record(shadowToolName, false, Date.now() - started, { fallbackUsed: true });
+        }
+    }
+
+    private isShadowSafe(tool: IMcpTool): boolean {
+        const annotations = tool.definition.annotations;
+        if (!annotations) return false;
+        return annotations.readOnlyHint === true && annotations.destructiveHint !== true;
     }
 }

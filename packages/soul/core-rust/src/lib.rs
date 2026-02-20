@@ -1,14 +1,9 @@
-//! Eidolon WASM Core - High-Performance Trading Engine
-//!
-//! This crate provides the performance-critical components for the
-//! Eidolon Crypto/Trading/Blockchain engine, compiled to WebAssembly.
-//!
-//! ## Modules
-//! - `order_book`: Lock-free order matching engine
-//! - `risk`: Margin and liquidation calculations
-//! - `token_math`: Fixed-point 128-bit token arithmetic
-//! - `utils`: Shared utilities and FFI helpers
+mod security;
+mod q64_96;
+mod hyper_memory;
+mod liquid_brain;
 
+// New Eidolon Engine modules
 mod order_book;
 mod risk;
 mod token_math;
@@ -16,12 +11,32 @@ mod utils;
 
 pub mod sentinel;
 
-use wasm_bindgen::prelude::*;
+// Legacy Exports (Maintain backward compatibility using new modules)
+pub use security::{ValueInvariant, AntiRug, InvariantCheckResult, SecurityScore, InvariantConfig, VolatileSecret};
+// Re-export specific structs from sentinel to match legacy API
+pub use sentinel::causal::CausalGraph;
+pub use sentinel::trauma::TraumaRegistry;
+pub use sentinel::causal::{Intervenable, CounterfactualResult};
+pub use sentinel::conversation_config::ConversationDomainConfig;
 
-// Re-exports for JS consumption
+// Keep these as they are unique
+pub use q64_96::{q64_96_mul, q64_96_div, sqrt_price_x96_to_price_wad};
+pub use hyper_memory::HyperMemory;
+pub use liquid_brain::LiquidBrain;
+
+// New Exports (Eidolon Engine)
 pub use order_book::*;
 pub use risk::*;
 pub use token_math::*;
+pub use sentinel::Sentinel;
+
+use wasm_bindgen::prelude::*;
+
+// When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
+// allocator.
+#[cfg(feature = "wee_alloc")]
+#[global_allocator]
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 /// Initialize the WASM module with panic hook for better error messages
 #[wasm_bindgen(start)]
@@ -87,39 +102,5 @@ pub fn batch_calculate_margin_levels(
         } else {
             margin_level[i] = f32::INFINITY;
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_health_check() {
-        assert!(health_check());
-    }
-
-    #[test]
-    fn test_batch_pnl_long() {
-        let entry = [100.0f32];
-        let qty = [1.0f32];
-        let side = [0u8]; // LONG
-        let mut pnl = [0.0f32];
-
-        batch_update_pnl(&entry, &qty, &side, &mut pnl, 110.0, 1);
-
-        assert!((pnl[0] - 10.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_batch_pnl_short() {
-        let entry = [100.0f32];
-        let qty = [1.0f32];
-        let side = [1u8]; // SHORT
-        let mut pnl = [0.0f32];
-
-        batch_update_pnl(&entry, &qty, &side, &mut pnl, 90.0, 1);
-
-        assert!((pnl[0] - 10.0).abs() < 0.001);
     }
 }

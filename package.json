@@ -7,6 +7,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "pnpm sync:integration-mirrors && turbo run test",
+    "test:integration": "vitest run packages/soul/test/TraumaRegistryRustBridge.test.ts packages/soul/test/CausalBrainRustBridge.test.ts packages/soul/test/EidolonGuardRust.test.ts",
     "test:all": "pnpm sync:integration-mirrors && turbo run test",
     "deploy": "hardhat run scripts/deploy.ts --network opbnb",
     "lint": "turbo run lint",
