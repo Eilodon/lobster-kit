@@ -1,0 +1,40 @@
+{
+  "version": "2026-02-20",
+  "stable_window_days": 7,
+  "phase_gates": {
+    "A": {
+      "required_contract_pass_rate": 1.0,
+      "required_feature_flags_e2e": true,
+      "required_canary_e2e": true
+    },
+    "B": {
+      "min_memory_count": 100000,
+      "max_memory_query_p95_ms": 220,
+      "min_recall_at_k": 0.8,
+      "max_data_loss_ratio": 0.0
+    },
+    "C": {
+      "max_orchestration_p95_ms": 1400,
+      "max_node_event_loop_lag_p95_ms": 40,
+      "min_throughput_gain_ratio": 1.2
+    },
+    "D": {
+      "min_mcp_token_reduction_ratio": 0.3,
+      "min_factual_retention": 0.9
+    },
+    "E": {
+      "security_suite_pass_rate": 1.0,
+      "required_audit_immutable": true
+    },
+    "F": {
+      "required_primary_runtime": "rust",
+      "required_prod_stable_days": 30,
+      "required_rollback_drill_passed": true,
+      "max_eidolon_usage_ratio": 0.15
+    }
+  },
+  "global": {
+    "max_error_rate": 0.05,
+    "max_rollback_count": 1
+  }
+}

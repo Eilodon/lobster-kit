@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package clawkit.runtime.v1.context;
+
+import "common.proto";
+
+message Message {
+  string role = 1;
+  string content = 2;
+  int64 timestamp_ms = 3;
+}
+
+message CompressionPolicy {
+  int32 target_tokens = 1;
+  int32 preserve_recent = 2;
+  bool semantic_chunking = 3;
+  bool fastcdc_dedupe = 4;
+  bool importance_rerank = 5;
+}
+
+message CompressContextRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  repeated Message messages = 2;
+  CompressionPolicy policy = 3;
+  string model_profile = 4;
+}
+
+message SummaryChunk {
+  string topic = 1;
+  string summary = 2;
+  double importance = 3;
+}
+
+message CompressContextResponse {
+  repeated Message verbatim = 1;
+  repeated SummaryChunk summaries = 2;
+  repeated string key_facts = 3;
+  int32 estimated_tokens = 4;
+  int64 latency_ms = 5;
+  clawkit.runtime.v1.ErrorEnvelope error = 6;
+}
+
+service ContextService {
+  rpc CompressContext(CompressContextRequest) returns (CompressContextResponse);
+}

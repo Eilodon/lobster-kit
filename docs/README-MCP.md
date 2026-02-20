@@ -11,6 +11,18 @@ npm run mcp
 ```
 *Note: It runs on `stdio`, so you won't see output unless you pipe it to an MCP client.*
 
+Run rollout preflight before staging/prod:
+```bash
+pnpm mcp:preflight -- --profile staging
+pnpm mcp:preflight -- --profile production
+```
+
+Run phase gate checks against metrics snapshots:
+```bash
+pnpm mcp:phase-gate -- --phase A --metrics path/to/metrics.json
+pnpm mcp:phase-gate -- --phase B --metrics path/to/metrics.json
+```
+
 ### 2. Configure in Antigravity / Claude Desktop
 Add this to your `mcp-config.json` (or equivalent settings):
 
@@ -37,6 +49,7 @@ Add this to your `mcp-config.json` (or equivalent settings):
 | `eidolon_oracle_sense` | **Omniscient Oracle:** Get real-time price, gas, and liquidity depth (THIN/DEEP). |
 | `eidolon_defi_quote` | **Hyper-Routing:** Get the best swap quote across all V3 fee tiers. |
 | `eidolon_security_scan` | **Anti-Rug:** Scan a contract for honeypots, ownership issues, and risks. |
+| `...` | Legacy `eidolon_*` and Cognitive `clawkit_*` run in dual-stack mode. |
 
 ## 📦 Resources
 
@@ -44,6 +57,27 @@ Add this to your `mcp-config.json` (or equivalent settings):
 | :--- | :--- |
 | `eidolon://bioreactor` | Real-time biological state (Glucose / Dopamine / Cortisol). |
 | `eidolon://logs` | Live "Thought Stream" from the agent's brain. |
+| `eidolon://telemetry` | Tool-level call/error/latency/fallback telemetry + rollout state. |
+| `eidolon://generated-tool-audit` | Accepted/rejected generated-tool audit log. |
+| `eidolon://contracts` | Runtime/MCP compatibility contract manifest (dual-stack + rollout). |
+
+## 🎛 Rollout Profiles
+
+Environment templates:
+- `packages/mcp/env/mcp.development.env.example`
+- `packages/mcp/env/mcp.staging.env.example`
+- `packages/mcp/env/mcp.production.env.example`
+
+Key rollout flags:
+- `COGNITIVE_CANARY_PERCENT`
+- `COGNITIVE_AUTO_ROLLBACK_ERROR_RATE`
+- `COGNITIVE_AUTO_ROLLBACK_P95_MS`
+- `COGNITIVE_AUTO_ROLLBACK_MIN_CALLS`
+- `TOOL_GEN_EXPERIMENTAL_ENABLED`
+- `TOOL_GEN_MAX_DYNAMIC_TOOLS`
+
+Detailed rollout runbook: `docs/MCP_ROLLOUT.md`
+Runtime contract freeze artifacts: `docs/runtime-migration/contracts/runtime-v1/`
 
 ## 🧠 System Architecture
 

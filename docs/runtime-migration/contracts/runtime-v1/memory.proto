@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package clawkit.runtime.v1.memory;
+
+import "common.proto";
+
+message MemoryPoint {
+  string id = 1;
+  repeated float embedding = 2;
+  string content = 3;
+  double importance = 4;
+  string source = 5;
+  int64 created_at_ms = 6;
+  int64 last_accessed_ms = 7;
+  map<string, string> metadata = 8;
+}
+
+message UpsertMemoriesRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  string namespace = 2;
+  repeated MemoryPoint points = 3;
+}
+
+message UpsertMemoriesResponse {
+  int32 upserted = 1;
+  clawkit.runtime.v1.ErrorEnvelope error = 2;
+}
+
+message QueryMemoriesRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  string namespace = 2;
+  repeated float query_embedding = 3;
+  string query_text = 4;
+  int32 top_k = 5;
+  int32 min_importance_bp = 6;
+}
+
+message MemoryHit {
+  string id = 1;
+  double score = 2;
+  string content = 3;
+  string source = 4;
+  map<string, string> metadata = 5;
+}
+
+message QueryMemoriesResponse {
+  repeated MemoryHit hits = 1;
+  double recall_at_k = 2;
+  int64 latency_ms = 3;
+  clawkit.runtime.v1.ErrorEnvelope error = 4;
+}
+
+message DeleteMemoriesRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  string namespace = 2;
+  repeated string ids = 3;
+}
+
+message DeleteMemoriesResponse {
+  int32 deleted = 1;
+  clawkit.runtime.v1.ErrorEnvelope error = 2;
+}
+
+service MemoryService {
+  rpc UpsertMemories(UpsertMemoriesRequest) returns (UpsertMemoriesResponse);
+  rpc QueryMemories(QueryMemoriesRequest) returns (QueryMemoriesResponse);
+  rpc DeleteMemories(DeleteMemoriesRequest) returns (DeleteMemoriesResponse);
+}

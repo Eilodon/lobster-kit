@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package clawkit.runtime.v1;
+
+message RequestMeta {
+  string request_id = 1;
+  string user_id = 2;
+  string session_id = 3;
+  int64 timestamp_ms = 4;
+  int32 deadline_ms = 5;
+  map<string, string> labels = 6;
+}
+
+message ErrorEnvelope {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  string details_json = 4;
+}
+
+message ServiceStatus {
+  string service = 1;
+  string version = 2;
+  bool healthy = 3;
+  repeated string checks = 4;
+}

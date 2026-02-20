@@ -13,8 +13,28 @@
 
 export interface McpToolInputSchema {
     type: 'object';
-    properties: Record<string, { type: string; description?: string }>;
+    properties: Record<string, { type: string; description?: string; [key: string]: unknown }>;
     required?: string[];
+    [key: string]: unknown;
+}
+
+export interface McpToolOutputSchema {
+    type: 'object';
+    properties: Record<string, { type: string; description?: string; [key: string]: unknown }>;
+    required?: string[];
+    [key: string]: unknown;
+}
+
+export interface McpToolAnnotations {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+}
+
+export interface McpToolExecution {
+    taskSupport?: 'optional' | 'required' | 'forbidden';
 }
 
 /** Describes a tool to MCP clients (what to show in ListTools). */
@@ -22,11 +42,16 @@ export interface McpToolDefinition {
     name: string;
     description: string;
     inputSchema: McpToolInputSchema;
+    outputSchema?: McpToolOutputSchema;
+    annotations?: McpToolAnnotations;
+    execution?: McpToolExecution;
+    title?: string;
 }
 
 /** The raw output returned to the MCP caller. */
 export interface McpToolResult {
     content: Array<{ type: 'text'; text: string }>;
+    structuredContent?: Record<string, unknown>;
     isError?: boolean;
 }
 

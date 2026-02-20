@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package clawkit.runtime.v1.toolgen;
+
+import "common.proto";
+
+message GenerateToolRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  string need = 2;
+  string world_state_json = 3;
+}
+
+message CapabilityPolicy {
+  repeated string whitelist = 1;
+  bool side_effects_denied_by_default = 2;
+  bool wasi_only = 3;
+}
+
+message ToolSpec {
+  string name = 1;
+  string description = 2;
+  string input_schema_json = 3;
+  repeated string capabilities = 4;
+  string handler_hint = 5;
+}
+
+message GenerateToolResponse {
+  bool accepted = 1;
+  ToolSpec spec = 2;
+  CapabilityPolicy policy = 3;
+  string audit_id = 4;
+  clawkit.runtime.v1.ErrorEnvelope error = 5;
+}
+
+message ValidateToolRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  ToolSpec spec = 2;
+}
+
+message ValidateToolResponse {
+  bool valid = 1;
+  repeated string violations = 2;
+  clawkit.runtime.v1.ErrorEnvelope error = 3;
+}
+
+service ToolgenService {
+  rpc GenerateTool(GenerateToolRequest) returns (GenerateToolResponse);
+  rpc ValidateTool(ValidateToolRequest) returns (ValidateToolResponse);
+}

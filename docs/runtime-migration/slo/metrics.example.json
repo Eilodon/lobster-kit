@@ -1,0 +1,12 @@
+{
+  "window_days": 7,
+  "phase": {
+    "required_contract_pass_rate": 1,
+    "required_feature_flags_e2e": true,
+    "required_canary_e2e": true
+  },
+  "global": {
+    "max_error_rate": 0.02,
+    "max_rollback_count": 0
+  }
+}

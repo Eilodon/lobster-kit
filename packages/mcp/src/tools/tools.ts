@@ -37,8 +37,9 @@ export class OracleSenseTool implements IMcpTool {
 
     async execute(args: Record<string, unknown>): Promise<McpToolResult> {
         const symbol = (args.symbol as string) || 'WBNB';
+        const quoteToken = (args.quoteToken as string) || 'USDT';
         const result = await this.callDefi<{ amountOutMin: string }>('sense_oracle', {
-            symbol, quoteToken: 'USDT', amount: '1', slippage: 1,
+            symbol, quoteToken, amount: '1', slippage: 1,
         });
         return {
             content: [{
@@ -169,8 +170,9 @@ export class ExecuteSwapTool implements IMcpTool {
 
         const safeResolve = (symbol: string) => {
             const addr = resolveTokenAddress(symbol);
-            if (addr === symbol && !addr.startsWith('0x')) {
-                throw new Error(`Unknown token symbol: ${symbol}`);
+            // Strict check: Must be a valid 0x address
+            if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+                throw new Error(`Unknown token symbol: ${symbol} (Resolved to: ${addr})`);
             }
             return addr;
         };
@@ -240,9 +242,8 @@ export class PanicTool implements IMcpTool {
         }
 
         Logger.warn('🚨 PANIC BUTTON TRIGGERED VIA MCP');
-        // Trigger emotional panic on the soul layer
-        (this.guard as unknown as { soul?: { inducePanic(reason: string): void } })
-            .soul?.inducePanic('User Manual Trigger');
+        // Trigger emotional panic via public API
+        (this.guard as unknown as { inducePanic: (reason: string) => void }).inducePanic('User Manual Trigger');
 
         const results = await this.callDefi<string[]>('dump_all_positions');
         return {

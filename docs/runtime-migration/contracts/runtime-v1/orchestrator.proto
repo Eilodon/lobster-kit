@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package clawkit.runtime.v1.orchestrator;
+
+import "common.proto";
+
+message Task {
+  string task_id = 1;
+  string role = 2;
+  string payload_json = 3;
+  int32 priority = 4;
+  int64 enqueue_ts_ms = 5;
+  int32 timeout_ms = 6;
+}
+
+message SubmitTaskRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  Task task = 2;
+}
+
+message SubmitTaskResponse {
+  string task_id = 1;
+  string state = 2;
+  clawkit.runtime.v1.ErrorEnvelope error = 3;
+}
+
+message CancelTaskRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  string task_id = 2;
+  string reason = 3;
+}
+
+message CancelTaskResponse {
+  bool cancelled = 1;
+  clawkit.runtime.v1.ErrorEnvelope error = 2;
+}
+
+message TaskResult {
+  string task_id = 1;
+  bool ok = 2;
+  string output_json = 3;
+  int64 latency_ms = 4;
+  bool timed_out = 5;
+  bool cancelled = 6;
+}
+
+message PollTaskRequest {
+  clawkit.runtime.v1.RequestMeta meta = 1;
+  string task_id = 2;
+}
+
+message PollTaskResponse {
+  string state = 1;
+  TaskResult result = 2;
+  clawkit.runtime.v1.ErrorEnvelope error = 3;
+}
+
+service OrchestratorService {
+  rpc SubmitTask(SubmitTaskRequest) returns (SubmitTaskResponse);
+  rpc PollTask(PollTaskRequest) returns (PollTaskResponse);
+  rpc CancelTask(CancelTaskRequest) returns (CancelTaskResponse);
+}

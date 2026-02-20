@@ -1,7 +1,21 @@
 #!/usr/bin/env node
 
 
-import { Logger } from "@clawkit/core";
+import {
+    ContextCompressor,
+    ContextRouter,
+    ConversationTransparency,
+    Logger,
+    MemoryDecayManager,
+    MemoryGraph,
+    MemoryRouter,
+    ReasoningChain,
+    SQLiteLearningStore,
+    SwarmOrchestrator,
+    ToolGenerator,
+    ToolPerformanceTracker,
+    createWorldState,
+} from "@clawkit/core";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -12,14 +26,16 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 // Import ClawKit Core Modules
-import { ClawKit, ClawKitConfig, resolveTokenAddress, OPBNB_CONFIG } from "@clawkit/toolkit";
+import { ClawKit, ClawKitConfig, OPBNB_CONFIG } from "@clawkit/toolkit";
 
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { opBNB } from 'viem/chains';
 
-import { EidolonGuard, ClawOracle } from "@clawkit/soul";
+import { EidolonGuard, ClawOracle, DeepSeekOracle, TraumaRegistry } from "@clawkit/soul";
 import { McpToolRegistry } from './tools/McpToolRegistry';
+import { MCP_COMPATIBILITY_CONTRACT } from './contracts/mcpCompatibilityContract';
+import { normalizeCallToolRequest } from './tools/callToolCompat';
 import {
     OracleSenseTool,
     DefiQuoteTool,
@@ -31,6 +47,7 @@ import {
     IntuitionTool,
     DreamTool,
 } from './tools/tools';
+import { createCognitiveTools } from './tools/cognitive-tools';
 import { ClawKit as DeFiClawKit, OpBnbDefiAdapter } from '@clawkit/defi-bnb';
 
 
@@ -44,6 +61,44 @@ class EidolonServer {
     private defiKit: DeFiClawKit;
     private guard: EidolonGuard;       // 🛡️ The Exocortex Defender
     private toolRegistry!: McpToolRegistry; // 🔌 Dynamic Tool Dispatcher
+    private readonly featureFlags = {
+        cognitiveToolsEnabled: this.parseBooleanEnv('COGNITIVE_TOOLS_ENABLED', true),
+        reasonChainEnabled: this.parseBooleanEnv('REASON_CHAIN_ENABLED', true),
+        contextCompressionEnabled: this.parseBooleanEnv('CONTEXT_COMPRESSION_ENABLED', true),
+        orchestratorEnabled: this.parseBooleanEnv('ORCHESTRATOR_ENABLED', false),
+        toolGeneratorExperimentalEnabled: this.parseBooleanEnv('TOOL_GEN_EXPERIMENTAL_ENABLED', false),
+    };
+    private readonly rolloutConfig = {
+        canaryPercent: this.parseNumberEnv('COGNITIVE_CANARY_PERCENT', 100),
+        rollbackErrorRate: this.parseNumberEnv('COGNITIVE_AUTO_ROLLBACK_ERROR_RATE', 0.35),
+        rollbackP95Ms: this.parseNumberEnv('COGNITIVE_AUTO_ROLLBACK_P95_MS', 3000),
+        rollbackMinCalls: this.parseNumberEnv('COGNITIVE_AUTO_ROLLBACK_MIN_CALLS', 20),
+        generatedToolMax: this.parseNumberEnv('TOOL_GEN_MAX_DYNAMIC_TOOLS', 32),
+    };
+    private readonly cognitiveStore = new SQLiteLearningStore();
+    private readonly traumaRegistry = new TraumaRegistry();
+    private readonly conversationTransparency = new ConversationTransparency();
+    private readonly contextCompressor = new ContextCompressor();
+    private readonly contextRouter = new ContextRouter();
+    private readonly embeddingOracle = new DeepSeekOracle({
+        apiKey: process.env.DEEPSEEK_API_KEY || '',
+        baseUrl: process.env.DEEPSEEK_BASE_URL,
+        model: process.env.DEEPSEEK_MODEL,
+        embeddingModel: process.env.CLAWKIT_EMBEDDING_MODEL,
+        embeddingEndpoint: process.env.CLAWKIT_EMBEDDING_ENDPOINT,
+    });
+    private readonly toolGenerator = new ToolGenerator(this.embeddingOracle);
+    private readonly orchestrator = new SwarmOrchestrator(this.embeddingOracle);
+    private readonly reasoningChain = new ReasoningChain(this.embeddingOracle);
+    private readonly memoryGraph = new MemoryGraph(this.cognitiveStore);
+    private readonly memoryDecay = new MemoryDecayManager(this.cognitiveStore);
+    private readonly memoryRouter = new MemoryRouter(
+        this.embeddingOracle,
+        this.memoryGraph,
+        async () => this.cognitiveStore.listMemoryEntries(),
+        async () => [{ id: 'causal_bootstrap', confidence: 0.55, note: 'No causal trace persisted yet.' }]
+    );
+    private toolPerformance!: ToolPerformanceTracker;
 
     constructor() {
         this.server = new Server(
@@ -61,7 +116,6 @@ class EidolonServer {
 
         // Initialize ClawKit (Read-Only Mode Support)
         let account;
-        let isReadOnly = false;
         // const privateKey = process.env.PRIVATE_KEY as `0x${string}`; // REMOVED for Security
 
 
@@ -69,7 +123,6 @@ class EidolonServer {
             Logger.warn("⚠️ EIDOLON-V: No PRIVATE_KEY found. Starting in READ-ONLY mode (Random Identity).");
             // Generate random account for read-only operations
             account = privateKeyToAccount(generatePrivateKey());
-            isReadOnly = true;
         } else {
             // Scope the key access to minimize lifetime in this closure
             {
@@ -78,16 +131,19 @@ class EidolonServer {
             }
         }
 
+        const rpcUrl = process.env.RPC_URL || "https://opbnb-mainnet-rpc.bnbchain.org";
+        const chainId = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID, 10) : opBNB.id;
+
         const walletClient = createWalletClient({
             account,
             chain: opBNB,
-            transport: http("https://opbnb-mainnet-rpc.bnbchain.org")
+            transport: http(rpcUrl)
         });
 
         const config: ClawKitConfig = {
-            rpcUrl: "https://opbnb-mainnet-rpc.bnbchain.org",
+            rpcUrl,
             chainConfig: OPBNB_CONFIG,
-            chainId: opBNB.id
+            chainId
         };
 
         try {
@@ -127,6 +183,22 @@ class EidolonServer {
         });
     }
 
+    private parseBooleanEnv(name: string, fallback: boolean): boolean {
+        const raw = process.env[name];
+        if (!raw) return fallback;
+        const normalized = raw.trim().toLowerCase();
+        if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+        if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+        return fallback;
+    }
+
+    private parseNumberEnv(name: string, fallback: number): number {
+        const raw = process.env[name];
+        if (!raw) return fallback;
+        const value = Number(raw);
+        return Number.isFinite(value) ? value : fallback;
+    }
+
     private setupHandlers() {
         this.setupResources();
         this.setupTools();
@@ -151,7 +223,12 @@ class EidolonServer {
                 context: { actor: 'mcp', requestedAt: Date.now() },
             }).then((r) => r.data);
 
-        return new McpToolRegistry().registerAll([
+        const registry = new McpToolRegistry(this.cognitiveStore, {
+            canaryPercent: this.rolloutConfig.canaryPercent,
+            rollbackErrorRate: this.rolloutConfig.rollbackErrorRate,
+            rollbackP95Ms: this.rolloutConfig.rollbackP95Ms,
+            rollbackMinCalls: this.rolloutConfig.rollbackMinCalls,
+        }).registerAll([
             new OracleSenseTool(callDefi),
             new DefiQuoteTool(callDefi),
             new SecurityScanTool(callDefi),
@@ -162,6 +239,41 @@ class EidolonServer {
             new IntuitionTool(this.guard),
             new DreamTool(this.guard),
         ]);
+
+        this.toolPerformance = registry.getTelemetry();
+
+        if (this.featureFlags.cognitiveToolsEnabled) {
+            const cognitiveTools = createCognitiveTools({
+                flags: {
+                    reasonChainEnabled: this.featureFlags.reasonChainEnabled,
+                    contextCompressionEnabled: this.featureFlags.contextCompressionEnabled,
+                    orchestratorEnabled: this.featureFlags.orchestratorEnabled,
+                    toolGeneratorExperimentalEnabled: this.featureFlags.toolGeneratorExperimentalEnabled,
+                },
+                store: this.cognitiveStore,
+                traumaRegistry: this.traumaRegistry,
+                conversationTransparency: this.conversationTransparency,
+                reasoningChain: this.reasoningChain,
+                contextCompressor: this.contextCompressor,
+                contextRouter: this.contextRouter,
+                memoryGraph: this.memoryGraph,
+                memoryRouter: this.memoryRouter,
+                memoryDecay: this.memoryDecay,
+                orchestrator: this.orchestrator,
+                toolGenerator: this.toolGenerator,
+                toolPerformance: this.toolPerformance,
+                oracleGenerator: this.embeddingOracle,
+                generatedToolMax: this.rolloutConfig.generatedToolMax,
+                listTools: () => registry.listToolNames(),
+                recommendTools: (task, available) => registry.recommend(task, available),
+                registerDynamicTool: (tool) => {
+                    registry.register(tool, true);
+                },
+            });
+            registry.registerAll(cognitiveTools);
+        }
+
+        return registry;
     }
 
 
@@ -177,6 +289,21 @@ class EidolonServer {
                     uri: "eidolon://logs",
                     name: "Agent Thought Stream",
                     mimeType: "text/plain",
+                },
+                {
+                    uri: "eidolon://telemetry",
+                    name: "Tool Telemetry (call/error/latency/fallback)",
+                    mimeType: "application/json",
+                },
+                {
+                    uri: "eidolon://generated-tool-audit",
+                    name: "Generated Tool Audit Logs",
+                    mimeType: "application/json",
+                },
+                {
+                    uri: "eidolon://contracts",
+                    name: "Runtime + MCP compatibility contracts",
+                    mimeType: "application/json",
                 }
             ],
         }));
@@ -211,6 +338,49 @@ class EidolonServer {
                 };
             }
 
+            if (request.params.uri === "eidolon://telemetry") {
+                const byTool = await this.toolRegistry.getPerformanceRecords();
+                return {
+                    contents: [{
+                        uri: "eidolon://telemetry",
+                        mimeType: "application/json",
+                        text: JSON.stringify({
+                            feature_flags: this.featureFlags,
+                            rollout: this.toolRegistry.getRolloutStatus(),
+                            by_tool: byTool,
+                            generated_at: Date.now(),
+                        }, null, 2),
+                    }]
+                };
+            }
+
+            if (request.params.uri === "eidolon://generated-tool-audit") {
+                const entries = await this.cognitiveStore.listGeneratedToolAudits(200);
+                return {
+                    contents: [{
+                        uri: "eidolon://generated-tool-audit",
+                        mimeType: "application/json",
+                        text: JSON.stringify({
+                            entries,
+                            generated_at: Date.now(),
+                        }, null, 2),
+                    }]
+                };
+            }
+
+            if (request.params.uri === "eidolon://contracts") {
+                return {
+                    contents: [{
+                        uri: "eidolon://contracts",
+                        mimeType: "application/json",
+                        text: JSON.stringify({
+                            mcp_compatibility: MCP_COMPATIBILITY_CONTRACT,
+                            generated_at: Date.now(),
+                        }, null, 2),
+                    }]
+                };
+            }
+
             throw new Error("Resource not found");
         });
     }
@@ -229,8 +399,16 @@ class EidolonServer {
         // Our McpToolResult satisfies the CallToolResult branch at runtime.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const callHandler = async (request: any, _extra: any): Promise<any> => {
-            const args = (request.params?.arguments ?? {}) as Record<string, unknown>;
-            return this.toolRegistry.dispatch(request.params.name, args);
+            try {
+                const normalized = normalizeCallToolRequest(request);
+                return this.toolRegistry.dispatch(normalized.toolName, normalized.args);
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : String(error);
+                return {
+                    content: [{ type: 'text', text: `Error: ${message}` }],
+                    isError: true,
+                };
+            }
         };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.server.setRequestHandler(CallToolRequestSchema, callHandler as any);
@@ -239,11 +417,25 @@ class EidolonServer {
 
     async run() {
         Logger.info("🧠 Initializing Eidolon Consciousness...");
+        await this.initCognitiveRuntime();
         await this.guard.init(); // Wakes up the brain
 
         const transport = new StdioServerTransport();
         await this.server.connect(transport);
         Logger.info("🦅 EIDOLON-V Server running on stdio");
+    }
+
+    private async initCognitiveRuntime(): Promise<void> {
+        await this.cognitiveStore.init();
+        await this.traumaRegistry.initPersistence(this.cognitiveStore, 'cognitive_trauma_registry.json');
+
+        // Seed a tiny semantic baseline so memory_query has meaningful first result.
+        await this.memoryGraph.addNode({
+            id: 'semantic_bootstrap',
+            concept: 'system bootstrapped',
+            embedding: await this.embeddingOracle.embed(createWorldState('system', { status: 'ready' })),
+            connections: [],
+        });
     }
 }
 
