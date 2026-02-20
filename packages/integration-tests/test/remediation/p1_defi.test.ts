@@ -91,7 +91,7 @@ describe('DeFiModule P1 Fixes', () => {
             // Mock approval check
             mockPublicClient.readContract.mockResolvedValueOnce(1000000000000n); // allowance
 
-            await defi.stake({ pool: 'BNB-USDT', amount: '1' });
+            await defi.stake({ pool: 'BNB-USDT', token: 'CAKE', amount: '1' });
 
             // Verify readContract was called for decimals
             expect(mockPublicClient.readContract).toHaveBeenCalledWith(

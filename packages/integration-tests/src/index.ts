@@ -59,7 +59,7 @@ export class ClawKit {
     }
 
     if (this.config?.privacyMode !== 'strict') {
-      this.marketStream = new MarketStream(this.publicClient as any);
+      this.marketStream = new MarketStream();
       this.marketStream.start();
       this.swarm = new EidolonSwarm();
     }

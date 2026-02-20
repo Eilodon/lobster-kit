@@ -32,12 +32,12 @@ describe("CRITICAL AUDIT: ActiveLearning Memory Leak", function () {
                 },
                 causalFactors: [] // Empty factors to skip weight updates recursion
             } as any, {
-                decisionId: i,
+                decisionId: i.toString(),
                 profitLoss: 10,
                 slippage: 0,
                 gasUsed: 0,
                 success: true
-            });
+            } as any);
         }
 
         // 2. Check size

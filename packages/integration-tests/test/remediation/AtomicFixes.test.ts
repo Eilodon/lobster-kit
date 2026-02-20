@@ -1,6 +1,5 @@
-
 import { ActiveLearning, EmotionalCore } from '@clawkit/soul';
-import { AppendOnlyAdapter } from '../src/eidolon/memory/AppendOnlyAdapter';
+import { AppendOnlyAdapter } from '@clawkit/core';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';

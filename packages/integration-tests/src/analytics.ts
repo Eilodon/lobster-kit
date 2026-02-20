@@ -1,68 +1,71 @@
 import { AnalyticsModule as BaseAnalyticsModule } from '@clawkit/defi-bnb';
-import axios from 'axios';
 
 type PriceMap = Record<string, number>;
 
 /**
- * Compatibility shim for integration tests:
- * keeps axios-based fetch path so vi.mock('axios') remains reliable.
+ * Compatibility shim for integration tests.
+ * Uses prototype patching instead of class extension to avoid TS2415 private member conflict.
  */
-export class AnalyticsModule extends BaseAnalyticsModule {
-  private readonly COINGECKO_API = 'https://api.coingecko.com/api/v3';
-  private readonly CACHE_DURATION = 60_000;
-  private priceCache: { token_prices?: { value: PriceMap; timestamp: number } } = {};
+export class AnalyticsModule extends BaseAnalyticsModule { }
 
-  public async fetchTokenPrices(): Promise<PriceMap> {
-    const cacheKey = 'token_prices';
-    const cached = this.priceCache[cacheKey];
-    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-      return cached.value;
-    }
+// Internal constants – not on the class to avoid TS2415
+const COINGECKO_API = 'https://api.coingecko.com/api/v3';
+const CACHE_DURATION = 60_000;
+const priceCache: Map<string, { value: PriceMap; timestamp: number }> = new Map();
 
-    try {
-      const response = await axios.get(`${this.COINGECKO_API}/simple/price`, {
-        params: {
-          ids: 'binancecoin,usd-coin,tether,pancakeswap-token,bitcoin,ethereum',
-          vs_currencies: 'usd',
-          include_24hr_change: true
-        },
-        timeout: 5000
-      });
+// Patch fetchTokenPrices to use axios-based fetch path (for vi.mock('axios') compatibility)
+import axios from 'axios';
 
-      const prices: PriceMap = {
-        BNB: response.data.binancecoin?.usd || 0,
-        WBNB: response.data.binancecoin?.usd || 0,
-        USDT: response.data.tether?.usd || 1,
-        USDC: response.data['usd-coin']?.usd || 1,
-        BUSD: 1,
-        CAKE: response.data['pancakeswap-token']?.usd || 0,
-        BTC: response.data.bitcoin?.usd || 0,
-        ETH: response.data.ethereum?.usd || 0
-      };
+(AnalyticsModule.prototype as any).fetchTokenPrices = async function (): Promise<PriceMap> {
+  const cacheKey = 'token_prices';
+  const cached = priceCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.value;
+  }
 
-      this.priceCache[cacheKey] = { value: prices, timestamp: Date.now() };
-      return prices;
-    } catch (error: unknown) {
-      const status =
-        typeof error === 'object' &&
+  try {
+    const response = await axios.get(`${COINGECKO_API}/simple/price`, {
+      params: {
+        ids: 'binancecoin,usd-coin,tether,pancakeswap-token,bitcoin,ethereum',
+        vs_currencies: 'usd',
+        include_24hr_change: true
+      },
+      timeout: 5000
+    });
+
+    const prices: PriceMap = {
+      BNB: response.data.binancecoin?.usd || 0,
+      WBNB: response.data.binancecoin?.usd || 0,
+      USDT: response.data.tether?.usd || 1,
+      USDC: response.data['usd-coin']?.usd || 1,
+      BUSD: 1,
+      CAKE: response.data['pancakeswap-token']?.usd || 0,
+      BTC: response.data.bitcoin?.usd || 0,
+      ETH: response.data.ethereum?.usd || 0
+    };
+
+    priceCache.set(cacheKey, { value: prices, timestamp: Date.now() });
+    return prices;
+  } catch (error: unknown) {
+    const status =
+      typeof error === 'object' &&
         error !== null &&
         'response' in error &&
         typeof (error as { response?: { status?: unknown } }).response?.status === 'number'
-          ? (error as { response: { status: number } }).response.status
-          : undefined;
+        ? (error as { response: { status: number } }).response.status
+        : undefined;
 
-      if (status === 429 && cached) {
-        return cached.value;
-      }
-
-      return {
-        BNB: 600,
-        WBNB: 600,
-        USDT: 1,
-        USDC: 1,
-        BUSD: 1,
-        CAKE: 2.5
-      };
+    if (status === 429 && cached) {
+      return cached.value;
     }
+
+    return {
+      BNB: 600,
+      WBNB: 600,
+      USDT: 1,
+      USDC: 1,
+      BUSD: 1,
+      CAKE: 2.5
+    };
   }
-}
+};

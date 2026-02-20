@@ -5,16 +5,12 @@
         "rootDir": ".",
         "composite": true,
         "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
-        "typeRoots": [
-            "../../node_modules/@types"
-        ],
         "types": [
             "node",
             "vitest/globals"
         ]
     },
     "include": [
-        "src/**/*.ts",
         "test/**/*.ts"
     ],
     "references": [

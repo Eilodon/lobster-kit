@@ -40,7 +40,7 @@ describe('Memory Cortex Atomic Upgrades', () => {
 
         it('should respect limit in readLog to avoid OOM', async () => {
             // Mock file content with many lines
-            const lines = [];
+            const lines: string[] = [];
             for (let i = 0; i < 100; i++) {
                 lines.push(JSON.stringify({ ts: i, data: { id: i } }));
             }

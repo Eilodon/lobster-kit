@@ -96,7 +96,7 @@ describe('SQLiteLearningStore secure_delete', () => {
             prepare: vi.fn(() => ({ run: vi.fn(), get: vi.fn(), all: vi.fn(() => []) })),
         };
 
-        const MockDatabase = function () { return mockDb; };
+        const MockDatabase = class { constructor() { return mockDb; } } as any;
 
         const { SQLiteLearningStore } = await import('../src/eidolon/memory/SQLiteLearningStore');
         const store = new SQLiteLearningStore({
