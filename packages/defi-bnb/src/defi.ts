@@ -58,7 +58,7 @@ export class DeFiModule {
     private walletClient: ClawKitWalletClient,
     private publicClient: PublicClient,
     private config: ClawKitConfig,
-    private security: SecurityModule // FIX P2: Security Injection
+    private security?: SecurityModule // FIX P2: Security Injection (optional — graceful degradation)
   ) {
     if (!this.config.chainConfig) {
       console.warn("⚠️ No chain config provided, defaulting to opBNB");
@@ -312,7 +312,7 @@ export class DeFiModule {
     const toToken = this.resolveTokenAddress(to);
 
     // FIX P2: Security Guard (The Immune System)
-    if (params.force !== true) {
+    if (params.force !== true && this.security) {
       if (toToken !== this.tokens.BNB.address && toToken !== this.tokens.WBNB.address && toToken !== this.tokens.USDT.address) {
         // Only scan non-trusted tokens
         const risk = await this.security.scanContract(toToken);
