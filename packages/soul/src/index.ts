@@ -51,3 +51,4 @@ export { ReasoningChain, CriticModule, TreeOfThoughts, VerifierLoop } from './ei
 export { ContextCompressor, ContextRouter } from './eidolon/ContextCompressor';
 export { SwarmOrchestrator } from './swarm/SwarmOrchestrator';
 export { CausalDiscoveryPipeline, type CausalHypothesis, type VerificationResult, type DiscoveryReport } from './eidolon/CausalDiscoveryPipeline';
+export { MetaCognitiveOrchestrator, RoutingStrategy, type OrchestrationContext, type RoutingDecision } from './eidolon/MetaCognitiveOrchestrator';
