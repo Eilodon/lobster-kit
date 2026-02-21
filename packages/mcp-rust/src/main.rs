@@ -208,20 +208,68 @@ impl EidolonMcpServer {
                 })
             },
             "clawkit_recall_similar" => {
-                let _context = params["context"].as_str().unwrap_or("");
-                let _k = params["k"].as_u64().unwrap_or(5);
-                // Stubbing HyperMemory vector search for now
+                // Upgraded: search memories by context similarity (substring match)
+                let context = params["context"].as_str().unwrap_or("");
+                let k = params["k"].as_u64().unwrap_or(5) as usize;
+                let mems = self.memories.lock().await;
+                
+                if context.is_empty() || mems.is_empty() {
+                    return serde_json::json!({
+                        "matches": [],
+                        "total_memories": mems.len(),
+                        "note": "No context provided or memory store is empty."
+                    });
+                }
+                
+                let ctx_lower = context.to_lowercase();
+                let ctx_words: Vec<&str> = ctx_lower.split_whitespace().collect();
+                
+                // Score each memory by word overlap
+                let mut scored: Vec<(f64, &MemoryEntry)> = mems.iter().map(|m| {
+                    let content_lower = m.content.to_lowercase();
+                    let matching = ctx_words.iter().filter(|w| content_lower.contains(*w)).count();
+                    let similarity = if ctx_words.is_empty() { 0.0 } else { matching as f64 / ctx_words.len() as f64 };
+                    (similarity, m)
+                }).filter(|(s, _)| *s > 0.0).collect();
+                
+                scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+                
+                let results: Vec<serde_json::Value> = scored.iter().take(k).map(|(sim, m)| {
+                    serde_json::json!({
+                        "similarity": sim,
+                        "category": m.category,
+                        "content": m.content,
+                        "timestamp": m.timestamp
+                    })
+                }).collect();
+                
                 serde_json::json!({
-                    "matches": [
-                        { "episode_id": "ep_123", "similarity": 0.88, "outcome": "positive" },
-                        { "episode_id": "ep_456", "similarity": 0.76, "outcome": "negative" }
-                    ]
+                    "matches": results,
+                    "total_memories": mems.len()
                 })
             },
             "clawkit_memory_query" => {
                 // Upgrade 3: Real stateful memory search
                 let query = params["query"].as_str().unwrap_or("");
                 let mems = self.memories.lock().await;
+                
+                // Guard: empty query returns all memories (up to 10)
+                if query.is_empty() {
+                    let results: Vec<serde_json::Value> = mems.iter().rev().take(10).map(|m| {
+                        serde_json::json!({
+                            "timestamp": m.timestamp,
+                            "category": m.category,
+                            "content": m.content
+                        })
+                    }).collect();
+                    return serde_json::json!({
+                        "query": "*",
+                        "total_memories": mems.len(),
+                        "matches": results.len(),
+                        "results": results
+                    });
+                }
+                
                 let query_lower = query.to_lowercase();
                 let matches: Vec<&MemoryEntry> = mems.iter()
                     .filter(|m| m.content.to_lowercase().contains(&query_lower) || m.category.to_lowercase().contains(&query_lower))
@@ -252,12 +300,22 @@ impl EidolonMcpServer {
             },
             "clawkit_compress_context" => {
                 // Upgrade 2: Real context compression
-                let target_tokens = params["target_tokens"].as_u64().unwrap_or(1000) as usize;
+                let target_tokens = params["target_tokens"].as_u64().unwrap_or(1000).max(1) as usize;
                 let context = params["context"].as_str().unwrap_or("");
                 
                 if context.is_empty() {
                     // Fallback: compress from memory store
                     let mems = self.memories.lock().await;
+                    if mems.is_empty() {
+                        return serde_json::json!({
+                            "compressed_context": "",
+                            "original_tokens": 0,
+                            "compressed_tokens": 0,
+                            "compression_ratio": "N/A",
+                            "source": "memory_store",
+                            "note": "Memory store is empty. Record outcomes or commit patterns first."
+                        });
+                    }
                     let summary: String = mems.iter().rev().take(10)
                         .map(|m| m.content.as_str())
                         .collect::<Vec<&str>>()
@@ -312,7 +370,9 @@ impl EidolonMcpServer {
             "clawkit_record_outcome" => {
                 let pattern = params["pattern"].as_str().unwrap_or("unknown_pattern");
                 let mode_str = params["mode"].as_str().unwrap_or("Peer");
-                let severity = params["severity"].as_f64().unwrap_or(0.0) as f32;
+                // Clamp severity to [0.0, 5.0] — prevents garbage inputs
+                let raw_severity = params["severity"].as_f64().unwrap_or(0.0) as f32;
+                let severity = raw_severity.clamp(0.0, 5.0);
                 
                 let mode = match mode_str {
                     "Stalking" => core_rust::sentinel::modes::SentinelMode::Stalking,
