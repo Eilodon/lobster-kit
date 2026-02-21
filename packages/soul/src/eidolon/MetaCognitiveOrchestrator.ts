@@ -26,13 +26,13 @@ export enum RoutingStrategy {
 export interface OrchestrationContext {
     userId: string;
     message: string;
-    suggestedTool: string;
     contextType: string;
 }
 
 export interface RoutingDecision {
     strategy: RoutingStrategy;
     confidence: number;
+    suggestedTool: string;
     breakdown: {
         intentConfidence: number;
         thermoCoherence: number;
@@ -134,6 +134,49 @@ export class MetaCognitiveOrchestrator {
     };
 
     /**
+     * Executes the keyword-based TF-IDF tool recommendation (replicated from MCP logic).
+     */
+    private recommendTool(message: string): { tool: string, score: number } {
+        const keywords: Array<[string, string]> = [
+            ["user", "clawkit_recall_user"], ["user", "clawkit_update_user"],
+            ["profile", "clawkit_recall_user"], ["profile", "clawkit_update_user"],
+            ["memory", "clawkit_memory_query"], ["remember", "clawkit_memory_query"],
+            ["compress", "clawkit_compress_context"], ["summarize", "clawkit_compress_context"],
+            ["similar", "clawkit_recall_similar"], ["context", "clawkit_recall_similar"],
+            ["reason", "clawkit_reason_chain"], ["think", "clawkit_reason_chain"], ["logic", "clawkit_reason_chain"],
+            ["simulate", "clawkit_simulate_response"], ["test", "clawkit_simulate_response"],
+            ["pattern", "clawkit_check_pattern"], ["pattern", "clawkit_commit_pattern"],
+            ["outcome", "clawkit_record_outcome"], ["learn", "clawkit_record_outcome"],
+            ["dream", "clawkit_dream_conversation"], ["sleep", "clawkit_dream_conversation"],
+            ["swarm", "clawkit_orchestrate"], ["agents", "clawkit_orchestrate"],
+        ];
+
+        const msgLower = message.toLowerCase();
+        const scores = new Map<string, number>();
+
+        for (const [kw, tool] of keywords) {
+            if (msgLower.includes(kw)) {
+                scores.set(tool, (scores.get(tool) || 0) + 0.33);
+            }
+        }
+
+        if (scores.size === 0) {
+            return { tool: "clawkit_reason_chain", score: 0.5 }; // Fallback
+        }
+
+        let bestTool = "";
+        let bestScore = -1;
+        for (const [tool, score] of scores.entries()) {
+            if (score > bestScore) {
+                bestScore = score;
+                bestTool = tool;
+            }
+        }
+
+        return { tool: bestTool, score: Math.min(bestScore, 0.99) };
+    }
+
+    /**
      * Execute the full 3-Layer pipeline for inbound messages.
      * Determines EXACTLY how to handle a potential tool execution based on HOTL principles.
      */
@@ -142,9 +185,10 @@ export class MetaCognitiveOrchestrator {
         // LAYER 1: MANDATORY SENSING (Always Runs)
         // ───────────────────────────────────────────────────────────────────────
 
-        // 1a. Intent Parsing (Simulated here via Oracle if it were cheap, or basic regEx)
-        // Represented directly by returning a high baseline for requested tools
-        const intentConfidence = ctx.suggestedTool ? 0.85 : 0.40;
+        // 1a. Tool Recommendation & Intent Parsing
+        const recommendation = this.recommendTool(ctx.message);
+        const suggestedTool = recommendation.tool;
+        const intentConfidence = recommendation.score;
 
         // 1b. Thermodynamic State (Entropy)
         // We pulse the thermo engine with a dummy state to measure system chaos
@@ -163,7 +207,7 @@ export class MetaCognitiveOrchestrator {
 
         // 1c. Trauma Registry Security Check
         // If the tool is inhibited under any context, this plummets to 0
-        const isDangerous = this.trauma.is_inhibited(0 /* Zen */, ctx.suggestedTool, BigInt(Date.now()));
+        const isDangerous = this.trauma.is_inhibited(0 /* Zen */, suggestedTool, BigInt(Date.now()));
         const traumaSafety = isDangerous ? 0.0 : 1.0;
 
         // ───────────────────────────────────────────────────────────────────────
@@ -171,7 +215,7 @@ export class MetaCognitiveOrchestrator {
         // ───────────────────────────────────────────────────────────────────────
 
         // 2a. Per-User Learned Policy 
-        const learnedPolicyScore = this.policy.predict(ctx.userId, ctx.suggestedTool, ctx.contextType);
+        const learnedPolicyScore = this.policy.predict(ctx.userId, suggestedTool, ctx.contextType);
 
         // 2b. Weighted Additive Score Calculation (Capped)
         let compositeConfidence = (
@@ -207,6 +251,7 @@ export class MetaCognitiveOrchestrator {
         return {
             strategy,
             confidence: compositeConfidence,
+            suggestedTool,
             breakdown: {
                 intentConfidence,
                 thermoCoherence,
@@ -220,7 +265,7 @@ export class MetaCognitiveOrchestrator {
     /**
      * The Feedback Loop: Called after the user clicks PROPOSE, ignores PROPOSE, or rates an AUTO execution.
      */
-    recordFeedback(ctx: OrchestrationContext, satisfied: boolean) {
-        this.policy.learn(ctx.userId, ctx.suggestedTool, ctx.contextType, satisfied);
+    recordFeedback(ctx: OrchestrationContext, executedTool: string, satisfied: boolean) {
+        this.policy.learn(ctx.userId, executedTool, ctx.contextType, satisfied);
     }
 }
