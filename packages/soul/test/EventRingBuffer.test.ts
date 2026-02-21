@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EventRingBuffer } from '../src/eidolon/events/EventRingBuffer';
+import { EventRingBuffer } from '../src/events/EventRingBuffer';
 
 describe('EventRingBuffer', () => {
     it('should push and drain events in order', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeFiModule } from '../src/defi';
-import { ClawKitConfig, OPBNB_CONFIG, resolveTokenAddress } from '../src/types';
+import { DeFiModule } from '@clawkit/defi-bnb';
+import { ClawKitConfig, OPBNB_CONFIG, resolveTokenAddress } from '@clawkit/defi-bnb';
 
 describe('DeFiModule', () => {
     let defi: DeFiModule;
@@ -96,7 +96,8 @@ describe('DeFiModule', () => {
                 from: 'USDT',
                 to: 'WBNB',
                 amount: '1',
-                amountUSD: 100
+                amountUSD: 100,
+                force: true
             });
 
             const approveCall = mockPublic.simulateContract.mock.calls[0][0];

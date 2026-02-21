@@ -172,35 +172,13 @@ mod tests {
         assert_eq!(sentinel.get_mode(), modes::SentinelMode::Zen);
     }
     
-    // ... (other tests unchanged) ...
     #[test]
     fn test_sentinel_priors() {
         let sentinel = Sentinel::new();
-        let edge = sentinel.brain.get_edge(
-            SentinelVariable::MempoolPendingCnt, 
-            SentinelVariable::GasPriceGwei
-        );
-        // Previously used .unwrap(), but get_edge now returns Result<JsValue, JsValue>
-        // We can't easily inspect JsValue in rust unit tests without specific wasm-bindgen-test setup
-    }
-
-    // Skipping unit tests that depend on JS interop return types for now, 
-    // or we should update get_edge to return something inspectable?
-    // The previous get_edge returned Option<&Edge>.
-    // My new get_edge returns Result<JsValue>.
-    // This breaks the test: sentinel.brain.get_edge returns Result.
-    // I should add `get_edge_internal` or access `brain.weights` directly since tests are in same module (using pub crate or direct access)?
-    // Tests are `mod tests` inside `mod.rs`. `Sentinel` has `brain: CausalGraph`. `CausalGraph` fields are public inside crate?
-    // `CausalGraph` struct is define in `causal.rs` as:
-    // pub struct CausalGraph { #[wasm_bindgen(skip)] pub weights: ... }
-    // So YES, we can access `weights` directly in tests!
-    
-    #[test]
-    fn test_sentinel_priors_via_weights() {
-        let sentinel = Sentinel::new();
         let edge = sentinel.brain.weights[SentinelVariable::MempoolPendingCnt.index()][SentinelVariable::GasPriceGwei.index()].as_ref();
         assert!(edge.is_some());
-        assert_eq!(edge.unwrap().success_prob(), 0.95);
+        // Laplace smoothing: (95 + 1) / (95 + 5 + 2) = 96 / 102
+        assert!((edge.unwrap().success_prob() - (96.0 / 102.0)).abs() < 1e-6);
     }
 
     #[test]

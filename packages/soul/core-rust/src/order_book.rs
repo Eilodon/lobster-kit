@@ -106,7 +106,7 @@ impl OrderBook {
         let order_id = self.next_order_id;
         self.next_order_id += 1;
 
-        let order = Order {
+        let mut order = Order {
             id: order_id,
             price,
             quantity,
@@ -117,7 +117,7 @@ impl OrderBook {
         };
 
         // Match first, then add remainder to book
-        let fills = self.match_order(order.clone());
+        let _fills = self.match_order(&mut order);
 
         // If order still has remaining quantity, add to book
         if !order.is_filled() {
@@ -193,7 +193,7 @@ impl OrderBook {
 
 // Private implementation
 impl OrderBook {
-    fn match_order(&mut self, mut taker: Order) -> Vec<Fill> {
+    fn match_order(&mut self, taker: &mut Order) -> Vec<Fill> {
         let mut fills = Vec::new();
 
         let opposite_book = match taker.side {
@@ -294,6 +294,21 @@ mod tests {
 
         // Sell side should have 5 remaining
         assert_eq!(book.ask_volume_at(100_00000000), 5_00000000);
+        // Incoming buy was fully matched, so it must NOT rest on bid side.
+        assert_eq!(book.bid_volume_at(100_00000000), 0);
+    }
+
+    #[test]
+    fn test_partial_taker_rests_only_remaining_quantity() {
+        let mut book = OrderBook::new();
+
+        // Existing ask liquidity: 5 @ 100
+        book.place_order(100_00000000, 5_00000000, OrderSide::Sell, 1);
+        // Incoming buy wants 10 @ 100. It should fill 5 and rest only 5.
+        book.place_order(100_00000000, 10_00000000, OrderSide::Buy, 2);
+
+        assert_eq!(book.ask_volume_at(100_00000000), 0);
+        assert_eq!(book.bid_volume_at(100_00000000), 5_00000000);
     }
 
     #[test]

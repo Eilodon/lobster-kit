@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeFiModule } from '../src/defi';
-import { ClawOracle } from '../src/eidolon/sensors/ClawOracle';
+import { DeFiModule } from '@clawkit/defi-bnb';
+import { ClawOracle } from '../src/sensors/ClawOracle';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
 import { parseEther } from 'viem';
 

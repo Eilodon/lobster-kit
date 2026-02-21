@@ -2,6 +2,38 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const graphEdges = new Map<string, { successes: number; failures: number }>();
 const edgeKey = (cause: number, effect: number) => `${cause}->${effect}`;
+const SENTINEL_VARIABLES = [
+    'PriceDelta',
+    'VolumeSpike',
+    'Volatility',
+    'Momentum',
+    'GasPriceGwei',
+    'MempoolPendingCnt',
+    'WhaleNetFlow',
+    'LiquidityImbalance',
+    'SmartMoneyActivity',
+    'PortfolioRisk',
+    'UserAction',
+    'Sentiment',
+    'MacroFactor'
+] as const;
+const VAR_TO_INDEX = SENTINEL_VARIABLES.reduce((acc, v, i) => {
+    acc[v] = i;
+    return acc;
+}, {} as Record<string, number>);
+const canonicalKey = (raw: string): string => {
+    const [cause, effect] = raw.split('->');
+    if (!cause || !effect) return raw;
+    if (/^\d+$/.test(cause) && /^\d+$/.test(effect)) {
+        return `${cause}->${effect}`;
+    }
+    const causeIdx = VAR_TO_INDEX[cause];
+    const effectIdx = VAR_TO_INDEX[effect];
+    if (Number.isInteger(causeIdx) && Number.isInteger(effectIdx)) {
+        return edgeKey(causeIdx, effectIdx);
+    }
+    return raw;
+};
 
 const mockGraph = {
     learn: vi.fn((cause: number, effect: number, positive: boolean) => {
@@ -32,14 +64,12 @@ const mockGraph = {
         }
         return out;
     }),
-    import_edges: vi.fn((edges: Record<string, { s: number; f: number }>) => {
+    import_edges: vi.fn((edges: Record<string, { s?: number; f?: number; successes?: number; failures?: number }>) => {
         for (const [key, val] of Object.entries(edges)) {
-            // Convert "1->0" key format if needed, but mock uses simple logic
-            // The test uses names, CausalBrain converts to indices.
-            // But mockGraph doesn't really care about indices vs names if we just map keys.
-            // CausalBrain sends "idx->idx".
-            // Mock expects this.
-            graphEdges.set(key, { successes: val.s, failures: val.f });
+            graphEdges.set(canonicalKey(key), {
+                successes: Number(val.successes ?? val.s ?? 0),
+                failures: Number(val.failures ?? val.f ?? 0)
+            });
         }
     })
 };

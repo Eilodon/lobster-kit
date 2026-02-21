@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DivineTransparency } from '../src/eidolon/DivineTransparency';
-import { IOracle, OracleInsight } from '../src/eidolon/ai/IOracle';
+import { IOracle, OracleInsight } from '../src/ai/IOracle';
 import { MarketState, ReasoningWeights, DEFAULT_WEIGHTS } from '../src/eidolon/EidolonTypes';
 
 // Mock Oracle

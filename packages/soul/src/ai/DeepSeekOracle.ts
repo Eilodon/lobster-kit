@@ -145,6 +145,44 @@ export class DeepSeekOracle implements IOracle {
         }
     }
 
+    public async extractCausalHypothesis(episodes: string): Promise<Array<{ cause: string, effect: string, expected_direction: '+' | '-' }>> {
+        if (!this.config.apiKey) {
+            return [];
+        }
+
+        const prompt = `
+        EXTRACT CAUSAL HYPOTHESES
+        From the following episodes, extract simple causal relationships between variables.
+        Episodes:
+        ${episodes.slice(-2000)}
+
+        Return ONLY a JSON array of objects strictly matching this schema:
+        [
+            {
+                "cause": "SourceName",
+                "effect": "TargetName",
+                "expected_direction": "+"
+            }
+        ]
+        `;
+
+        const response = await this.callLLM(prompt, { jsonOnly: true });
+        try {
+            const parsed = JSON.parse(response);
+            if (Array.isArray(parsed)) {
+                return parsed.filter(p =>
+                    typeof p.cause === 'string' &&
+                    typeof p.effect === 'string' &&
+                    (p.expected_direction === '+' || p.expected_direction === '-')
+                );
+            }
+            return [];
+        } catch (e) {
+            console.warn('extractCausalHypothesis parse failed', e);
+            return [];
+        }
+    }
+
     public async counterfactual(
         actual_pattern: string,
         hypothetical_pattern: string,

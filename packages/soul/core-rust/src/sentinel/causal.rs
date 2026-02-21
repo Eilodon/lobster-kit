@@ -148,6 +148,22 @@ impl CausalGraph {
             Ok(weighted_sum / total_weight) // Normalized prediction
         }
     }
+
+    /// Neuro-Symbolic Causal Discovery Verification
+    /// Validates an LLM-generated hypothesis against mathematical evidence.
+    pub fn verify_hypothesis(&self, cause: SentinelVariable, effect: SentinelVariable, direction_positive: bool, threshold: f32) -> bool {
+        let prob = self.get_causal_effect(cause, effect);
+        if direction_positive {
+            prob > 0.5 + threshold
+        } else {
+            prob < 0.5 - threshold
+        }
+    }
+
+    /// Returns raw probabilistic evidence weight [0.0 - 1.0] for TS to make decisions
+    pub fn get_evidence_weight(&self, cause: SentinelVariable, effect: SentinelVariable) -> f32 {
+        self.get_causal_effect(cause, effect)
+    }
     
     // "Skin in the game" learning
     pub fn learn(&mut self, cause: SentinelVariable, effect: SentinelVariable, outcome_positive: bool) {

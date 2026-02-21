@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
-import { EidolonBus, EidolonEventType } from '../src/eidolon/events/EidolonBus';
+import { EidolonBus, EidolonEventType } from '../src/events/EidolonBus';
 
 describe('EmotionalCore: Dispose', () => {
     let core: EmotionalCore;

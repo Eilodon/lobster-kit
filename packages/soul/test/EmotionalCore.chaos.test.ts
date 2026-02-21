@@ -1,7 +1,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
-import { IStorageProvider } from '../src/eidolon/memory/IStorageProvider';
+import { IStorageProvider } from '@clawkit/core';
 
 // Mock Storage to prevent network calls/hangs
 class MockStorage implements IStorageProvider {

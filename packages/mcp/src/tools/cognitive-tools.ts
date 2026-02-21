@@ -327,6 +327,7 @@ export class ClawkitSenseIntentTool implements IMcpTool {
             destructiveHint: false,
             idempotentHint: true,
             openWorldHint: false,
+            shadowSafeHint: true,
         },
     };
 
@@ -436,6 +437,7 @@ export class ClawkitCheckPatternTool implements IMcpTool {
             destructiveHint: false,
             idempotentHint: true,
             openWorldHint: false,
+            shadowSafeHint: true,
         },
     };
 
@@ -499,6 +501,9 @@ export class ClawkitCommitPatternTool implements IMcpTool {
             },
             required: ['chosen_pattern', 'reasoning'],
         },
+        annotations: {
+            shadowSafeHint: true,
+        },
     };
 
     constructor(private readonly deps: CognitiveToolDeps) { }
@@ -520,17 +525,20 @@ export class ClawkitCommitPatternTool implements IMcpTool {
             importance: Math.max(0, Math.min(1, importance)),
             source: 'pattern_commit',
         };
-        await this.deps.store.upsertMemoryEntry(memoryEntry);
-        await this.deps.memoryGraph.addNode({
-            id,
-            concept: `${chosenPattern}: ${reasoning.slice(0, 120)}`,
-            embedding: memoryEntry.embedding,
-            connections: [],
-        });
+
+        if (!args.__shadow) {
+            await this.deps.store.upsertMemoryEntry(memoryEntry);
+            await this.deps.memoryGraph.addNode({
+                id,
+                concept: `${chosenPattern}: ${reasoning.slice(0, 120)}`,
+                embedding: memoryEntry.embedding,
+                connections: [],
+            });
+        }
 
         return {
-            content: [{ type: 'text', text: `Pattern committed: ${chosenPattern}` }],
-            structuredContent: { id, chosen_pattern: chosenPattern },
+            content: [{ type: 'text', text: `Pattern committed: ${chosenPattern}${args.__shadow ? ' (shadow dry-run)' : ''}` }],
+            structuredContent: { id, chosen_pattern: chosenPattern, shadow_simulated: !!args.__shadow },
         };
     }
 
@@ -551,9 +559,29 @@ export class ClawkitCommitPatternTool implements IMcpTool {
 
         const fallback = new Array<number>(64).fill(0);
         const text = `${chosenPattern} ${reasoning}`;
+
+        // Use a simpler string hash for PRNG seeding
+        let hash = 0x811c9dc5;
         for (let i = 0; i < text.length; i++) {
-            const idx = (text.charCodeAt(i) + i) % fallback.length;
-            fallback[idx] += 1;
+            hash ^= text.charCodeAt(i);
+            hash = Math.imul(hash, 0x01000193);
+        }
+
+        let sumSq = 0;
+        for (let i = 0; i < fallback.length; i++) {
+            // Predictable pseudo-random mapped to ~[-1.0, 1.0]
+            hash = Math.imul(hash, 0x01000193);
+            const val = ((hash >>> 0) / 0xffffffff) * 2 - 1;
+            fallback[i] = val;
+            sumSq += val * val;
+        }
+
+        // Normalize the vector
+        const norm = Math.sqrt(sumSq);
+        if (norm > 0) {
+            for (let i = 0; i < fallback.length; i++) {
+                fallback[i] /= norm;
+            }
         }
         return fallback;
     }
@@ -573,6 +601,9 @@ export class ClawkitRecordOutcomeTool implements IMcpTool {
             },
             required: ['pattern', 'outcome'],
         },
+        annotations: {
+            shadowSafeHint: true,
+        },
     };
 
     constructor(private readonly deps: CognitiveToolDeps) { }
@@ -583,17 +614,19 @@ export class ClawkitRecordOutcomeTool implements IMcpTool {
         const severity = Math.max(0, Math.min(1, asNumber(args.severity, 0.4)));
         const mode = asText(args.mode, 'ZEN');
 
-        if (outcome === 'failure') {
-            this.deps.traumaRegistry.recordTrauma(mode, pattern, severity * 5);
-        } else if (outcome === 'success') {
-            this.deps.traumaRegistry.heal(mode, pattern);
+        if (!args.__shadow) {
+            if (outcome === 'failure') {
+                this.deps.traumaRegistry.recordTrauma(mode, pattern, severity * 5);
+            } else if (outcome === 'success') {
+                this.deps.traumaRegistry.heal(mode, pattern);
+            }
+
+            await this.deps.toolPerformance.record(`pattern:${pattern}`, outcome !== 'failure', 0, outcome === 'success' ? 1 : 0.4);
         }
 
-        await this.deps.toolPerformance.record(`pattern:${pattern}`, outcome !== 'failure', 0, outcome === 'success' ? 1 : 0.4);
-
         return {
-            content: [{ type: 'text', text: `Outcome recorded for pattern "${pattern}".` }],
-            structuredContent: { pattern, outcome, severity, mode },
+            content: [{ type: 'text', text: `Outcome recorded for pattern "${pattern}"${args.__shadow ? ' (shadow dry-run)' : ''}.` }],
+            structuredContent: { pattern, outcome, severity, mode, shadow_simulated: !!args.__shadow },
         };
     }
 }
@@ -615,6 +648,7 @@ export class ClawkitRecallSimilarTool implements IMcpTool {
             destructiveHint: false,
             idempotentHint: true,
             openWorldHint: false,
+            shadowSafeHint: true,
         },
     };
 
@@ -643,6 +677,9 @@ export class ClawkitUpdateUserTool implements IMcpTool {
             },
             required: ['user_id', 'patch'],
         },
+        annotations: {
+            shadowSafeHint: true,
+        },
     };
 
     constructor(private readonly deps: CognitiveToolDeps) { }
@@ -663,10 +700,14 @@ export class ClawkitUpdateUserTool implements IMcpTool {
             last_seen: Date.now(),
             session_count: existing.session_count + 1,
         };
-        await this.deps.store.saveUserProfile(updated);
+
+        if (!args.__shadow) {
+            await this.deps.store.saveUserProfile(updated);
+        }
+
         return {
-            content: [{ type: 'text', text: `User profile updated: ${userId}` }],
-            structuredContent: { profile: updated },
+            content: [{ type: 'text', text: `User profile updated: ${userId}${args.__shadow ? ' (shadow dry-run)' : ''}` }],
+            structuredContent: { profile: updated, shadow_simulated: !!args.__shadow },
         };
     }
 }
@@ -683,6 +724,9 @@ export class ClawkitDreamConversationTool implements IMcpTool {
                 preserve_importance_at: { type: 'number', description: 'Do not prune memories at/above this importance.' },
             },
         },
+        annotations: {
+            shadowSafeHint: true,
+        },
     };
 
     constructor(private readonly deps: CognitiveToolDeps) { }
@@ -691,10 +735,21 @@ export class ClawkitDreamConversationTool implements IMcpTool {
         const episodes = Math.max(1, Math.floor(asNumber(args.episodes, 20)));
         const threshold = Math.max(0.01, Math.min(0.9, asNumber(args.prune_threshold, 0.1)));
         const preserveImportanceAt = Math.max(0, Math.min(1, asNumber(args.preserve_importance_at, 0.85)));
-        const pruned = await this.deps.memoryDecay.prune(threshold, { preserveImportanceAbove: preserveImportanceAt });
+
+        let pruned = 0;
+        if (!args.__shadow) {
+            for (let i = 0; i < episodes; i++) {
+                // Decay the threshold adaptively across episodes to deepen prune logic
+                const adaptiveThreshold = threshold * (1 + (i * 0.1));
+                const passPruned = await this.deps.memoryDecay.prune(adaptiveThreshold, { preserveImportanceAbove: preserveImportanceAt });
+                pruned += passPruned;
+                if (passPruned === 0) break; // early exit if nothing else to prune
+            }
+        }
+
         return {
-            content: [{ type: 'text', text: `Dream cycle completed. episodes=${episodes} pruned=${pruned}` }],
-            structuredContent: { episodes, pruned, threshold, preserve_importance_at: preserveImportanceAt },
+            content: [{ type: 'text', text: `Dream cycle completed. episodes=${episodes} pruned=${pruned}${args.__shadow ? ' (shadow dry-run)' : ''}` }],
+            structuredContent: { episodes, pruned, base_threshold: threshold, preserve_importance_at: preserveImportanceAt, shadow_simulated: !!args.__shadow },
         };
     }
 }

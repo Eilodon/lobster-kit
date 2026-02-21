@@ -302,8 +302,34 @@ impl AntiRug {
             || owner_lower == "0x000000000000000000000000000000000000dead";
 
         // 3. Tax Risks — check FIRST to avoid wasted Section 4 deductions
-        let buy_tax: f64 = security_data.buy_tax.parse().unwrap_or(0.0);
-        let sell_tax: f64 = security_data.sell_tax.parse().unwrap_or(0.0);
+        let buy_tax: f64 = match security_data.buy_tax.trim().parse::<f64>() {
+            Ok(v) if v.is_finite() && v >= 0.0 && v <= 100.0 => v,
+            _ => {
+                return self.create_score(
+                    0,
+                    false,
+                    false,
+                    true,
+                    security_data.is_open_source,
+                    renounced,
+                    "INVALID_TAX_DATA"
+                );
+            }
+        };
+        let sell_tax: f64 = match security_data.sell_tax.trim().parse::<f64>() {
+            Ok(v) if v.is_finite() && v >= 0.0 && v <= 100.0 => v,
+            _ => {
+                return self.create_score(
+                    0,
+                    false,
+                    false,
+                    true,
+                    security_data.is_open_source,
+                    renounced,
+                    "INVALID_TAX_DATA"
+                );
+            }
+        };
 
         if buy_tax > TAX_THRESHOLD_HARD || sell_tax > TAX_THRESHOLD_HARD {
             return self.create_score(10, false, false, true, security_data.is_open_source, renounced, "HIGH_TAX");

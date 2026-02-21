@@ -13,14 +13,14 @@
 
 export interface McpToolInputSchema {
     type: 'object';
-    properties: Record<string, { type: string; description?: string; [key: string]: unknown }>;
+    properties: Record<string, { type: string; description?: string;[key: string]: unknown }>;
     required?: string[];
     [key: string]: unknown;
 }
 
 export interface McpToolOutputSchema {
     type: 'object';
-    properties: Record<string, { type: string; description?: string; [key: string]: unknown }>;
+    properties: Record<string, { type: string; description?: string;[key: string]: unknown }>;
     required?: string[];
     [key: string]: unknown;
 }
@@ -31,6 +31,7 @@ export interface McpToolAnnotations {
     destructiveHint?: boolean;
     idempotentHint?: boolean;
     openWorldHint?: boolean;
+    shadowSafeHint?: boolean;
 }
 
 export interface McpToolExecution {

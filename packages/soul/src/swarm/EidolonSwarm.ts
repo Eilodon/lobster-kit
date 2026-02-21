@@ -82,6 +82,9 @@ export class EidolonSwarm extends EventEmitter {
         ? (process.env.EIDOLON_SWARM_SECRET ?? '').trim()
         : '';
     private readonly authEnabled = this.swarmSecret.length > 0;
+    private readonly allowTokenFallback = typeof process !== 'undefined'
+        ? process.env.EIDOLON_SWARM_ALLOW_TOKEN_FALLBACK === '1'
+        : false;
     private warnedInsecureMode = false;
 
     constructor(agentId: string = `AGENT_${Math.floor(Math.random() * 10000)}`) {
@@ -417,7 +420,7 @@ export class EidolonSwarm extends EventEmitter {
         }
     }
 
-    private buildWirePayload(msg: SwarmMessage): unknown {
+    private buildWirePayload(msg: SwarmMessage): unknown | null {
         if (!this.authEnabled) {
             return msg.payload;
         }
@@ -425,7 +428,7 @@ export class EidolonSwarm extends EventEmitter {
         if (sig) {
             return { __eidolonSig: sig, data: msg.payload } satisfies SwarmWireEnvelope;
         }
-        return { __eidolonToken: this.swarmSecret, data: msg.payload } satisfies SwarmWireEnvelope;
+        return null;
     }
 
     private unwrapWirePayload(type: SwarmMessage['type'], sourceAgentId: string, timestamp: number, rawPayload: unknown): unknown | undefined {
@@ -451,7 +454,7 @@ export class EidolonSwarm extends EventEmitter {
             return this.signaturesMatch(expected, env.__eidolonSig) ? data : undefined;
         }
 
-        if (typeof env.__eidolonToken === 'string') {
+        if (this.allowTokenFallback && typeof env.__eidolonToken === 'string') {
             return env.__eidolonToken === this.swarmSecret ? data : undefined;
         }
 
@@ -510,6 +513,7 @@ export class EidolonSwarm extends EventEmitter {
     private packMessage(msg: SwarmMessage): SwarmMessage | Uint8Array | null {
         try {
             const wirePayload = this.buildWirePayload(msg);
+            if (wirePayload === null) return null;
             const sourceBytes = this.encoder.encode(msg.sourceAgentId);
             const payloadBytes = this.encoder.encode(JSON.stringify(wirePayload));
             if (sourceBytes.byteLength > this.MAX_SOURCE_LEN || payloadBytes.byteLength > this.MAX_PAYLOAD_BYTES) {

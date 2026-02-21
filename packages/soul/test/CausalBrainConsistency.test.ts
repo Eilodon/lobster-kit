@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { CausalBrain, SentinelVariable } from '../src/eidolon/ai/CausalBrain';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { CausalBrain, SentinelVariable } from '../src/ai/CausalBrain';
 
 type LearnEvent = {
   cause: SentinelVariable;
@@ -25,6 +25,20 @@ const PAIRS: Array<[SentinelVariable, SentinelVariable]> = [
 ];
 
 describe('CausalBrain TS-vs-Rust consistency', () => {
+  const originalCausalRust = process.env.EIDOLON_CAUSAL_RUST;
+
+  beforeEach(() => {
+    process.env.EIDOLON_CAUSAL_RUST = '0';
+  });
+
+  afterEach(() => {
+    if (originalCausalRust === undefined) {
+      delete process.env.EIDOLON_CAUSAL_RUST;
+      return;
+    }
+    process.env.EIDOLON_CAUSAL_RUST = originalCausalRust;
+  });
+
   it('should produce equivalent predictions after identical learning stream', () => {
     const hybrid = new CausalBrain();
     const tsOnly = new CausalBrain();

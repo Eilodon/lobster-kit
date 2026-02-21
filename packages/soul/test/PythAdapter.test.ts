@@ -1,15 +1,34 @@
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PythAdapter } from '../src/eidolon/oracles/PythAdapter';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { PythAdapter } from '../src/oracles/PythAdapter';
 import axios from 'axios';
 
 vi.mock('axios');
 
+class MockWebSocket {
+    public static readonly OPEN = 1;
+    public readyState = MockWebSocket.OPEN;
+    public onopen: (() => void) | null = null;
+    public onmessage: ((event: { data: unknown }) => void) | null = null;
+    public onerror: ((error: unknown) => void) | null = null;
+    public onclose: (() => void) | null = null;
+
+    constructor(_url: string) {
+        queueMicrotask(() => this.onopen?.());
+    }
+
+    public send(_msg: string): void { }
+    public close(): void {
+        this.onclose?.();
+    }
+}
+
 describe('PythAdapter', () => {
     let adapter: PythAdapter;
+    const originalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
 
     beforeEach(() => {
         vi.resetAllMocks();
+        (globalThis as { WebSocket?: unknown }).WebSocket = MockWebSocket as unknown as typeof WebSocket;
         adapter = new PythAdapter();
     });
 
@@ -59,5 +78,10 @@ describe('PythAdapter', () => {
         const price = await adapter.getPrice('BNB');
         expect(price).toBe(305.5);
         expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    afterEach(() => {
+        adapter.dispose();
+        (globalThis as { WebSocket?: unknown }).WebSocket = originalWebSocket;
     });
 });

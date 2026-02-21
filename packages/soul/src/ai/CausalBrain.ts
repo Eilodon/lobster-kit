@@ -232,10 +232,21 @@ export class CausalBrain {
     private parseEdgeKey(key: string): { cause: SentinelVariable; effect: SentinelVariable } | null {
         const [cause, effect] = key.split('->');
         if (!cause || !effect) return null;
-        if (!(cause in VAR_TO_INDEX) || !(effect in VAR_TO_INDEX)) return null;
+        if (cause in VAR_TO_INDEX && effect in VAR_TO_INDEX) {
+            return {
+                cause: cause as SentinelVariable,
+                effect: effect as SentinelVariable
+            };
+        }
+        const causeIdx = Number(cause);
+        const effectIdx = Number(effect);
+        if (!Number.isInteger(causeIdx) || !Number.isInteger(effectIdx)) return null;
+        const causeNamed = INDEX_TO_VAR[causeIdx];
+        const effectNamed = INDEX_TO_VAR[effectIdx];
+        if (!causeNamed || !effectNamed) return null;
         return {
-            cause: cause as SentinelVariable,
-            effect: effect as SentinelVariable
+            cause: causeNamed,
+            effect: effectNamed
         };
     }
 
@@ -267,13 +278,13 @@ export class CausalBrain {
 
         if (this.wasmGraph.import_edges) {
             try {
-                const payload: Record<string, { s: number; f: number }> = {};
+                const payload: Record<string, { successes: number; failures: number }> = {};
                 for (const [key, edge] of this.weights.entries()) {
                     const parsed = this.parseEdgeKey(key);
                     if (!parsed) continue;
-                    payload[`${VAR_TO_INDEX[parsed.cause]}->${VAR_TO_INDEX[parsed.effect]}`] = {
-                        s: edge.successes,
-                        f: edge.failures
+                    payload[`${parsed.cause}->${parsed.effect}`] = {
+                        successes: edge.successes,
+                        failures: edge.failures
                     };
                 }
                 this.wasmGraph.import_edges(payload);
@@ -289,14 +300,10 @@ export class CausalBrain {
         for (const [key, edge] of this.weights.entries()) {
             const parsed = this.parseEdgeKey(key);
             if (!parsed) continue;
-            const prior = this.priors.get(key) ?? { s: 0, f: 0 };
-            const extraS = Math.max(0, edge.successes - prior.s);
-            const extraF = Math.max(0, edge.failures - prior.f);
-
-            for (let i = 0; i < extraS; i++) {
+            for (let i = 0; i < edge.successes; i++) {
                 this.syncLearnToRust(parsed.cause, parsed.effect, true);
             }
-            for (let i = 0; i < extraF; i++) {
+            for (let i = 0; i < edge.failures; i++) {
                 this.syncLearnToRust(parsed.cause, parsed.effect, false);
             }
         }

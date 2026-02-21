@@ -1,13 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PriceAggregator } from '../src/eidolon/sensors/PriceAggregator';
-import * as types from '../src/types';
-
-// Verify module types to confirm where getTokenDecimals comes from.
-// It is imported as: import { getTokenDecimals } from '../../types';
-
-vi.mock('../src/types', () => ({
-    getTokenDecimals: vi.fn().mockReturnValue(18) // Assume 18 for test simplicity
-}));
+import { PriceAggregator } from '../src/sensors/PriceAggregator';
 
 // Mock dependencies
 const mockKit = {
@@ -46,9 +38,9 @@ describe('PriceAggregator', () => {
         mockAxios.get.mockResolvedValue({ data: { price: "602" } });
 
         // 3. DEX = 601
-        // 601 * 1e18 (since we mocked decimals to 18)
+        // Amount is USDT with 6 decimals.
         mockKit.defi.getRealQuote.mockResolvedValue({
-            amountOutMin: 601n * 1000000000000000000n
+            amountOutMin: 601_000000n
         });
 
         const price = await aggregator.getPrice('BNB');
@@ -68,7 +60,7 @@ describe('PriceAggregator', () => {
 
         // 3. DEX = 700 (Outlier > 5%)
         mockKit.defi.getRealQuote.mockResolvedValue({
-            amountOutMin: 700n * 1000000000000000000n
+            amountOutMin: 700_000000n
         });
 
         const price = await aggregator.getPrice('BNB');

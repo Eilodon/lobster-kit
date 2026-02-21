@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KpiTracker } from '../src/eidolon/metrics/KpiTracker';
+import { KpiTracker } from '../src/metrics/KpiTracker';
 
 describe('KpiTracker', () => {
   it('should compute core KPI ratios', () => {

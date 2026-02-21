@@ -69,4 +69,10 @@ export interface IOracle {
      * Get a human-readable name for the oracle (e.g., "DeepSeek-V3", "GPT-5")
      */
     getName(): string;
+
+    /**
+     * P1: Neuro-Symbolic Causal Extraction Hook
+     * Extract causal hypotheses from a conversation or events.
+     */
+    extractCausalHypothesis(episodes: string): Promise<Array<{ cause: string, effect: string, expected_direction: '+' | '-' }>>;
 }

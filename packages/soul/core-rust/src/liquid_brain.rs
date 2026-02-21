@@ -79,6 +79,16 @@ impl LiquidBrain {
         std::mem::swap(&mut self.state, &mut self.next_state_buffer);
         self.state.clone()
     }
+
+    /// Configure adaptation speed (tau in continuous-time update).
+    /// Returns false on invalid values (non-finite or <= 0).
+    pub fn set_time_constant(&mut self, time_constant: f32) -> bool {
+        if !time_constant.is_finite() || time_constant <= 0.0 {
+            return false;
+        }
+        self.time_constant = time_constant;
+        true
+    }
     
     pub fn reset(&mut self) {
         self.state.fill(0.0);

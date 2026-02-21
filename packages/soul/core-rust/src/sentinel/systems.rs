@@ -1,47 +1,56 @@
-use bevy_ecs::prelude::*;
 use crate::sentinel::variables::SentinelVariable;
 use crate::sentinel::modes::SentinelMode;
 use crate::sentinel::causal::CausalGraph;
+use tokio::sync::mpsc;
+use wasm_bindgen::prelude::*;
 
-// --- Components ---
-
-/// Component attaching a Causal Brain to an entity (e.g., a specific Strategy or Sub-agent)
-#[derive(Component)]
-pub struct SentinelBrain {
-    pub graph: CausalGraph,
-    pub last_update: u64,
+// Define types that can be exposed if needed, or keep them internal.
+#[derive(Debug, Clone)]
+pub enum CognitiveEvent {
+    Observe { data: Vec<(SentinelVariable, f32)> },
+    Evaluate,
 }
 
-/// Component tracking the current mode of an entity
-#[derive(Component)]
-pub struct SentinelState {
+/// The core Sentinel Agent implemented as an Actor
+pub struct SentinelActor {
+    pub graph: CausalGraph,
     pub mode: SentinelMode,
     pub risk_score: f32,
+    pub receiver: mpsc::Receiver<CognitiveEvent>,
 }
 
-/// Component representing an Observation buffer
-#[derive(Component)]
-pub struct ObservationBuffer {
-    pub data: Vec<(SentinelVariable, f32)>,
-}
+impl SentinelActor {
+    pub fn new(receiver: mpsc::Receiver<CognitiveEvent>) -> Self {
+        Self {
+            graph: CausalGraph::new(),
+            mode: SentinelMode::Zen,
+            risk_score: 0.1,
+            receiver,
+        }
+    }
 
-// --- Systems ---
+    /// The main event loop for the Actor.
+    /// It consumes exactly 0% CPU when waiting for `recv().await`.
+    pub async fn run(mut self) {
+        while let Some(event) = self.receiver.recv().await {
+            match event {
+                CognitiveEvent::Observe { data } => {
+                    self.handle_observation(data);
+                }
+                CognitiveEvent::Evaluate => {
+                    // In the Native MCP version, we would do I/O bounds here:
+                    // let response = IOracle::analyze().await;
+                }
+            }
+        }
+    }
 
-/// System: Update Brain Prediction based on Observations
-pub fn causal_inference_system(
-    mut query: Query<(&ObservationBuffer, &SentinelBrain, &mut SentinelState)>,
-) {
-    for (obs, brain, mut state) in query.iter_mut() {
-        // Simple heuristic: GasPriceGwei -> Volatility check from logic
-        // This connects the specific logic from mod.rs into ECS
-        
+    fn handle_observation(&mut self, data: Vec<(SentinelVariable, f32)>) {
         let mut max_risk = 0.0;
         
-        // Scan observations for triggers
-        for (var, val) in &obs.data {
-            if *var == SentinelVariable::GasPriceGwei && *val > 0.8 {
-                // Check causal edge
-                let risk = brain.graph.get_causal_effect(
+        for (var, val) in data {
+            if var == SentinelVariable::GasPriceGwei && val > 0.8 {
+                let risk = self.graph.get_causal_effect(
                     SentinelVariable::GasPriceGwei, 
                     SentinelVariable::Volatility
                 );
@@ -51,13 +60,12 @@ pub fn causal_inference_system(
             }
         }
 
-        // State Machine Transition
         if max_risk > 0.5 {
-            state.mode = SentinelMode::Stalking;
-            state.risk_score = max_risk;
+            self.mode = SentinelMode::Stalking;
+            self.risk_score = max_risk;
         } else {
-            state.mode = SentinelMode::Zen;
-            state.risk_score = 0.1;
+            self.mode = SentinelMode::Zen;
+            self.risk_score = 0.1;
         }
     }
 }

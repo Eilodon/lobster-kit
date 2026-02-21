@@ -159,11 +159,9 @@ export class MemoryRouter {
             if (entry.source) mixString(entry.source);
 
             if (entry.embedding.length > 0) {
-                const stride = Math.max(1, Math.floor(entry.embedding.length / 8));
-                for (let i = 0; i < entry.embedding.length; i += stride) {
+                for (let i = 0; i < entry.embedding.length; i++) {
                     mix(quantize(entry.embedding[i], 10_000));
                 }
-                mix(quantize(entry.embedding[entry.embedding.length - 1], 10_000));
             }
         }
 

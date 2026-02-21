@@ -1,49 +1,60 @@
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MarketStream } from '../src/eidolon/sensors/MarketStream';
-import WebSocket from 'ws';
+import { MarketStream } from '../src/sensors/MarketStream';
 
-// Mock WebSocket
-const mockWs = {
-    on: vi.fn(),
-    close: vi.fn(),
-    terminate: vi.fn(),
-    send: vi.fn()
-};
+type Listener = (event?: unknown) => void;
 
-// We need to intercept the WebSocket constructor
-vi.mock('ws', () => {
-    return {
-        default: vi.fn(() => mockWs)
-    };
-});
+class MockWebSocket {
+    public static instances: MockWebSocket[] = [];
+    private listeners = new Map<string, Listener[]>();
+
+    constructor(public readonly url: string) {
+        MockWebSocket.instances.push(this);
+    }
+
+    public addEventListener(event: string, listener: Listener): void {
+        const bucket = this.listeners.get(event) ?? [];
+        bucket.push(listener);
+        this.listeners.set(event, bucket);
+    }
+
+    public emit(event: string, payload?: unknown): void {
+        const bucket = this.listeners.get(event) ?? [];
+        for (const listener of bucket) listener(payload);
+    }
+
+    public close(): void {
+        this.emit('close');
+    }
+}
 
 describe('MarketStream', () => {
     let stream: MarketStream;
+    const originalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
 
     beforeEach(() => {
         vi.clearAllMocks();
+        MockWebSocket.instances = [];
+        (globalThis as { WebSocket?: unknown }).WebSocket = MockWebSocket as unknown as typeof WebSocket;
         stream = new MarketStream();
     });
 
     afterEach(() => {
         stream.stop();
+        (globalThis as { WebSocket?: unknown }).WebSocket = originalWebSocket;
+        vi.useRealTimers();
     });
 
     it('should connect to WebSocket on start', () => {
         stream.start();
-        expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('stream.binance.com'));
+        expect(MockWebSocket.instances.length).toBe(1);
+        expect(MockWebSocket.instances[0].url).toContain('stream.binance.com');
     });
 
     it('should emit PRICE updates on message', () => {
         stream.start();
+        const ws = MockWebSocket.instances[0];
 
-        // Get the 'message' handler
-        // ws.on calls: [0]: 'open', [1]: 'message', [2]: 'close', [3]: 'error'
-        // We need to find the call for 'message'
-        const messageHandler = mockWs.on.mock.calls.find(call => call[0] === 'message')[1];
-
-        const mockPayload = JSON.stringify({
+        const payload = JSON.stringify({
             e: 'trade',
             E: 123456789,
             s: 'BNBUSDT',
@@ -52,8 +63,7 @@ describe('MarketStream', () => {
         });
 
         const emitSpy = vi.spyOn(stream, 'emit');
-
-        messageHandler(mockPayload);
+        ws.emit('message', { data: payload });
 
         expect(emitSpy).toHaveBeenCalledWith('price', {
             symbol: 'BNB',
@@ -65,18 +75,10 @@ describe('MarketStream', () => {
     it('should attempt reconnect on close', () => {
         vi.useFakeTimers();
         stream.start();
+        const ws = MockWebSocket.instances[0];
+        ws.emit('close');
 
-        const closeHandler = mockWs.on.mock.calls.find(call => call[0] === 'close')[1];
-
-        // Trigger close
-        closeHandler();
-
-        // Fast forward time
         vi.advanceTimersByTime(5000);
-
-        // Expect new connection (constructor called again)
-        expect(WebSocket).toHaveBeenCalledTimes(2);
-
-        vi.useRealTimers();
+        expect(MockWebSocket.instances.length).toBe(2);
     });
 });

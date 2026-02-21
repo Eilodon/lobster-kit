@@ -2,8 +2,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ActiveLearning, LEARNING_CONFIG } from '../src/eidolon/ActiveLearning';
 import { DecisionLog, MarketState } from '../src/eidolon/EidolonTypes';
-import { IStorageProvider } from '../src/eidolon/memory/IStorageProvider';
-import { AppendOnlyAdapter } from '../src/eidolon/memory/AppendOnlyAdapter';
+import { IStorageProvider } from '@clawkit/core';
+import { AppendOnlyAdapter } from '@clawkit/core';
 
 // Mock Storage
 const mockStorage = {
@@ -101,8 +101,15 @@ describe('ActiveLearning', () => {
         // ActiveLearning doesn't expose CausalBrain directly, but we can check if it saves back what it loaded
         await newLearning.saveToDisk();
 
-        // It shoud call save with the loaded causal data plus priors
-        expect(mockStorage.save).toHaveBeenCalledWith('active_learning_causal.json', expect.objectContaining(mockCausal));
+        // It should preserve loaded edge counts (probability can be wasm-derived/smoothed).
+        const causalSaveCall = mockStorage.save.mock.calls.find(
+            ([key]) => key === 'active_learning_causal.json'
+        );
+        expect(causalSaveCall).toBeDefined();
+        const savedCausal = causalSaveCall?.[1] as Record<string, { s: number; f: number; p: number }>;
+        expect(savedCausal['WhaleNetFlow->PriceDelta']).toBeDefined();
+        expect(savedCausal['WhaleNetFlow->PriceDelta'].s).toBe(5);
+        expect(savedCausal['WhaleNetFlow->PriceDelta'].f).toBe(0);
     });
 
     it('should provide positive causal confidence bias for BUY in supportive state', () => {

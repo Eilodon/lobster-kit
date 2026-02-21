@@ -2,10 +2,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EidolonGuard } from '../src/eidolon/EidolonGuard';
 import { PublicClient, WalletClient } from 'viem';
-import { EidolonBus, EidolonEventType } from '../src/eidolon/events/EidolonBus';
+import { EidolonBus, EidolonEventType } from '../src/events/EidolonBus';
 
 // Mock WasmAdapter
-vi.mock('../src/eidolon/WasmAdapter', () => {
+vi.mock('../src/WasmAdapter', () => {
     return {
         WasmAdapter: {
             getInstance: () => ({
@@ -40,7 +40,7 @@ vi.mock('../src/eidolon/WasmAdapter', () => {
 });
 
 // Mock GoPlusSecurity
-vi.mock('../src/eidolon/oracles/GoPlusSecurity', () => {
+vi.mock('../src/oracles/GoPlusSecurity', () => {
     return {
         GoPlusSecurity: class {
             checkToken = vi.fn().mockResolvedValue({
@@ -54,7 +54,7 @@ vi.mock('../src/eidolon/oracles/GoPlusSecurity', () => {
 
 
 // Mock MarketStream
-vi.mock('../src/eidolon/sensors/MarketStream', () => ({
+vi.mock('../src/sensors/MarketStream', () => ({
     MarketStream: class {
         start() { }
         subscribe(cb: any) { }
@@ -62,7 +62,7 @@ vi.mock('../src/eidolon/sensors/MarketStream', () => ({
 }));
 
 // Mock ClawOracle
-vi.mock('../src/eidolon/sensors/ClawOracle', () => ({
+vi.mock('../src/sensors/ClawOracle', () => ({
     ClawOracle: class {
         async getBNBPrice() { return 600; }
         async sense() {
@@ -105,6 +105,10 @@ vi.mock('../src/eidolon/ActiveLearning', () => ({
         async init() { }
         async learnFromOutcome(...args: any[]) { return learnFromOutcomeMock(...args); }
         getWeights() { return {}; }
+        reinitWasmGraphs() { }
+        getCausalSignal() {
+            return { confidenceDelta: 0, explanations: [] };
+        }
     }
 }));
 
@@ -158,7 +162,7 @@ vi.mock('../src/eidolon/EmotionalCore', () => ({
 }));
 
 // Mock EidolonSimulator
-vi.mock('../src/eidolon/simulation/EidolonSimulator', () => ({
+vi.mock('../src/simulation/EidolonSimulator', () => ({
     EidolonSimulator: class {
         async simulate(tx: any) {
             // Default: successful simulation
@@ -166,6 +170,14 @@ vi.mock('../src/eidolon/simulation/EidolonSimulator', () => ({
                 success: true,
                 gasUsed: 100000n,
                 logs: []
+            };
+        }
+        async simulateRiskMatrix(tx: any) {
+            return {
+                base: await this.simulate(tx),
+                gasWorstCase: { estimatedGas: 100000n, bufferPct: 30 },
+                footprint: { touchedCount: 2, touchedAddresses: ['0xA', '0xB'] },
+                allPassed: true
             };
         }
     }

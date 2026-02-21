@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EidolonBus, EidolonEventType } from '../src/eidolon/events/EidolonBus';
+import { EidolonBus, EidolonEventType } from '../src/events/EidolonBus';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
 
-// Mock AppendOnlyAdapter to isolate test state
-vi.mock('../src/eidolon/memory/AppendOnlyAdapter', () => {
+// Mock AppendOnlyAdapter while keeping other core exports intact.
+vi.mock('@clawkit/core', async () => {
+    const actual = await vi.importActual<typeof import('@clawkit/core')>('@clawkit/core');
     return {
+        ...actual,
         AppendOnlyAdapter: class {
             async load() { return null; }
             async append() { }
@@ -14,14 +16,6 @@ vi.mock('../src/eidolon/memory/AppendOnlyAdapter', () => {
         }
     };
 });
-
-// Mock dependnecies
-vi.mock('../src/eidolon/memory/GreenfieldAdapter', () => ({
-    GreenfieldAdapter: class {
-        async load() { return null; }
-        async save() { }
-    }
-}));
 
 describe('Reactive Core (Brain Transplant)', () => {
     let bus: EidolonBus;

@@ -1,15 +1,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SecurityModule } from '../src/security';
-import axios from 'axios';
+import { SecurityModule } from '@clawkit/defi-bnb';
 
 // Mock dependencies
 const mockWalletClient = { getAddresses: vi.fn().mockResolvedValue(['0x123']) } as any;
 const mockPublicClient = { readContract: vi.fn(), call: vi.fn() } as any;
 const mockConfig = { rpcUrl: 'https://rpc.opbnb.vip', chainConfig: {} } as any; // Valid config
-
-// Mock axios
-vi.mock('axios');
 
 describe('SecurityModule: Immune Boost (Fail Safe)', () => {
     let security: SecurityModule;
@@ -25,8 +21,12 @@ describe('SecurityModule: Immune Boost (Fail Safe)', () => {
     });
 
     it('should enter degraded probe-only mode when GoPlus API fails', async () => {
-        // Mock API failure
-        (axios.get as any).mockRejectedValue(new Error('Network Error / API Down'));
+        vi.spyOn(security as any, 'checkHoneypotGoPlus').mockRejectedValue(new Error('SECURITY_SCAN_FAILED'));
+        vi.spyOn(security as any, 'checkContractVerification').mockResolvedValue(true);
+        vi.spyOn(security as any, 'checkOwnership').mockResolvedValue(false);
+        vi.spyOn(security as any, 'checkTradingRestrictions').mockResolvedValue([]);
+        vi.spyOn(security as any, 'checkBytecodeSanity').mockResolvedValue(true);
+        vi.spyOn(security as any, 'getGoPlusSecurityData').mockResolvedValue(null);
 
         const result = await security.scanContract('0xTargetContract');
 
@@ -37,19 +37,20 @@ describe('SecurityModule: Immune Boost (Fail Safe)', () => {
     });
 
     it('should return safe result when API succeeds and returns clean data', async () => {
-        // Mock API success (clean token)
-        (axios.get as any).mockResolvedValue({
-            data: { result: { '0xtargetcontract': { is_honeypot: '0' } } }
+        vi.spyOn(security as any, 'checkHoneypotGoPlus').mockResolvedValue(false);
+        vi.spyOn(security as any, 'checkContractVerification').mockResolvedValue(true);
+        vi.spyOn(security as any, 'checkOwnership').mockResolvedValue(false);
+        vi.spyOn(security as any, 'checkTradingRestrictions').mockResolvedValue([]);
+        vi.spyOn(security as any, 'checkBytecodeSanity').mockResolvedValue(true);
+        vi.spyOn(security as any, 'getGoPlusSecurityData').mockResolvedValue({
+            is_high_tax: false,
+            is_blacklisted: false,
+            is_open_source: true,
+            liquidity_locked: true
         });
-
-        // Mock other checks to pass or be skipped
-        // Since other methods are private and called internally, they might fail if not mocked
-        // But scanContract handles exceptions. Wait, checkHoneypotGoPlus handles its exception.
-        // Other checks like verifySourceCode are also called.
-        // We probably need to mock those too or rely on them returning defaults.
-        // For this test, let's assume they might fail but checkHoneypotGoPlus is the focus.
 
         const result = await security.scanContract('0xTargetContract');
         expect(result.isHoneypot).toBe(false);
+        expect(result.degradedMode).toBe(false);
     });
 });

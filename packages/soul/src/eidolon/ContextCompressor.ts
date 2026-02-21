@@ -50,7 +50,7 @@ export class ContextCompressor {
     ): Promise<CompressedContext> {
         const plannedBudget = this.planBudget(targetTokens, modelProfile);
         const keepCount = Math.max(1, preserveRecent);
-        let verbatim = messages.slice(-keepCount);
+        const verbatim = messages.slice(-keepCount);
         const older = messages.slice(0, Math.max(0, messages.length - keepCount));
 
         let verbatimTokens = verbatim.reduce((acc, m) => acc + estimateTokens(m.content), 0);
@@ -270,10 +270,10 @@ export class ContextCompressor {
     }
 
     private tokenize(input: string): Set<string> {
-        const lowered = input.toLowerCase();
+        const lowered = input.normalize('NFC').toLowerCase();
+        // Uses Unicode properties \p{L} for letters and \p{N} for numbers correctly across languages
         const unicodeTokens = lowered.match(/[\p{L}\p{N}_]+/gu);
-        const asciiFallback = lowered.match(/[a-z0-9_]+/g);
-        const tokens = unicodeTokens ?? asciiFallback ?? [];
+        const tokens = unicodeTokens ?? [];
         return new Set(tokens.filter((token) => token.length > 1));
     }
 

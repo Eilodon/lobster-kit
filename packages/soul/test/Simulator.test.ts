@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EidolonSimulator, ShadowTransaction } from '../src/eidolon/simulation/EidolonSimulator';
-import { ClawKit } from '../src/index';
+import { EidolonSimulator, ShadowTransaction } from '../src/simulation/EidolonSimulator';
 
 // Mock ClawKit and PublicClient
 const mockCall = vi.fn();
@@ -13,7 +12,7 @@ const mockKit = {
         estimateGas: mockEstimateGas,
         createAccessList: mockCreateAccessList
     }
-} as any as ClawKit;
+} as any;
 
 describe('EidolonSimulator: Hardening Body', () => {
     let simulator: EidolonSimulator;

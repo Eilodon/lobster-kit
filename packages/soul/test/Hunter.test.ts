@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeFiModule } from '../src/defi';
-import { ClawKitConfig } from '../src/types';
+import { DeFiModule } from '@clawkit/defi-bnb';
+import { ClawKitConfig } from '@clawkit/defi-bnb';
 import { parseEther } from 'viem';
 
 // Mock dependencies
@@ -77,7 +77,7 @@ describe('DeFiModule: Hunter Upgrade', () => {
         mockPublicClient.getGasPrice.mockResolvedValue(parseEther('0.000000001')); // 1 Gwei
         mockPublicClient.estimateGas.mockResolvedValue(1000000n); // 0.001 BNB cost
 
-        const params = { from: 'BNB', to: 'USDT', amount: '1.0' };
+        const params = { from: 'BNB', to: 'USDT', amount: '1.0', force: true };
 
         await expect(defi.swap(params)).resolves.toEqual(expect.objectContaining({ hash: '0x7ce087095034a02095f9c1df5c3285741f23594000305417ab4d63339ed9f572' }));
     });
@@ -90,7 +90,7 @@ describe('DeFiModule: Hunter Upgrade', () => {
         // Setup Simulation Failure
         mockPublicClient.call.mockRejectedValue(new Error('Execution Reverted: Slippage'));
 
-        const params = { from: 'BNB', to: 'USDT', amount: '1.0' };
+        const params = { from: 'BNB', to: 'USDT', amount: '1.0', force: true };
 
         await expect(defi.swap(params)).rejects.toThrow(/Simulation failed/);
     });

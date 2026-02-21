@@ -1,17 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { CausalBrain, CausalEdge } from '../src/eidolon/ai/CausalBrain';
+import { afterAll, describe, it, expect, beforeEach } from 'vitest';
+import { CausalBrain, CausalEdge } from '../src/ai/CausalBrain';
 
 describe('CausalBrain (Synaptic Plasticity)', () => {
     let brain: CausalBrain;
+    const originalCausalRust = process.env.EIDOLON_CAUSAL_RUST;
 
     beforeEach(() => {
+        process.env.EIDOLON_CAUSAL_RUST = '0';
         brain = new CausalBrain();
     });
 
     it('should load priors correctly', () => {
         const pred = brain.getPrediction('WhaleNetFlow', 'PriceDelta');
         expect(pred.prob).toBeGreaterThan(0.8); // 85/100 = 0.85
-        expect(pred.confidence).toBeGreaterThan(0.5);
+        expect(pred.confidence).toBe(0.5);
     });
 
     it('should learn from new experience', () => {
@@ -27,7 +29,7 @@ describe('CausalBrain (Synaptic Plasticity)', () => {
 
         const learned = brain.getPrediction('VolumeSpike', 'Volatility');
         expect(learned.prob).toBe(1.0); // 10 successes, 0 failures
-        expect(learned.confidence).toBe(0.5); // 10/20 samples
+        expect(learned.confidence).toBeCloseTo(10 / 110, 6); // n / (n + 100)
     });
 
     it('should adjust probability on failure', () => {
@@ -48,5 +50,13 @@ describe('CausalBrain (Synaptic Plasticity)', () => {
         const map = brain.getSynapticMap();
         expect(map['WhaleNetFlow->PriceDelta']).toBeDefined();
         expect(map['WhaleNetFlow->PriceDelta'].p).toBe(0.85);
+    });
+
+    afterAll(() => {
+        if (originalCausalRust === undefined) {
+            delete process.env.EIDOLON_CAUSAL_RUST;
+            return;
+        }
+        process.env.EIDOLON_CAUSAL_RUST = originalCausalRust;
     });
 });

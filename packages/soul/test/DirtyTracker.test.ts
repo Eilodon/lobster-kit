@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DirtyComponentMask, DirtyMask, DirtyTracker } from '../src/eidolon/swarm/DirtyTracker';
+import { DirtyComponentMask, DirtyMask, DirtyTracker } from '@clawkit/core';
 
 describe('DirtyTracker', () => {
     it('should mark and query dirty peers by mask', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeepSeekOracle } from '../src/eidolon/ai/DeepSeekOracle';
-import { MarketContext } from '../src/eidolon/ai/IOracle';
+import { DeepSeekOracle } from '../src/ai/DeepSeekOracle';
+import { MarketContext } from '../src/ai/IOracle';
 import { ReasoningWeights } from '../src/eidolon/EidolonTypes';
 
 // Mock global fetch

@@ -41,6 +41,9 @@ impl HyperMemory {
         if vector.len() != self.dimension {
             return Err(JsValue::from_str("Vector dimension mismatch"));
         }
+        // Intentionally do not normalize on insert.
+        // Search uses cosine similarity and computes per-vector norms on demand,
+        // so callers may store raw feature vectors without mutating source scale.
 
         if let Some(&idx) = self.index_by_id.get(&id) {
             let start = idx * self.dimension;
