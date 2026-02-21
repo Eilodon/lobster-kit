@@ -55,8 +55,7 @@ class LearnedPolicy {
 
     private getOrCreateGraph(userId: string): CausalGraph {
         if (!this.userGraphs.has(userId)) {
-            // @ts-ignore - The WASM instance exposes CausalGraph as a constructor
-            this.userGraphs.set(userId, new this.wasmAdapter.wasm!.CausalGraph());
+            this.userGraphs.set(userId, this.wasmAdapter.createCausalGraph());
         }
         return this.userGraphs.get(userId)!;
     }
@@ -137,26 +136,69 @@ export class MetaCognitiveOrchestrator {
      * Executes the keyword-based TF-IDF tool recommendation (replicated from MCP logic).
      */
     private recommendTool(message: string): { tool: string, score: number } {
-        const keywords: Array<[string, string]> = [
-            ["user", "clawkit_recall_user"], ["user", "clawkit_update_user"],
-            ["profile", "clawkit_recall_user"], ["profile", "clawkit_update_user"],
-            ["memory", "clawkit_memory_query"], ["remember", "clawkit_memory_query"],
-            ["compress", "clawkit_compress_context"], ["summarize", "clawkit_compress_context"],
-            ["similar", "clawkit_recall_similar"], ["context", "clawkit_recall_similar"],
-            ["reason", "clawkit_reason_chain"], ["think", "clawkit_reason_chain"], ["logic", "clawkit_reason_chain"],
-            ["simulate", "clawkit_simulate_response"], ["test", "clawkit_simulate_response"],
-            ["pattern", "clawkit_check_pattern"], ["pattern", "clawkit_commit_pattern"],
-            ["outcome", "clawkit_record_outcome"], ["learn", "clawkit_record_outcome"],
-            ["dream", "clawkit_dream_conversation"], ["sleep", "clawkit_dream_conversation"],
-            ["swarm", "clawkit_orchestrate"], ["agents", "clawkit_orchestrate"],
+        const keywords: Array<{ kw: string, tool: string, weight: number }> = [
+            // User Data
+            { kw: "user", tool: "clawkit_recall_user", weight: 0.3 },
+            { kw: "profile", tool: "clawkit_recall_user", weight: 0.3 },
+            { kw: "who am i", tool: "clawkit_recall_user", weight: 0.8 },
+            { kw: "update", tool: "clawkit_update_user", weight: 0.7 },
+            { kw: "save", tool: "clawkit_update_user", weight: 0.5 },
+            { kw: "set preference", tool: "clawkit_update_user", weight: 0.8 },
+            { kw: "user", tool: "clawkit_update_user", weight: 0.2 },
+            { kw: "profile", tool: "clawkit_update_user", weight: 0.2 },
+
+            // Memory
+            { kw: "memory", tool: "clawkit_memory_query", weight: 0.5 },
+            { kw: "remember", tool: "clawkit_memory_query", weight: 0.6 },
+            { kw: "search", tool: "clawkit_memory_query", weight: 0.4 },
+
+            // Context
+            { kw: "compress", tool: "clawkit_compress_context", weight: 0.8 },
+            { kw: "summarize", tool: "clawkit_compress_context", weight: 0.6 },
+            { kw: "too long", tool: "clawkit_compress_context", weight: 0.5 },
+
+            { kw: "similar", tool: "clawkit_recall_similar", weight: 0.6 },
+            { kw: "context", tool: "clawkit_recall_similar", weight: 0.4 },
+            { kw: "related", tool: "clawkit_recall_similar", weight: 0.5 },
+
+            // Reasoning / Simulation
+            { kw: "reason", tool: "clawkit_reason_chain", weight: 0.6 },
+            { kw: "think", tool: "clawkit_reason_chain", weight: 0.6 },
+            { kw: "logic", tool: "clawkit_reason_chain", weight: 0.5 },
+            { kw: "plan", tool: "clawkit_reason_chain", weight: 0.6 },
+
+            { kw: "simulate", tool: "clawkit_simulate_response", weight: 0.8 },
+            { kw: "test", tool: "clawkit_simulate_response", weight: 0.5 },
+            { kw: "what if", tool: "clawkit_simulate_response", weight: 0.7 },
+
+            // Patterns / Learning
+            { kw: "pattern", tool: "clawkit_check_pattern", weight: 0.5 },
+            { kw: "behavior", tool: "clawkit_check_pattern", weight: 0.4 },
+            { kw: "check", tool: "clawkit_check_pattern", weight: 0.3 },
+
+            { kw: "commit", tool: "clawkit_commit_pattern", weight: 0.8 },
+            { kw: "learn", tool: "clawkit_commit_pattern", weight: 0.6 },
+            { kw: "pattern", tool: "clawkit_commit_pattern", weight: 0.3 },
+
+            { kw: "outcome", tool: "clawkit_record_outcome", weight: 0.7 },
+            { kw: "result", tool: "clawkit_record_outcome", weight: 0.5 },
+
+            // Swarm / Dreams
+            { kw: "dream", tool: "clawkit_dream_conversation", weight: 0.8 },
+            { kw: "sleep", tool: "clawkit_dream_conversation", weight: 0.8 },
+            { kw: "consolidate", tool: "clawkit_dream_conversation", weight: 0.7 },
+
+            { kw: "swarm", tool: "clawkit_orchestrate", weight: 0.8 },
+            { kw: "agents", tool: "clawkit_orchestrate", weight: 0.7 },
+            { kw: "orchestrate", tool: "clawkit_orchestrate", weight: 0.9 },
         ];
 
         const msgLower = message.toLowerCase();
         const scores = new Map<string, number>();
 
-        for (const [kw, tool] of keywords) {
+        for (const { kw, tool, weight } of keywords) {
             if (msgLower.includes(kw)) {
-                scores.set(tool, (scores.get(tool) || 0) + 0.33);
+                scores.set(tool, (scores.get(tool) || 0) + weight);
             }
         }
 
