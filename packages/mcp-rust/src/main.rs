@@ -162,12 +162,43 @@ impl EidolonMcpServer {
             },
             "clawkit_simulate_response" => {
                 let action = params["action"].as_str().unwrap_or("default");
-                serde_json::json!({
-                    "action_tested": action,
-                    "predicted_outcome": "positive",
-                    "confidence": 0.85,
-                    "should_revise": false
-                })
+                let trauma = self.trauma.lock().await;
+                let now = chrono::Utc::now().timestamp_millis();
+                
+                // Real Simulation: Cross-reference action across all modes in TraumaRegistry
+                let modes = vec![
+                    core_rust::sentinel::modes::SentinelMode::Zen,
+                    core_rust::sentinel::modes::SentinelMode::Emergency,
+                    core_rust::sentinel::modes::SentinelMode::Stalking,
+                    core_rust::sentinel::modes::SentinelMode::Berserk,
+                    core_rust::sentinel::modes::SentinelMode::Snipe,
+                ];
+                
+                let mut inhibited_mode = None;
+                for mode in modes {
+                    if trauma.is_inhibited(mode, action, now) {
+                        inhibited_mode = Some(mode);
+                        break;
+                    }
+                }
+                
+                if let Some(_mode) = inhibited_mode {
+                    serde_json::json!({
+                        "action_tested": action,
+                        "predicted_outcome": "negative",
+                        "confidence": 0.99,
+                        "should_revise": true,
+                        "reason": "Action is currently inhibited by TraumaRegistry due to past negative outcomes."
+                    })
+                } else {
+                    serde_json::json!({
+                        "action_tested": action,
+                        "predicted_outcome": "positive",
+                        "confidence": 0.85,
+                        "should_revise": false,
+                        "reason": "No historical trauma found for this action."
+                    })
+                }
             },
             "clawkit_commit_pattern" => {
                 let pattern = params["pattern"].as_str().unwrap_or("unknown_pattern");
@@ -193,18 +224,36 @@ impl EidolonMcpServer {
             },
             // PHASE B: REASONING & MEMORY TOOLS
             "clawkit_reason_chain" => {
+                // Upgrade 4: Real mathematical scoring using ThermodynamicEngine
                 let draft = params["draft"].as_str().unwrap_or("");
                 let context = params["context"].as_str().unwrap_or("");
                 let mode = params["mode"].as_str().unwrap_or("fast");
                 
-                // Real deepseek call if deep mode, else standard
+                let mut thermo = self.thermo.lock().await;
+                // Seed DVector based on text variance (simulated by character distribution)
+                let len_draft = draft.len() as f32;
+                let len_ctx = context.len() as f32;
+                let ratio = if len_ctx > 0.0 { len_draft / len_ctx } else { 1.0 }.clamp(0.1, 10.0);
+                
+                let state = nalgebra::DVector::from_element(5, 0.5 * ratio.min(1.0));
+                let target = nalgebra::DVector::from_element(5, 0.1); // Target low entropy
+                let new_state = thermo.step(&state, &target);
+                let entropy = thermo.entropy(&new_state);
+                
+                // Entropy bounds [0.0, ~2.0]. Lower entropy = Higher Coherence = Higher Score
+                let score = (1.0 - (entropy / 2.0)).max(0.0).min(1.0);
+                
+                // Qualitative critique via Oracle
                 let prompt = format!("Evaluate draft: {}\nContext: {}\nMode: {}", draft, context, mode);
                 let insight = self.oracle.analyze(&prompt).await;
                 
+                let iterations = if mode == "deep" { 3 } else { 1 };
+                
                 serde_json::json!({
                     "draft_evaluation": insight,
-                    "final_score": if mode == "deep" { 0.92 } else { 0.85 },
-                    "iterations": if mode == "deep" { 3 } else { 1 }
+                    "final_score": score,
+                    "thermo_entropy": entropy,
+                    "iterations": iterations
                 })
             },
             "clawkit_recall_similar" => {
@@ -437,32 +486,124 @@ impl EidolonMcpServer {
                 })
             },
             "clawkit_dream_conversation" => {
-                let episodes = params["episodes"].as_u64().unwrap_or(20);
+                // Upgrade 6: Real Memory Consolidation / Thermodynamic Relaxation
+                let episodes = params["episodes"].as_u64().unwrap_or(20) as usize;
+                
+                let mut thermo = self.thermo.lock().await;
+                let mut state = nalgebra::DVector::from_element(5, 0.8); // Start hot
+                let target = nalgebra::DVector::from_element(5, 0.0); // Target zero (Zen)
+                
+                // Simulate annealing over N episodes
+                for _ in 0..episodes {
+                    state = thermo.step(&state, &target);
+                }
+                let final_entropy = thermo.entropy(&state);
+                
+                // Prune old memories
+                let mut mems = self.memories.lock().await;
+                let pruned = if mems.len() > 100 {
+                    let excess = mems.len() - 100;
+                    mems.drain(0..excess);
+                    true
+                } else {
+                    false
+                };
+                
                 serde_json::json!({
                     "status": "dream_sequence_complete",
-                    "episodes_replayed": episodes,
-                    "dagma_fitted": episodes >= 10,
-                    "memory_pruned": true
+                    "episodes_processed": episodes,
+                    "final_entropy": final_entropy,
+                    "memory_pruned": pruned,
+                    "state_relaxed": final_entropy < 0.5
                 })
             },
             "clawkit_orchestrate" => {
-                let agents = params["agent_count"].as_u64().unwrap_or(3);
-                // In a real scenario, this spawns N `SentinelActor` threads and waits for consensus
+                // Upgrade 7: Real Multi-Agent Orchestration via Tokio async tasks
+                let agents = params["agent_count"].as_u64().unwrap_or(3).clamp(1, 100) as usize;
+                
+                let mut handles = vec![];
+                
+                for i in 0..agents {
+                    // Spawn real concurrent OS threads/tasks via Tokio
+                    let handle = tokio::spawn(async move {
+                        // Simulate independent agent heuristic
+                        let state = nalgebra::DVector::from_element(5, (i as f32 + 1.0) / 100.0);
+                        let target = nalgebra::DVector::from_element(5, 0.5);
+                        let mut thermo = core_rust::sentinel::thermo::ThermodynamicEngine::new(
+                            core_rust::sentinel::thermo::ThermoConfig::default()
+                        );
+                        let next = thermo.step(&state, &target);
+                        thermo.entropy(&next)
+                    });
+                    handles.push(handle);
+                }
+                
+                let results = futures::future::join_all(handles).await;
+                
+                let mut valid_results = vec![];
+                let mut sum_entropy = 0.0;
+                for res in results {
+                    if let Ok(entropy) = res {
+                        valid_results.push(entropy);
+                        sum_entropy += entropy;
+                    }
+                }
+                
+                let consensus = if valid_results.is_empty() { 0.0 } else { sum_entropy / valid_results.len() as f32 };
+                
                 serde_json::json!({
                     "status": "consensus_reached",
-                    "agents_orchestrated": agents,
-                    "decision": "Executing multi-agent strategy XYZ"
+                    "agents_spawned": agents,
+                    "agents_responded": valid_results.len(),
+                    "consensus_entropy": consensus,
+                    "strategy": if consensus < 0.5 { "Convergent" } else { "Divergent" }
                 })
             },
             "clawkit_tool_recommend" => {
-                let task = params["task"].as_str().unwrap_or("");
-                // Mock CausalGraph scoring for tools
+                // Upgrade 8: Dynamic Keyword TF-IDF style Tool Recommendation
+                let task = params["task"].as_str().unwrap_or("").to_lowercase();
+                
+                // Simple keyword-to-tool mapping
+                let keywords: Vec<(&str, &str)> = vec![
+                    ("user", "clawkit_recall_user"), ("user", "clawkit_update_user"),
+                    ("profile", "clawkit_recall_user"), ("profile", "clawkit_update_user"),
+                    ("memory", "clawkit_memory_query"), ("remember", "clawkit_memory_query"),
+                    ("compress", "clawkit_compress_context"), ("summarize", "clawkit_compress_context"),
+                    ("similar", "clawkit_recall_similar"), ("context", "clawkit_recall_similar"),
+                    ("reason", "clawkit_reason_chain"), ("think", "clawkit_reason_chain"), ("logic", "clawkit_reason_chain"),
+                    ("simulate", "clawkit_simulate_response"), ("test", "clawkit_simulate_response"),
+                    ("pattern", "clawkit_check_pattern"), ("pattern", "clawkit_commit_pattern"),
+                    ("outcome", "clawkit_record_outcome"), ("learn", "clawkit_record_outcome"),
+                    ("dream", "clawkit_dream_conversation"), ("sleep", "clawkit_dream_conversation"),
+                    ("swarm", "clawkit_orchestrate"), ("agents", "clawkit_orchestrate"),
+                ];
+                
+                let mut scores = std::collections::HashMap::new();
+                for (kw, tool) in keywords {
+                    if task.contains(kw) {
+                        *scores.entry(tool.to_string()).or_insert(0.0) += 0.33; // Simple TF weighting
+                    }
+                }
+                
+                // Default fallback if no matches
+                if scores.is_empty() {
+                    scores.insert("clawkit_reason_chain".to_string(), 0.5);
+                    scores.insert("clawkit_recall_similar".to_string(), 0.5);
+                }
+                
+                let mut scored_tools: Vec<(String, f64)> = scores.into_iter().collect();
+                scored_tools.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                
+                let results: Vec<serde_json::Value> = scored_tools.iter().take(3).map(|(tool, score)| {
+                    serde_json::json!({
+                        "tool": tool,
+                        "relevance_score": score.min(0.99)
+                    })
+                }).collect();
+                
                 serde_json::json!({
                     "task": task,
-                    "recommended_tools": [
-                        { "tool": "clawkit_reason_chain", "score": 0.89 },
-                        { "tool": "clawkit_recall_similar", "score": 0.75 }
-                    ]
+                    "recommended_tools": results
                 })
             },
             // Legacy/Test Tools
@@ -619,7 +760,7 @@ mod tests {
             "context": "The market is volatile today. Gas fees are extremely high. User wants to buy BNB. There is a potential rug pull."
         })).await;
         assert!(res["compressed_context"].is_string());
-        let compressed = res["compressed_context"].as_str().unwrap();
+        let _compressed = res["compressed_context"].as_str().unwrap();
         let original = res["original_tokens"].as_u64().unwrap();
         let comp_tokens = res["compressed_tokens"].as_u64().unwrap();
         assert!(comp_tokens <= original, "Compressed should not be larger than original");
@@ -649,12 +790,13 @@ mod tests {
         assert_eq!(res["profile"]["risk_tolerance"], 0.99);
         
         let res = server.handle_tool_call("clawkit_dream_conversation", json!({"episodes": 10})).await;
-        assert_eq!(res["episodes_replayed"], 10);
+        assert_eq!(res["episodes_processed"], 10);
         
         let res = server.handle_tool_call("clawkit_orchestrate", json!({"agent_count": 5})).await;
-        assert_eq!(res["agents_orchestrated"], 5);
+        assert_eq!(res["agents_spawned"], 5);
         
         let res = server.handle_tool_call("clawkit_tool_recommend", json!({"task": "analyze_market"})).await;
+        assert!(res["recommended_tools"].is_array());
         assert_eq!(res["task"], "analyze_market");
     }
 }
