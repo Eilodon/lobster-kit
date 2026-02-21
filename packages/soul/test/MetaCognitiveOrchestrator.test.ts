@@ -4,10 +4,14 @@ import { WasmAdapter } from '../src/WasmAdapter';
 import type { IOracle } from '../src/ai/IOracle';
 
 // Mock Oracle
-const mockOracle: IOracle = {
-    ask: vi.fn(),
+const mockOracle = {
+    analyze: vi.fn(),
     embed: vi.fn(),
-};
+    interpretConversation: vi.fn(),
+    counterfactual: vi.fn(),
+    getName: vi.fn().mockReturnValue('MockOracle'),
+    extractCausalHypothesis: vi.fn(),
+} as unknown as IOracle;
 
 describe('MetaCognitiveOrchestrator HOTL-Native Integration', () => {
     let orchestrator: MetaCognitiveOrchestrator;
