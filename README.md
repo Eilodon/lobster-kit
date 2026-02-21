@@ -1,4 +1,4 @@
-# 🦞 ClawKit V4: The Singularity (Hybrid MCP Architecture)
+# 🦞 ClawKit V4: The Exocortex (Infrastructure for AI Agents)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://github.com/Eilodon/lobster-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/Eilodon/lobster-kit/actions)
@@ -6,18 +6,17 @@
 [![Rust Native](https://img.shields.io/badge/Rust-Native%20Core-orange.svg)](https://www.rust-lang.org/)
 [![BNB Chain](https://img.shields.io/badge/BNB%20Chain-OpBNB-yellow)](https://opbnb.bnbchain.org/)
 
-> **"Why pay for LLM inference when 90% of requests can be handled deterministically?"**
+> **"You provide the Brain (LLM). We provide the Sub-Brain & Instincts."**
 
-**ClawKit V4** is not just a DeFi SDK. It is the **90% Cost Reduction Architecture**—a Hybrid Neuro-Symbolic MCP (Model Context Protocol) Server built in pure Rust.
+**ClawKit V4** is not an AI. It does not replace LLMs. **ClawKit is the Infrastructure (Sub-Brain) FOR AI Agents.** 
 
-We intercept the bloat of modern AI Agents. Instead of forcing expensive, high-latency LLMs (GPT-4, Claude) to do basic math, guardrail checking, and memory retrieval, ClawKit handles deterministic chores in **Local Rust (0-4ms, $0 cost)**. Your AI only wakes up for what it does best: True generative reasoning.
+By implementing the Model Context Protocol (MCP) in pure Rust, ClawKit acts as a high-speed, zero-cost **Exocortex**. We allow generic AI agents (Claude, ChatGPT, AutoGPT—our End Users) to offload deterministic chores (Memory lookups, Math, Safety Guardrails) so they can focus entirely on what they do best: generative inference.
 
 ---
 
-## 🧠 The Hybrid Value Proposition
+## 🧠 The 90% Cost Reduction Architecture
 
-Most AI agents waste money sending deterministic queries to expensive LLMs (The "Apples to Oranges" fallacy).
-ClawKit V4 solves the **Economic & Latency Argument**:
+Most Agent developers waste money forcing expensive, high-latency LLMs to do basic math or fetch data. ClawKit solves the **Economic & Latency Argument**:
 
 1. **Memory Lookups:** LLM takes 700ms and hallucinate user states. ClawKit uses `LiquidBrain` (Vector/Thermodynamic) taking **4ms** to extract exactly what's needed.
 2. **Safety & Guardrails:** Prompting an LLM to "act safe" costs $ and takes 130ms. ClawKit's `TraumaRegistry` uses Hash Map O(1) lookups taking **1ms**. Unbreakable.
