@@ -305,3 +305,76 @@ async fn main() {
     
     server.run_stdio().await;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // Helper function to setup the server
+    fn setup_server() -> EidolonMcpServer {
+        let oracle = DeepSeekOracle::new("dummy".to_string());
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+        EidolonMcpServer::new(oracle, tx)
+    }
+
+    #[tokio::test]
+    async fn test_phase_a_core_loop() {
+        let server = setup_server();
+        
+        let res = server.handle_tool_call("clawkit_recall_user", json!({"user_id": "u123"})).await;
+        assert_eq!(res["user_id"], "u123");
+        assert_eq!(res["status"], "success");
+
+        let res = server.handle_tool_call("clawkit_sense_intent", json!({})).await;
+        assert_eq!(res["success"], true);
+        assert_eq!(res["recommended_mode"], "Peer");
+
+        let res = server.handle_tool_call("clawkit_check_pattern", json!({"pattern": "greetings", "mode": "Peer"})).await;
+        assert_eq!(res["pattern"], "greetings");
+        assert_eq!(res["inhibited"], false);
+
+        let res = server.handle_tool_call("clawkit_simulate_response", json!({"action": "ask_why"})).await;
+        assert_eq!(res["action_tested"], "ask_why");
+        assert_eq!(res["predicted_outcome"], "positive");
+
+        let res = server.handle_tool_call("clawkit_commit_pattern", json!({"pattern": "greetings"})).await;
+        assert_eq!(res["status"], "committed");
+    }
+
+    #[tokio::test]
+    async fn test_phase_b_reasoning_memory() {
+        let server = setup_server();
+        
+        let res = server.handle_tool_call("clawkit_recall_similar", json!({"context": "hello", "k": 2})).await;
+        assert!(res["matches"].is_array());
+        
+        let res = server.handle_tool_call("clawkit_memory_query", json!({"query": "risk level"})).await;
+        assert_eq!(res["query"], "risk level");
+        
+        let res = server.handle_tool_call("clawkit_compress_context", json!({"target_tokens": 500})).await;
+        assert!(res["compressed_context"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_phase_c_learning_orchestration() {
+        let server = setup_server();
+        
+        let res = server.handle_tool_call("clawkit_record_outcome", json!({
+            "pattern": "test_pattern", "mode": "Peer", "severity": 0.0
+        })).await;
+        assert_eq!(res["status"], "outcome_recorded");
+        
+        let res = server.handle_tool_call("clawkit_update_user", json!({"user_id": "u123"})).await;
+        assert_eq!(res["user_id"], "u123");
+        
+        let res = server.handle_tool_call("clawkit_dream_conversation", json!({"episodes": 10})).await;
+        assert_eq!(res["episodes_replayed"], 10);
+        
+        let res = server.handle_tool_call("clawkit_orchestrate", json!({"agent_count": 5})).await;
+        assert_eq!(res["agents_orchestrated"], 5);
+        
+        let res = server.handle_tool_call("clawkit_tool_recommend", json!({"task": "analyze_market"})).await;
+        assert_eq!(res["task"], "analyze_market");
+    }
+}
