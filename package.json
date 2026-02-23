@@ -20,6 +20,7 @@
     "mcp:preflight:staging": "node scripts/mcp-rollout-preflight.mjs --profile staging",
     "mcp:preflight:production": "node scripts/mcp-rollout-preflight.mjs --profile production",
     "mcp:telemetry:report": "node scripts/mcp-telemetry-report.mjs",
+    "mcp:replay:ab": "node scripts/replay2-ab-benchmark.mjs",
     "mcp:phase-gate": "node scripts/runtime-phase-gate.mjs",
     "docker:build": "docker build -f packages/mcp/Dockerfile -t clawkit/mcp-server .",
     "sync:integration-mirrors": "node scripts/sync-integration-mirrors.mjs",
