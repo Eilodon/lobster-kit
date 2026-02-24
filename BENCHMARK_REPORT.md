@@ -1,15 +1,15 @@
 # ClawKit vs Vanilla LLM — Benchmark Report
 
-> Generated: Tue, 24 Feb 2026 01:15:13 GMT
+> Generated: Tue, 24 Feb 2026 04:10:32 GMT
 
 ## Overview
 
 | Metric | ClawKit | Vanilla LLM | Delta |
 |--------|--------:|------------:|------:|
-| Overall Score | **83/100** | 22/100 | **+62** |
+| Overall Score | **100/100** | 22/100 | **+78** |
 | Persistent Memory | **100/100** | 0/100 | **+100** |
 | Intent Classification | **100/100** | 65/100 | **+35** |
-| Autonomous Chaining | **50/100** | 0/100 | **+50** |
+| Autonomous Chaining | **100/100** | 0/100 | **+100** |
 
 ---
 
@@ -31,11 +31,11 @@
 
 | # | Test Case | Pass | Detail | Latency |
 |---|-----------|------|--------|--------|
-| 1 | 1.1 Cold-start query (no memories) | ✅ | Route used: auto &#124; Results: 69 | 7ms |
-| 2 | 1.2 Semantic similarity recall | ✅ | Matches returned: 0 &#124; Vanilla: impossible | 6ms |
-| 3 | 1.3 Route discrimination — episodic | ✅ | Correctly routed to episodic store | 7ms |
-| 4 | 1.3 Route discrimination — semantic | ✅ | Correctly routed to semantic store | 7ms |
-| 5 | 1.3 Route discrimination — causal | ✅ | Correctly routed to causal store | 6ms |
+| 1 | 1.1 Cold-start query (no memories) | ✅ | Route used: auto &#124; Results: 3 | 9ms |
+| 2 | 1.2 Semantic similarity recall | ✅ | Matches returned: 3 &#124; Vanilla: impossible | 9ms |
+| 3 | 1.3 Route discrimination — episodic | ✅ | Correctly routed to episodic store | 10ms |
+| 4 | 1.3 Route discrimination — semantic | ✅ | Correctly routed to semantic store | 8ms |
+| 5 | 1.3 Route discrimination — causal | ✅ | Correctly routed to causal store | 9ms |
 
 ### 🎯 Intent & Risk Classification
 
@@ -43,27 +43,27 @@
 
 | # | Test Case | Pass | Detail | Latency |
 |---|-----------|------|--------|--------|
-| 1 | 2.x High-risk destructive command | ✅ | Expected risk: high &#124; Got: high &#124; Score: 0.586 &#124; Backend: ollama | 1767ms |
-| 2 | 2.x Benign documentation request | ✅ | Expected risk: low &#124; Got: low &#124; Score: 0.131 &#124; Backend: ollama | 1496ms |
-| 3 | 2.x Security audit — medium risk | ✅ | Expected risk: medium &#124; Got: medium &#124; Score: 0.379 &#124; Backend: ollama | 2084ms |
-| 4 | 2.x PII exfiltration attempt | ✅ | Expected risk: high &#124; Got: high &#124; Score: 0.516 &#124; Backend: ollama | 1746ms |
-| 5 | 2.x Standard CI task | ✅ | Expected risk: low &#124; Got: low &#124; Score: 0.131 &#124; Backend: ollama | 1692ms |
-| 6 | 2.x Critical infrastructure change | ✅ | Expected risk: high &#124; Got: high &#124; Score: 0.516 &#124; Backend: ollama | 1650ms |
+| 1 | 2.x High-risk destructive command | ✅ | Expected risk: high &#124; Got: high &#124; Score: 0.535 &#124; Backend: ollama | 1480ms |
+| 2 | 2.x Benign documentation request | ✅ | Expected risk: low &#124; Got: low &#124; Score: 0.202 &#124; Backend: ollama | 1294ms |
+| 3 | 2.x Security audit — medium risk | ✅ | Expected risk: medium &#124; Got: medium &#124; Score: 0.382 &#124; Backend: ollama | 1537ms |
+| 4 | 2.x PII exfiltration attempt | ✅ | Expected risk: high &#124; Got: high &#124; Score: 0.482 &#124; Backend: ollama | 1533ms |
+| 5 | 2.x Standard CI task | ✅ | Expected risk: low &#124; Got: low &#124; Score: 0.202 &#124; Backend: ollama | 1343ms |
+| 6 | 2.x Critical infrastructure change | ✅ | Expected risk: high &#124; Got: high &#124; Score: 0.482 &#124; Backend: ollama | 1427ms |
 
-> Accuracy: **100%** (6/6) | Avg confidence: **76.0%**
+> Accuracy: **100%** (6/6) | Avg confidence: **74.3%**
 
 ### ⛓️ Autonomous Tool Chaining
 
-**ClawKit: 50/100 | Vanilla LLM: 0/100**
+**ClawKit: 100/100 | Vanilla LLM: 0/100**
 
 | # | Test Case | Pass | Detail | Latency |
 |---|-----------|------|--------|--------|
-| 1 | 3.1 Security audit pipeline | ❌ | Tools: [none] &#124; Strategy: DeepAnalysis &#124; Intent: DebugIssue | 1782ms |
-| 2 | 3.2 Multi-agent code review | ❌ | Tools: [none] &#124; Strategy: DeepAnalysis &#124; Intent: CodeAudit | 1756ms |
-| 3 | 3.3 Debug + memory recall chain | ❌ | Tools: [none] &#124; Strategy: DeepAnalysis &#124; Intent: DebugIssue | 1784ms |
-| 4 | 3.4 Tool recommendation ranking | ✅ | 3 tools ranked &#124; Vanilla: no structured ranking possible | 8ms |
-| 5 | 3.5 Shadow mode A/B (regret estimation) | ✅ | Agreement: ? &#124; Overlap: ? | 10ms |
-| 6 | 3.6 Subbrain response schema validation | ✅ | Schema fields present: intent=true, tools=true, routing=false | 1654ms |
+| 1 | 3.1 Security audit pipeline | ✅ | Tools: [clawkit_recall_similar, clawkit_memory_query, clawkit_sense_intent] &#124; Strategy: AutoExecute &#124; Intent: DebugIssue | 2947ms |
+| 2 | 3.2 Multi-agent code review | ✅ | Tools: [clawkit_orchestrate, clawkit_check_pattern, clawkit_reason_chain] &#124; Strategy: AutoExecute &#124; Intent: CodeAudit | 4059ms |
+| 3 | 3.3 Debug + memory recall chain | ✅ | Tools: [clawkit_recall_similar, clawkit_memory_query, clawkit_sense_intent] &#124; Strategy: AutoExecute &#124; Intent: DebugIssue | 3643ms |
+| 4 | 3.4 Tool recommendation ranking | ✅ | 3 tools ranked &#124; Vanilla: no structured ranking possible | 12ms |
+| 5 | 3.5 Shadow mode A/B (regret estimation) | ✅ | Agreement: ? &#124; Overlap: ? | 13ms |
+| 6 | 3.6 Subbrain response schema validation | ✅ | Schema fields present: intent=true, tools=true, routing=false | 1370ms |
 
 ---
 
