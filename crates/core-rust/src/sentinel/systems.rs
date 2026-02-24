@@ -1,8 +1,6 @@
 use crate::sentinel::variables::SentinelVariable;
 use crate::sentinel::modes::SentinelMode;
 use crate::sentinel::causal::CausalGraph;
-use tokio::sync::mpsc;
-use wasm_bindgen::prelude::*;
 
 // Define types that can be exposed if needed, or keep them internal.
 #[derive(Debug, Clone)]

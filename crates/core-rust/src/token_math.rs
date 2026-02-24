@@ -9,10 +9,10 @@ pub mod q64_96;
 pub use q64_96::Q64_96;
 
 /// Decimals constant for most crypto tokens (18 decimals)
-const DECIMALS_18: u64 = 1_000_000_000_000_000_000;
+
 
 /// Decimals for stablecoins (6 decimals - USDC/USDT)
-const DECIMALS_6: u64 = 1_000_000;
+
 
 // ============================================
 // Fixed-Point Token Amount (128-bit)

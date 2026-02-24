@@ -2,7 +2,7 @@ use crate::EidolonMcpServer;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use wasmtime::{Config, Engine, Module, Store, Func};
+use wasmtime::{Config, Engine, Module, Store};
 
 #[derive(Clone)]
 pub struct WasmTool {

@@ -8,9 +8,9 @@
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use candle_core::{Device, Tensor, DType};
+use candle_core::{Device, Tensor};
 use tokenizers::Tokenizer;
-use std::path::PathBuf;
+
 use candle_transformers::models::quantized_llama::ModelWeights;
 use candle_core::quantized::ggml_file;
 use hf_hub::api::sync::Api;

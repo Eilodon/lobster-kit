@@ -1,10 +1,6 @@
 use crate::EidolonMcpServer;
-use crate::embedding::EmbeddingEngine;
 use crate::types::*;
 use crate::helpers::*;
-use crate::oracle::{query_local_llm, query_local_llm_with_temp};
-use core_rust::sentinel::causal::CausalGraph;
-use std::collections::HashMap;
 use std::collections::HashSet;
 
 impl EidolonMcpServer {
@@ -29,7 +25,7 @@ impl EidolonMcpServer {
 
             let base_temp = if mode_selected == "deep" { 0.4 } else { 0.1 };
             let trauma_penalty = (trauma_severity / 5.0).clamp(0.0, 1.0) as f64;
-            let final_temp = (base_temp - trauma_penalty * 0.35).max(0.01);
+            let _final_temp = (base_temp - trauma_penalty * 0.35).max(0.01);
 
             let trauma_context = if trauma_severity > 1.0 {
                 format!("\nCRITICAL SYSTEM WARNING: Model is under TRUAMA INHIBITION (Severity {:.1}/5.0). EXTREME CAUTION REQUIRED. Zero hallucination tolerance.", trauma_severity)

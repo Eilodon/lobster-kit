@@ -4,8 +4,6 @@
 // payload parsing, and legacy tool normalization.
 // Implements as associated functions on EidolonMcpServer (impl-block extension).
 
-use crate::helpers::clamp01;
-use crate::types::*;
 use crate::EidolonMcpServer;
 
 impl EidolonMcpServer {

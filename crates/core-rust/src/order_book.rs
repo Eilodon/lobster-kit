@@ -3,7 +3,6 @@
 //! Lock-free order book using a pre-allocated Slab allocator.
 //! BTreeMap has been eliminated to achieve Zero-Allocation during matching.
 
-use std::cmp::Ordering;
 use wasm_bindgen::prelude::*;
 
 // ============================================
@@ -131,6 +130,10 @@ impl OrderBook {
         side: OrderSide,
         owner_id: u32,
     ) -> u32 {
+        if price <= 0 || quantity <= 0 {
+            return u32::MAX;
+        }
+
         let order_id = self.next_order_id;
         self.next_order_id += 1;
 

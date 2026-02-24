@@ -108,7 +108,7 @@ impl RiskCalculator {
     /// Check if new position is allowed
     pub fn can_open_position(
         &self,
-        account_margin_level: f32,
+        _account_margin_level: f32,
         account_risk_level: RiskLevel,
         leverage: u16,
         current_positions: u16,

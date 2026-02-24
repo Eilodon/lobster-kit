@@ -7,7 +7,7 @@ use crate::helpers::*;
 use crate::types::MemoryEntry;
 use crate::EidolonMcpServer;
 use core_rust::sentinel::variables::SentinelVariable;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 impl EidolonMcpServer {
     pub(crate) async fn estimate_historical_risk_prior(&self, query: &str) -> f64 {

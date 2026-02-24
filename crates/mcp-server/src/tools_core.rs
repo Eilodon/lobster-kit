@@ -3,9 +3,6 @@ use crate::embedding::EmbeddingEngine;
 use crate::types::*;
 use crate::helpers::*;
 use crate::oracle::query_local_llm;
-use core_rust::sentinel::causal::CausalGraph;
-use std::collections::HashMap;
-use std::collections::HashSet;
 
 impl EidolonMcpServer {
     pub(crate) async fn handle_recall_user(&self, params: serde_json::Value) -> serde_json::Value {

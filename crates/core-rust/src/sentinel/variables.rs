@@ -50,22 +50,7 @@ impl SentinelVariable {
     }
 
     pub fn from_index(idx: usize) -> Option<Self> {
-        match idx {
-            0 => Some(SentinelVariable::PriceDelta),
-            1 => Some(SentinelVariable::VolumeSpike),
-            2 => Some(SentinelVariable::Volatility),
-            3 => Some(SentinelVariable::Momentum),
-            4 => Some(SentinelVariable::GasPriceGwei),
-            5 => Some(SentinelVariable::MempoolPendingCnt),
-            6 => Some(SentinelVariable::WhaleNetFlow),
-            7 => Some(SentinelVariable::LiquidityImbalance),
-            8 => Some(SentinelVariable::SmartMoneyActivity),
-            9 => Some(SentinelVariable::PortfolioRisk),
-            10 => Some(SentinelVariable::UserAction),
-            11 => Some(SentinelVariable::Sentiment),
-            12 => Some(SentinelVariable::MacroFactor),
-            _ => None,
-        }
+        Self::ALL.get(idx).copied()
     }
     
     pub fn name(&self) -> &'static str {

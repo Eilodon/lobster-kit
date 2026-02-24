@@ -21,7 +21,6 @@ mod tools_reasoning;
 mod types;
 
 use crate::embedding::EmbeddingEngine;
-use crate::helpers::*;
 use crate::oracle::DeepSeekOracle;
 use crate::types::*;
 
@@ -48,14 +47,8 @@ const DEFAULT_TOOL_GEN_AUTOPILOT_MAX_FALLBACK_RATE: f64 = 0.35;
 const DEFAULT_TOOL_GEN_AUTOPILOT_MAX_P95_MS: f64 = 2200.0;
 const DEFAULT_TOOL_GEN_AUTOPILOT_MAX_P99_P50_RATIO: f64 = 3.0;
 const DEFAULT_TOOL_GEN_AUTOPILOT_MIN_SAMPLE_COUNT: u64 = 30;
-const CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS: [&str; 5] = [
-    "eidolon_recall_user",
-    "eidolon_sense_intent",
-    "eidolon_reason_chain",
-    "eidolon_memory_query",
-    "eidolon_compress_context",
-];
-const DEFAULT_COGNITIVE_TOOL_CATALOG: [&str; 16] = [
+
+pub(crate) const DEFAULT_COGNITIVE_TOOL_CATALOG: [&str; 16] = [
     "eidolon_recall_user",
     "eidolon_sense_intent",
     "eidolon_check_pattern",
@@ -72,17 +65,6 @@ const DEFAULT_COGNITIVE_TOOL_CATALOG: [&str; 16] = [
     "eidolon_tool_recommend",
     "eidolon_subbrain_auto",
     "eidolon_generated_tool_decision",
-];
-const LEGACY_COMPAT_TOOL_CATALOG: [&str; 9] = [
-    "eidolon_oracle_sense",
-    "eidolon_defi_quote",
-    "eidolon_security_scan",
-    "eidolon_get_portfolio",
-    "eidolon_execute_swap",
-    "eidolon_panic_button",
-    "eidolon_recall",
-    "eidolon_intuition",
-    "eidolon_dream",
 ];
 
 #[derive(Clone)]

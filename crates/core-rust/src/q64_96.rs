@@ -20,11 +20,16 @@ fn u256_from_bytes_be(bytes: &[u8]) -> U256 {
     let len = bytes.len().min(32);
     let mut padded = [0u8; 32];
     padded[32 - len..].copy_from_slice(&bytes[..len]);
+    let mut buf0 = [0u8; 8]; buf0.copy_from_slice(&padded[24..32]);
+    let mut buf1 = [0u8; 8]; buf1.copy_from_slice(&padded[16..24]);
+    let mut buf2 = [0u8; 8]; buf2.copy_from_slice(&padded[8..16]);
+    let mut buf3 = [0u8; 8]; buf3.copy_from_slice(&padded[0..8]);
+
     [
-        u64::from_be_bytes(padded[24..32].try_into().unwrap()),
-        u64::from_be_bytes(padded[16..24].try_into().unwrap()),
-        u64::from_be_bytes(padded[8..16].try_into().unwrap()),
-        u64::from_be_bytes(padded[0..8].try_into().unwrap()),
+        u64::from_be_bytes(buf0),
+        u64::from_be_bytes(buf1),
+        u64::from_be_bytes(buf2),
+        u64::from_be_bytes(buf3),
     ]
 }
 

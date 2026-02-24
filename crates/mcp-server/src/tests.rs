@@ -194,9 +194,30 @@ use rusqlite::{params, Connection};
         assert_eq!(parsed.1["task"], "check intent");
     }
 
-    #[test]
-    fn test_contract_tools_list_has_dual_stack_required_tools() {
-        let payload = EidolonMcpServer::list_tools_payload();
+    const CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS: [&str; 5] = [
+        "eidolon_recall_user",
+        "eidolon_sense_intent",
+        "eidolon_reason_chain",
+        "eidolon_memory_query",
+        "eidolon_compress_context",
+    ];
+
+    const LEGACY_COMPAT_TOOL_CATALOG: [&str; 9] = [
+        "eidolon_oracle_sense",
+        "eidolon_defi_quote",
+        "eidolon_security_scan",
+        "eidolon_get_portfolio",
+        "eidolon_execute_swap",
+        "eidolon_panic_button",
+        "eidolon_recall",
+        "eidolon_intuition",
+        "eidolon_dream",
+    ];
+
+    #[tokio::test]
+    async fn test_contract_tools_list_has_dual_stack_required_tools() {
+        let server = setup_server();
+        let payload = server.list_tools_payload().await;
         let tools = payload["tools"].as_array().expect("missing tools array");
         let names: Vec<&str> = tools
             .iter()

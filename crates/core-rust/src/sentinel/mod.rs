@@ -9,8 +9,7 @@ pub mod thermo;
 pub mod trauma;
 
 use variables::SentinelVariable;
-use self::causal::{CausalGraph, CausalEdge, Intervenable, CounterfactualResult};
-use self::conversation_config::ConversationDomainConfig;
+use self::causal::{CausalGraph, CausalEdge};
 use wasm_bindgen::prelude::*;
 use chrono::Utc;
 
