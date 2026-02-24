@@ -5,7 +5,7 @@
  * external API feeds, file system, websockets, etc.
  *
  * Any module that only needs to *read* should depend on ISensorHub,
- * not the full IClawKit. This minimizes coupling.
+ * not the full IEidolon. This minimizes coupling.
  */
 
 /**

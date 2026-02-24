@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AnalyticsModule } from '../src/analytics';
-import { ClawKitConfig } from '../src/types';
+import { EidolonConfig } from '../src/types';
 import axios from 'axios';
 
 // Mock axios
@@ -18,7 +18,7 @@ const mockPublicClient = {
 
 describe('AnalyticsModule', () => {
     let analytics: AnalyticsModule;
-    const config: ClawKitConfig = {};
+    const config: EidolonConfig = {};
 
     beforeEach(() => {
         analytics = new AnalyticsModule(mockWalletClient as any, mockPublicClient as any, config);

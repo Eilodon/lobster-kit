@@ -287,8 +287,8 @@ impl EidolonMcpServer {
                 .recommend_tools_with_model(&primary_model, &task, &available_tools)
                 .await;
             if ranked.is_empty() {
-                ranked.push(("clawkit_reason_chain".to_string(), 0.5));
-                ranked.push(("clawkit_recall_similar".to_string(), 0.5));
+                ranked.push(("eidolon_reason_chain".to_string(), 0.5));
+                ranked.push(("eidolon_recall_similar".to_string(), 0.5));
             }
 
             let mut shadow_top1_agreement = None;
@@ -300,8 +300,8 @@ impl EidolonMcpServer {
                     .recommend_tools_with_model(&shadow_model, &task, &available_tools)
                     .await;
                 if shadow_ranked.is_empty() {
-                    shadow_ranked.push(("clawkit_reason_chain".to_string(), 0.5));
-                    shadow_ranked.push(("clawkit_recall_similar".to_string(), 0.5));
+                    shadow_ranked.push(("eidolon_reason_chain".to_string(), 0.5));
+                    shadow_ranked.push(("eidolon_recall_similar".to_string(), 0.5));
                 }
 
                 let primary_top = ranked

@@ -1,19 +1,19 @@
-import { IClawKit } from '@clawkit/core';
+import { IEidolon } from '@eidolon/core';
 import { MarketState } from '../eidolon/EidolonTypes';
 import { PythAdapter } from '../oracles/PythAdapter';
 import { PriceAggregator } from './PriceAggregator';
-import { BigMath } from '@clawkit/core';
+import { BigMath } from '@eidolon/core';
 import { PythConfig } from '../config/PythConfig';
 
 /**
  * 👁️ CLAW ORACLE (The Eye)
- * Real-time market sensing using ClawKit's analytics
+ * Real-time market sensing using Eidolon's analytics
  */
 export class ClawOracle {
     private aggregator: PriceAggregator;
     private pyth: PythAdapter;
 
-    constructor(private kit: IClawKit) {
+    constructor(private kit: IEidolon) {
         // pythConfig is optional in several test/mocked contexts.
         // Fall back to adapter defaults instead of hard-failing the guard.
         const maybePythConfig = kit.config.pythConfig;
@@ -21,7 +21,7 @@ export class ClawOracle {
             ? maybePythConfig as PythConfig
             : undefined;
         if (!pythConfig) {
-            console.warn('⚠️ PythConfig missing in ClawKit config. Using PythAdapter defaults.');
+            console.warn('⚠️ PythConfig missing in Eidolon config. Using PythAdapter defaults.');
         }
         this.pyth = new PythAdapter(pythConfig);
         this.aggregator = new PriceAggregator(kit, this.pyth);

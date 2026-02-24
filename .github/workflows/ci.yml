@@ -1,4 +1,4 @@
-name: ClawKit CI
+name: Eidolon CI
 
 on:
   push:

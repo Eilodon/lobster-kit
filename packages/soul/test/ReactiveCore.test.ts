@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EidolonBus, EidolonEventType } from '@clawkit/core';
+import { EidolonBus, EidolonEventType } from '@eidolon/core';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
 
 // Mock AppendOnlyAdapter while keeping other core exports intact.
-vi.mock('@clawkit/core', async () => {
-    const actual = await vi.importActual<typeof import('@clawkit/core')>('@clawkit/core');
+vi.mock('@eidolon/core', async () => {
+    const actual = await vi.importActual<typeof import('@eidolon/core')>('@eidolon/core');
     return {
         ...actual,
         AppendOnlyAdapter: class {

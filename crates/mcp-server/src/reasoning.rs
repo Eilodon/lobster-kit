@@ -35,7 +35,7 @@ impl EidolonMcpServer {
         let historical_pressure = {
             let metrics = self.tool_metrics.lock().await;
             metrics
-                .get("clawkit_reason_chain")
+                .get("eidolon_reason_chain")
                 .map(|metric| metric.latency_p95_ms)
                 .unwrap_or(0.0)
         };

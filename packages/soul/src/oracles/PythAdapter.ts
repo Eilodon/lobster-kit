@@ -1,7 +1,7 @@
 
 import axios from 'axios';
 import { PythConfig } from '../config/PythConfig';
-import { withRetry } from '@clawkit/core';
+import { withRetry } from '@eidolon/core';
 
 interface PythPricePayload {
     price?: unknown;

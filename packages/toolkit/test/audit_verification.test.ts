@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
 vi.mock('axios');
 
-// 2. Mock @clawkit/soul
-vi.mock('@clawkit/soul', () => {
+// 2. Mock @eidolon/soul
+vi.mock('@eidolon/soul', () => {
     return {
         WasmAdapter: {
             getInstance: vi.fn().mockReturnValue({
@@ -22,7 +22,7 @@ vi.mock('@clawkit/soul', () => {
 import { Q64x96 } from '../src/math/Q64x96';
 import { PriceService } from '../src/services/PriceService';
 import { getGateway } from '../src/utils/ApiGateway';
-import { ClawKitConfig } from '../src/types';
+import { EidolonConfig } from '../src/types';
 
 describe('Atomic Audit Verification', () => {
 
@@ -68,7 +68,7 @@ describe('Atomic Audit Verification', () => {
 
         beforeEach(() => {
             vi.resetAllMocks();
-            const config: ClawKitConfig = { rpcUrl: '', privacyMode: 'standard' };
+            const config: EidolonConfig = { rpcUrl: '', privacyMode: 'standard' };
             priceService = new PriceService(config);
 
             // Clear internal cache to ensure fetch logic runs
@@ -95,7 +95,7 @@ describe('Atomic Audit Verification', () => {
         });
 
         it('should warn on partial results in strict mode', async () => {
-            const config: ClawKitConfig = { rpcUrl: '', privacyMode: 'strict' };
+            const config: EidolonConfig = { rpcUrl: '', privacyMode: 'strict' };
             priceService = new PriceService(config); // Strict mode
 
             const spy = vi.spyOn(console, 'warn').mockImplementation(() => { });
@@ -119,7 +119,7 @@ describe('Atomic Audit Verification', () => {
 
         beforeEach(() => {
             vi.resetAllMocks();
-            const config: ClawKitConfig = { rpcUrl: 'http://localhost', privacyMode: 'standard' };
+            const config: EidolonConfig = { rpcUrl: 'http://localhost', privacyMode: 'standard' };
             gateway = getGateway(config);
             // Hack to reset token bucket
             (gateway as any).buckets.clear();

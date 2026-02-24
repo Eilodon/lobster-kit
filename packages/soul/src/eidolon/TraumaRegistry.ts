@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { IStorageProvider } from '@clawkit/core';
+import { IStorageProvider } from '@eidolon/core';
 import { WasmAdapter } from '../WasmAdapter';
 
 interface TraumaHit {

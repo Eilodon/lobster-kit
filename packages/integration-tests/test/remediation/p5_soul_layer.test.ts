@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('DeepSeekOracle Hardening', () => {
     it('should have withRetry import and sanitizeContext method', async () => {
-        const { DeepSeekOracle } = await import('@clawkit/soul');
+        const { DeepSeekOracle } = await import('@eidolon/soul');
         const oracle = new DeepSeekOracle({ apiKey: 'test-key' });
 
         // Verify sanitizeContext exists
@@ -15,7 +15,7 @@ describe('DeepSeekOracle Hardening', () => {
     });
 
     it('sanitizeContext should strip injection vectors', async () => {
-        const { DeepSeekOracle } = await import('@clawkit/soul');
+        const { DeepSeekOracle } = await import('@eidolon/soul');
         const oracle = new DeepSeekOracle({ apiKey: 'test-key' });
 
         const maliciousContext = {
@@ -51,7 +51,7 @@ describe('DeepSeekOracle Hardening', () => {
     });
 
     it('should return cached result within TTL', async () => {
-        const { DeepSeekOracle } = await import('@clawkit/soul');
+        const { DeepSeekOracle } = await import('@eidolon/soul');
         const oracle = new DeepSeekOracle({ apiKey: 'test-key' });
 
         // Set up a fake cached result

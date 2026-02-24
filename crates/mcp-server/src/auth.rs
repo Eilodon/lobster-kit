@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 impl EidolonMcpServer {
     pub(crate) fn resolve_users_file_path() -> PathBuf {
-        if let Ok(explicit_path) = std::env::var("CLAWKIT_USERS_PATH") {
+        if let Ok(explicit_path) = std::env::var("EIDOLON_USERS_PATH") {
             let trimmed = explicit_path.trim();
             if !trimmed.is_empty() {
                 return PathBuf::from(trimmed);
@@ -20,12 +20,12 @@ impl EidolonMcpServer {
 
         let mut candidates = Vec::new();
         if let Ok(home) = std::env::var("HOME") {
-            candidates.push(PathBuf::from(home).join(".clawkit").join("users.json"));
+            candidates.push(PathBuf::from(home).join(".eidolon").join("users.json"));
         }
         if let Ok(cwd) = std::env::current_dir() {
             candidates.push(cwd.join("data").join("memory").join("users.json"));
         }
-        candidates.push(PathBuf::from("/tmp/.clawkit/users.json"));
+        candidates.push(PathBuf::from("/tmp/.eidolon/users.json"));
 
         for path in candidates {
             if Self::is_users_path_writable(&path) {
@@ -33,7 +33,7 @@ impl EidolonMcpServer {
             }
         }
 
-        PathBuf::from("/tmp/.clawkit/users.json")
+        PathBuf::from("/tmp/.eidolon/users.json")
     }
 
     pub(crate) fn is_users_path_writable(path: &Path) -> bool {
@@ -45,7 +45,7 @@ impl EidolonMcpServer {
         }
 
         let probe_path = parent.join(format!(
-            ".clawkit-write-probe-{}",
+            ".eidolon-write-probe-{}",
             chrono::Utc::now()
                 .timestamp_nanos_opt()
                 .unwrap_or_else(|| chrono::Utc::now().timestamp_micros() * 1000)
@@ -121,7 +121,7 @@ impl EidolonMcpServer {
         })
         .await
         {
-            eprintln!("[ClawKit] user profile persistence failed: {}", err);
+            eprintln!("[Eidolon] user profile persistence failed: {}", err);
         }
     }
 }

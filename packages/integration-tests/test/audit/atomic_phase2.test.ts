@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Vector, Matrix, BreathEngine, BreathPhase } from '@clawkit/soul';
-import { EidolonSwarm } from '@clawkit/soul';
+import { Vector, Matrix, BreathEngine, BreathPhase } from '@eidolon/soul';
+import { EidolonSwarm } from '@eidolon/soul';
 
 describe('Atomic Audit Phase 2 Verification', () => {
 

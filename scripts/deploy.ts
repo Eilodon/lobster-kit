@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 async function main() {
-  console.log("🚀 Deploying ClawKit contracts to", hre.network.name);
+  console.log("🚀 Deploying Eidolon contracts to", hre.network.name);
   console.log("=====================================\n");
 
   const [deployer] = await hre.ethers.getSigners();

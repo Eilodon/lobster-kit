@@ -1,4 +1,4 @@
-# ClawKit Runtime Migration Execution Map (v2, Updated: 2026-02-21)
+# Eidolon Runtime Migration Execution Map (v2, Updated: 2026-02-21)
 
 This plan is execution-first: every phase has deliverables, measurable evidence, and a hard promotion gate.
 
@@ -12,7 +12,7 @@ This plan is execution-first: every phase has deliverables, measurable evidence,
   - uses `structured_mcp_error` for invalid params + tool not found
 - [x] `resources/templates/list` minimum spec shipped (`resourceTemplates: []`)
 - [x] `tools/list` now dual-stack contract-compatible:
-  - exposes both `eidolon_*` and `clawkit_*`
+  - exposes both `eidolon_*` and `eidolon_*`
   - includes required legacy list in frozen contract
 - [x] `generated_tool_audit` has SQLite write path and is logged on `tools/call`
 - [x] MCP Rust contract tests cover:
@@ -127,7 +127,7 @@ This plan is execution-first: every phase has deliverables, measurable evidence,
 ## 4) Immediate Backlog (next 10 working days)
 
 1. Recommender v2 integration plan:
-   - define interface parity with existing `clawkit_tool_recommend` output
+   - define interface parity with existing `eidolon_tool_recommend` output
    - add A/B shadow result schema + storage
 2. Memory router cutover plan:
    - route map for `memory_query` and fallback strategy

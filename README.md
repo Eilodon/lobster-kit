@@ -1,4 +1,4 @@
-# 🦞 ClawKit V4: The Exocortex (Infrastructure for AI Agents)
+# 🦞 Eidolon V4: The Exocortex (Infrastructure for AI Agents)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://github.com/Eilodon/lobster-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/Eilodon/lobster-kit/actions)
@@ -8,18 +8,18 @@
 
 > **"You provide the Brain (LLM). We provide the Sub-Brain & Instincts."**
 
-**ClawKit V4** is not an AI. It does not replace LLMs. **ClawKit is the Infrastructure (Sub-Brain) FOR AI Agents.** 
+**Eidolon V4** is not an AI. It does not replace LLMs. **Eidolon is the Infrastructure (Sub-Brain) FOR AI Agents.** 
 
-By implementing the Model Context Protocol (MCP) in pure Rust, ClawKit acts as a high-speed, zero-cost **Exocortex**. We allow generic AI agents (Claude, ChatGPT, AutoGPT—our End Users) to offload deterministic chores (Memory lookups, Math, Safety Guardrails) so they can focus entirely on what they do best: generative inference.
+By implementing the Model Context Protocol (MCP) in pure Rust, Eidolon acts as a high-speed, zero-cost **Exocortex**. We allow generic AI agents (Claude, ChatGPT, AutoGPT—our End Users) to offload deterministic chores (Memory lookups, Math, Safety Guardrails) so they can focus entirely on what they do best: generative inference.
 
 ---
 
 ## 🧠 The 90% Cost Reduction Architecture
 
-Most Agent developers waste money forcing expensive, high-latency LLMs to do basic math or fetch data. ClawKit solves the **Economic & Latency Argument**:
+Most Agent developers waste money forcing expensive, high-latency LLMs to do basic math or fetch data. Eidolon solves the **Economic & Latency Argument**:
 
-1. **Memory Lookups:** LLM takes 700ms and hallucinate user states. ClawKit uses `LiquidBrain` (Vector/Thermodynamic) taking **4ms** to extract exactly what's needed.
-2. **Safety & Guardrails:** Prompting an LLM to "act safe" costs $ and takes 130ms. ClawKit's `TraumaRegistry` uses Hash Map O(1) lookups taking **1ms**. Unbreakable.
+1. **Memory Lookups:** LLM takes 700ms and hallucinate user states. Eidolon uses `LiquidBrain` (Vector/Thermodynamic) taking **4ms** to extract exactly what's needed.
+2. **Safety & Guardrails:** Prompting an LLM to "act safe" costs $ and takes 130ms. Eidolon's `TraumaRegistry` uses Hash Map O(1) lookups taking **1ms**. Unbreakable.
 3. **Causal Logic:** Instead of hallucinating math, the `DAGMA` Causal Graph computes Counterfactuals in **0ms**.
 
 **Result:** 90% cost reduction, 8x faster response time, zero hallucinations on deterministic queries.
@@ -28,11 +28,11 @@ Most Agent developers waste money forcing expensive, high-latency LLMs to do bas
 
 ## 🚀 14 Cognitive MCP Tools (The Arsenal)
 
-ClawKit exposes 14 strictly typed, native Rust MCP tools straight to your Agent (Cursor, Cline, AutoGPT) via Standard I/O:
+Eidolon exposes 14 strictly typed, native Rust MCP tools straight to your Agent (Cursor, Cline, AutoGPT) via Standard I/O:
 
-*   **Phase A (Core Loop):** `clawkit_recall_user`, `clawkit_sense_intent`, `clawkit_check_pattern`, `clawkit_simulate_response`, `clawkit_commit_pattern`.
-*   **Phase B (Reasoning/Memory):** `clawkit_reason_chain`, `clawkit_recall_similar`, `clawkit_memory_query`, `clawkit_compress_context`.
-*   **Phase C (Learning/Orchestrator):** `clawkit_record_outcome`, `clawkit_update_user`, `clawkit_dream_conversation`, `clawkit_orchestrate`, `clawkit_tool_recommend`.
+*   **Phase A (Core Loop):** `eidolon_recall_user`, `eidolon_sense_intent`, `eidolon_check_pattern`, `eidolon_simulate_response`, `eidolon_commit_pattern`.
+*   **Phase B (Reasoning/Memory):** `eidolon_reason_chain`, `eidolon_recall_similar`, `eidolon_memory_query`, `eidolon_compress_context`.
+*   **Phase C (Learning/Orchestrator):** `eidolon_record_outcome`, `eidolon_update_user`, `eidolon_dream_conversation`, `eidolon_orchestrate`, `eidolon_tool_recommend`.
 
 ---
 
@@ -50,7 +50,7 @@ cargo build --release
 # Set the command to the generated binary
 {
   "mcpServers": {
-    "clawkit-v4": {
+    "eidolon-v4": {
       "command": "/path/to/lobster-kit/packages/mcp-rust/target/release/mcp-rust",
       "args": [],
       "env": {
@@ -77,4 +77,4 @@ cargo build --release
 ---
 
 ## 📄 License
-MIT License. **Built with 🦞 by the ClawKit Team.**
+MIT License. **Built with 🦞 by the Eidolon Team.**

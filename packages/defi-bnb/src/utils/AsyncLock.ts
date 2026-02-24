@@ -1,1 +1,1 @@
-export { AsyncLock } from '@clawkit/core';
+export { AsyncLock } from '@eidolon/core';

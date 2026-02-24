@@ -1,11 +1,11 @@
 import { PublicClient, parseEther, formatEther, parseUnits, formatUnits, encodeFunctionData, parseAbi } from 'viem';
-import { ClawKitConfig, TransferParams, TOKENS, getTokenDecimals, resolveTokenAddress, toAddress, CLAWKIT_CONTRACTS, type TokenInfo, type ClawKitWalletClient } from './types';
+import { EidolonConfig, TransferParams, TOKENS, getTokenDecimals, resolveTokenAddress, toAddress, EIDOLON_CONTRACTS, type TokenInfo, type EidolonWalletClient } from './types';
 
 export class WalletModule {
   constructor(
-    private walletClient: ClawKitWalletClient,
+    private walletClient: EidolonWalletClient,
     private publicClient: PublicClient,
-    private config: ClawKitConfig
+    private config: EidolonConfig
   ) { }
 
   /**
@@ -53,7 +53,7 @@ export class WalletModule {
    */
   async sendBatch(transfers: TransferParams[]): Promise<{ hashes: string[] }> {
     // FIX Phase 2: Use BatchExecutor for atomicity
-    const batchExecutorAddr = CLAWKIT_CONTRACTS.BatchExecutor;
+    const batchExecutorAddr = EIDOLON_CONTRACTS.BatchExecutor;
     const isBatchExecutorDeployed = batchExecutorAddr && batchExecutorAddr !== '0x0000000000000000000000000000000000000000';
 
     if (isBatchExecutorDeployed) {

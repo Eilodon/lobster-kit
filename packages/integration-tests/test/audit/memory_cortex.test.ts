@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { AppendOnlyAdapter } from '@clawkit/core';
+import { AppendOnlyAdapter } from '@eidolon/core';
 // Mock dependencies
 vi.mock('fs/promises', () => {
     return {

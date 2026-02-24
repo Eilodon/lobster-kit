@@ -1,5 +1,5 @@
-import { ActiveLearning, EmotionalCore } from '@clawkit/soul';
-import { AppendOnlyAdapter } from '@clawkit/core';
+import { ActiveLearning, EmotionalCore } from '@eidolon/soul';
+import { AppendOnlyAdapter } from '@eidolon/core';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';

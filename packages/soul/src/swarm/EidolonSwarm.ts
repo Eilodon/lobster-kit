@@ -1,8 +1,8 @@
 
 import { EventEmitter } from 'events';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { EidolonBus, EidolonEventType } from '@clawkit/core';
-import { DirtyMask, DirtyTracker } from '@clawkit/core';
+import { EidolonBus, EidolonEventType } from '@eidolon/core';
+import { DirtyMask, DirtyTracker } from '@eidolon/core';
 
 // Assuming EidolonBus needs to export these or we define them
 // For now, let's assume simple string types or redefine if needed, 

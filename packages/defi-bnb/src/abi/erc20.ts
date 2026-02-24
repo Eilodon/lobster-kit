@@ -3,4 +3,4 @@ export {
   ERC20_ALLOWANCE_ABI,
   ERC20_BALANCE_OF_ABI,
   ERC20_DECIMALS_ABI
-} from '@clawkit/toolkit';
+} from '@eidolon/toolkit';

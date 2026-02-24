@@ -12,7 +12,7 @@ import {
     ReasoningChain,
     SwarmOrchestrator,
     type IOracle as SoulOracle,
-} from '@clawkit/soul';
+} from '@eidolon/soul';
 
 describe('Core Cognitive Modules', () => {
     const oracle: SoulOracle = {
@@ -186,9 +186,9 @@ describe('Core Cognitive Modules', () => {
 
     it('tracks fallback rate and latency percentiles for tool telemetry', async () => {
         const tracker = new ToolPerformanceTracker();
-        await tracker.record('clawkit_reason_chain', true, 120);
-        await tracker.record('clawkit_reason_chain', false, 450, { fallbackUsed: true });
-        const record = tracker.getRecord('clawkit_reason_chain');
+        await tracker.record('eidolon_reason_chain', true, 120);
+        await tracker.record('eidolon_reason_chain', false, 450, { fallbackUsed: true });
+        const record = tracker.getRecord('eidolon_reason_chain');
         expect(record).not.toBeNull();
         expect(record?.call_count).toBe(2);
         expect(record?.fallback_count).toBe(1);
@@ -199,9 +199,9 @@ describe('Core Cognitive Modules', () => {
     it('computes latency percentiles from bounded recent samples', async () => {
         const tracker = new ToolPerformanceTracker(undefined, 4);
         for (const latency of [1, 2, 3, 4, 5, 6]) {
-            await tracker.record('clawkit_reason_chain', true, latency);
+            await tracker.record('eidolon_reason_chain', true, latency);
         }
-        const record = tracker.getRecord('clawkit_reason_chain');
+        const record = tracker.getRecord('eidolon_reason_chain');
         expect(record).not.toBeNull();
         expect(record?.latency_p50_ms).toBe(4);
         expect(record?.latency_p95_ms).toBe(6);
@@ -228,7 +228,7 @@ describe('Core Cognitive Modules', () => {
             async generate(prompt, options) {
                 if (options?.json && prompt.includes('Design a read-only MCP tool spec')) {
                     return JSON.stringify({
-                        name: 'clawkit_gen_log_summarizer',
+                        name: 'eidolon_gen_log_summarizer',
                         description: 'Summarize deploy and runtime logs.',
                         inputSchema: {
                             type: 'object',
@@ -252,7 +252,7 @@ describe('Core Cognitive Modules', () => {
             createWorldState('ops', { channel: 'deploy' })
         );
         expect(spec).not.toBeNull();
-        expect(spec?.name.startsWith('clawkit_gen_')).toBe(true);
+        expect(spec?.name.startsWith('eidolon_gen_')).toBe(true);
         expect(spec?.inputSchema.properties.max_lines?.type).toBe('number');
     });
 
@@ -264,7 +264,7 @@ describe('Core Cognitive Modules', () => {
                     return [
                         'Sure, here is the payload:',
                         JSON.stringify({
-                            name: 'clawkit_gen_resilient_parser',
+                            name: 'eidolon_gen_resilient_parser',
                             description: 'Read-only parser helper.',
                             inputSchema: {
                                 type: 'object',
@@ -290,7 +290,7 @@ describe('Core Cognitive Modules', () => {
             createWorldState('ops', { channel: 'deploy' })
         );
         expect(spec).not.toBeNull();
-        expect(spec?.name).toBe('clawkit_gen_resilient_parser');
+        expect(spec?.name).toBe('eidolon_gen_resilient_parser');
         expect(spec?.inputSchema.required).toEqual(['payload']);
     });
 

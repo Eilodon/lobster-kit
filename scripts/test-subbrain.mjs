@@ -91,12 +91,12 @@ async function testToolsList() {
   console.log('\n📋 Test 1: tools/list');
   try {
     const result = await callMcpTool(null, {});
-    // Check if clawkit_subbrain_auto is in the tools list
+    // Check if eidolon_subbrain_auto is in the tools list
     const hasSubBrain = result.responses.some(r => 
-      JSON.stringify(r).includes('clawkit_subbrain_auto')
+      JSON.stringify(r).includes('eidolon_subbrain_auto')
     );
     if (hasSubBrain) {
-      console.log('  ✅ clawkit_subbrain_auto registered');
+      console.log('  ✅ eidolon_subbrain_auto registered');
     } else {
       console.log('  ⚠️  Checking tool list...');
       console.log('  Responses:', JSON.stringify(result.responses, null, 2).substring(0, 500));
@@ -107,9 +107,9 @@ async function testToolsList() {
 }
 
 async function testSubBrainAuto() {
-  console.log('\n🧠 Test 2: clawkit_subbrain_auto');
+  console.log('\n🧠 Test 2: eidolon_subbrain_auto');
   try {
-    const result = await callMcpTool('clawkit_subbrain_auto', {
+    const result = await callMcpTool('eidolon_subbrain_auto', {
       input: 'audit project code for security',
       user_id: 'test-user',
       auto_execute: false,

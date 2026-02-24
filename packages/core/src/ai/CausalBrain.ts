@@ -1,7 +1,4 @@
-import { IStorageProvider } from '../memory/IStorageProvider';
-import { WasmAdapter } from '../WasmAdapter';
-
-/**
+import { IStorageProvider } from '../memory/IStorageProvider';/**
  * 🧠 CausalBrain: Synaptic Plasticity Engine
  *
  * Hybrid mode:
@@ -90,7 +87,7 @@ export class CausalBrain {
     private readonly weights: Map<string, CausalEdge> = new Map();
     private readonly priors: Map<string, { s: number; f: number }> = new Map();
     private wasmGraph: RustCausalGraph | null = null;
-    private readonly wasmAdapter = WasmAdapter.getInstance();
+    private readonly wasmAdapter = (globalThis as any).EIDOLON_WASM_ADAPTER ?? null;
     private readonly debugEnabled = process.env.EIDOLON_DEBUG === '1';
 
     constructor() {

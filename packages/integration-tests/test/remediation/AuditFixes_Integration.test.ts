@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ClawKit } from '../src/index';
+import { Eidolon } from '../src/index';
 import { createWalletClient, http, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { opBNB } from 'viem/chains';
@@ -30,7 +30,7 @@ vi.mock('viem', async (importOriginal) => {
         createPublicClient: vi.fn().mockReturnValue(mockPublicClient)
     };
 });
-vi.mock('@clawkit/soul', async (importOriginal) => {
+vi.mock('@eidolon/soul', async (importOriginal) => {
     const actual = await importOriginal() as Record<string, unknown>;
     return {
         ...actual,
@@ -65,8 +65,8 @@ const mockWalletClient = {
 };
 
 describe('Audit Remediation Integration', () => {
-    let kit: ClawKit;
-    const historyFile = path.resolve(process.cwd(), '.clawkit', 'portfolio_history.json');
+    let kit: Eidolon;
+    const historyFile = path.resolve(process.cwd(), '.eidolon', 'portfolio_history.json');
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -78,8 +78,8 @@ describe('Audit Remediation Integration', () => {
             // best-effort cleanup for deterministic tests
         }
 
-        // Setup ClawKit with mocks
-        kit = new ClawKit(mockWalletClient as any, {
+        // Setup Eidolon with mocks
+        kit = new Eidolon(mockWalletClient as any, {
             rpcUrl: 'https://opbnb.rpc',
             chainConfig: OPBNB_CONFIG,
             privacyMode: 'strict'

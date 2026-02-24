@@ -93,8 +93,8 @@ export interface TransferParams {
   amount: string;
 }
 
-// ClawKit config — no plaintext private key (FIX M8 partial)
-// ClawKit config — consolidated definition
+// Eidolon config — no plaintext private key (FIX M8 partial)
+// Eidolon config — consolidated definition
 
 export interface PythConfig {
   endpoint: string;
@@ -104,7 +104,7 @@ export interface PythConfig {
   };
 }
 
-export interface ClawKitConfig {
+export interface EidolonConfig {
   privateKey?: string; // Optional if WalletClient provided with account
   chainId?: number; // default: 204 (opBNB)
   rpcUrl?: string;
@@ -115,7 +115,7 @@ export interface ClawKitConfig {
   approvalMode?: 'EXACT' | 'BUFFERED' | 'MAX';
   approvalBufferBps?: number; // Used when approvalMode=BUFFERED (default 12000 = 1.2x)
   usePermit2?: boolean;       // [P3] Use Permit2 gasless approvals instead of on-chain approve()
-  contracts?: Partial<typeof CLAWKIT_CONTRACTS>;
+  contracts?: Partial<typeof EIDOLON_CONTRACTS>;
   chainConfig?: ChainConfig; // Inject chain specific config
   fallbackBNBPrice?: number; // [NEW] User-defined fallback price (default: 600)
   pythConfig?: PythConfig; // [NEW] Pyth Network Configuration
@@ -134,7 +134,7 @@ export interface ClawKitConfig {
 
 
 // Strict WalletClient type enforcing Account presence
-export type ClawKitWalletClient = WalletClient<Transport, Chain, Account>;
+export type EidolonWalletClient = WalletClient<Transport, Chain, Account>;
 
 // ═══════════════════════════════════════════════════════
 //  CHAIN CONFIGURATION (FIX F4 + F5)
@@ -217,11 +217,11 @@ export const PANCAKE_QUOTER = OPBNB_CONFIG.contracts.pancakeQuoter;
 // ═══════════════════════════════════════════════════════
 
 /**
- * ClawKit helper contracts — MUST be deployed before use.
+ * Eidolon helper contracts — MUST be deployed before use.
  * Run `npx hardhat run scripts/deploy.ts --network opbnb` to deploy.
  * Addresses are auto-populated by the deploy script.
  */
-export const CLAWKIT_CONTRACTS = {
+export const EIDOLON_CONTRACTS = {
   DynamicBadge: '0x0000000000000000000000000000000000000000' as string,
   BatchExecutor: '0x0000000000000000000000000000000000000000' as string,
   ApprovalRevoker: '0x0000000000000000000000000000000000000000' as string,
@@ -231,8 +231,8 @@ export const CLAWKIT_CONTRACTS = {
  * FIX F4: Validate that a contract address has been deployed.
  * Throws if the address is zero (not deployed yet).
  */
-export function assertDeployed(name: keyof typeof CLAWKIT_CONTRACTS): string {
-  const addr = CLAWKIT_CONTRACTS[name];
+export function assertDeployed(name: keyof typeof EIDOLON_CONTRACTS): string {
+  const addr = EIDOLON_CONTRACTS[name];
   if (!addr || addr === '0x0000000000000000000000000000000000000000') {
     throw new Error(
       `${name} contract not deployed. Run: npx hardhat run scripts/deploy.ts --network opbnb`
@@ -277,8 +277,8 @@ export function resolveTokenAddress(tokenOrSymbol: string): string {
 }
 
 // Aliases for backward compatibility
-export const BATCH_EXECUTOR = CLAWKIT_CONTRACTS.BatchExecutor;
-export const APPROVAL_REVOKER = CLAWKIT_CONTRACTS.ApprovalRevoker;
+export const BATCH_EXECUTOR = EIDOLON_CONTRACTS.BatchExecutor;
+export const APPROVAL_REVOKER = EIDOLON_CONTRACTS.ApprovalRevoker;
 
 export type TokenSymbol = keyof typeof TOKENS;
 

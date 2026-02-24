@@ -30,7 +30,7 @@ let actionCounter = 0;
  *   id: 'pr-merge-002',
  *   domain: 'github',
  *   priority: 'NORMAL',
- *   payload: { repo: 'clawkit-bnb', branch: 'main' },
+ *   payload: { repo: 'eidolon-bnb', branch: 'main' },
  * };
  */
 export interface CapabilityAction<T = unknown> {

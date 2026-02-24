@@ -1,7 +1,7 @@
 /**
  * Q64.96 fixed-point helpers for UniswapV3/PancakeV3 math.
  *
- * Primary path: @clawkit/soul WASM (Rust, higher precision)
+ * Primary path: @eidolon/soul WASM (Rust, higher precision)
  * Fallback path: Pure TypeScript (standard Uniswap V3 formulas)
  */
 
@@ -57,11 +57,11 @@ function getAdapter() {
     if (_adapter !== undefined) return _adapter;
     try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { WasmAdapter } = require('@clawkit/soul') as { WasmAdapter: { getInstance: () => typeof _adapter } };
+        const { WasmAdapter } = require('@eidolon/soul') as { WasmAdapter: { getInstance: () => typeof _adapter } };
         _adapter = WasmAdapter.getInstance() ?? null;
     } catch {
         _adapter = null;
-        console.warn('⚠️ [Q64x96] @clawkit/soul WASM unavailable — using TypeScript fallback');
+        console.warn('⚠️ [Q64x96] @eidolon/soul WASM unavailable — using TypeScript fallback');
     }
     return _adapter;
 }

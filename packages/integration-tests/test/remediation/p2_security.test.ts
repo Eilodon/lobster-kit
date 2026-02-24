@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SecurityModule } from '@clawkit/defi-bnb';
+import { SecurityModule } from '@eidolon/defi-bnb';
 
 // Mock dependencies
 const mockWalletClient: any = {

@@ -20,7 +20,7 @@ vi.mock('../src/types', async (importOriginal) => {
     return {
         ...(actual as any),
         assertDeployed: vi.fn().mockReturnValue('0xContract'),
-        CLAWKIT_CONTRACTS: { DynamicBadge: '0xContract' },
+        EIDOLON_CONTRACTS: { DynamicBadge: '0xContract' },
         toAddress: (a: string) => a
     };
 });

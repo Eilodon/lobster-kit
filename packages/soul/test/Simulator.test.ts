@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EidolonSimulator, ShadowTransaction } from '../src/simulation/EidolonSimulator';
 
-// Mock ClawKit and PublicClient
+// Mock Eidolon and PublicClient
 const mockCall = vi.fn();
 const mockEstimateGas = vi.fn();
 const mockCreateAccessList = vi.fn();

@@ -1,8 +1,8 @@
-import type { IReadClient, IWriteClient } from '@clawkit/core';
+import type { IReadClient, IWriteClient } from '@eidolon/core';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IClawKit, AppendOnlyAdapter, BigMath, withTimeout, Logger, RiskConfigPreset } from '@clawkit/core';
-import { DivineTransparency } from '@clawkit/core';
+import { IEidolon, AppendOnlyAdapter, BigMath, withTimeout, Logger, RiskConfigPreset } from '@eidolon/core';
+import { DivineTransparency } from '@eidolon/core';
 import { MarketState, ActionType, DecisionLog, SentinelMode, ModeConfig } from './EidolonTypes';
 import { ActiveLearning, TradeOutcome } from './ActiveLearning';
 import { EmotionalCore, EmotionalState } from './EmotionalCore';
@@ -11,7 +11,7 @@ import { ClawOracle } from '../sensors/ClawOracle';
 import { GoPlusSecurity } from '../oracles/GoPlusSecurity';
 import { EidolonSimulator, ShadowTransaction, SimulationResult } from '../simulation/EidolonSimulator';
 import { DeepSeekOracle } from '../ai/DeepSeekOracle';
-import { EidolonBus, EidolonEvent, EidolonEventType, TradeExecutedEvent } from '@clawkit/core';
+import { EidolonBus, EidolonEvent, EidolonEventType, TradeExecutedEvent } from '@eidolon/core';
 import { TraumaRegistry } from './TraumaRegistry';
 import { KpiTracker, KpiSnapshot } from '../metrics/KpiTracker';
 
@@ -52,7 +52,7 @@ export interface ValidationResult {
 export class EidolonGuard {
     private client: any; // IReadClient — uses viem PublicClient APIs at runtime
     private wallet: any; // IWriteClient — uses viem WalletClient APIs at runtime
-    private kit: IClawKit;
+    private kit: IEidolon;
     private config: GuardConfig;
     private wasmAdapter: WasmAdapter; // [NEW]
 
@@ -90,7 +90,7 @@ export class EidolonGuard {
     private readonly debugEnabled = process.env.EIDOLON_DEBUG === '1';
 
     constructor(
-        kit: IClawKit,
+        kit: IEidolon,
         config: GuardConfig = {
             maxRiskScore: 60,
             minConfidence: 70,

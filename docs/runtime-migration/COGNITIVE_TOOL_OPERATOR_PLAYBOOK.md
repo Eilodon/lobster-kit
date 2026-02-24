@@ -1,10 +1,10 @@
 # Cognitive Tool Operator Playbook (LLM-First, Updated: 2026-02-22)
 
-Muc tieu: toi da hoa gia tri thuc te cua `clawkit_*` tools cho LLM khi xu ly tac vu thuc chien, giam hallucination, giam token waste, va tang kha nang quyet dinh co kiem soat.
+Muc tieu: toi da hoa gia tri thuc te cua `eidolon_*` tools cho LLM khi xu ly tac vu thuc chien, giam hallucination, giam token waste, va tang kha nang quyet dinh co kiem soat.
 
 ## 1) Su that van hanh can nho
 
-- `clawkit_*` la nhom tool cognitive chinh, co telemetry + audit qua `tools/call`.
+- `eidolon_*` la nhom tool cognitive chinh, co telemetry + audit qua `tools/call`.
 - Nhieu `eidolon_*` hien la compatibility bridge (legacy emulation), khong nen coi la engine DeFi/Security production-ready.
 - `memories` hien la state trong process runtime; restart process co the mat bo nho tam thoi.
 - `tool_performance`, `generated_tool_audit`, `recommender_shadow_audit` duoc persist vao SQLite.
@@ -13,13 +13,13 @@ Muc tieu: toi da hoa gia tri thuc te cua `clawkit_*` tools cho LLM khi xu ly tac
 
 Ap dung cho task phuc tap, task rui ro, hoac task can truy hoi boi canh:
 
-1. `clawkit_tool_recommend`
-2. `clawkit_route_action`
-3. `clawkit_memory_query`
-4. `clawkit_compress_context`
-5. `clawkit_reason_chain`
-6. `clawkit_simulate_response` (neu co hanh dong rui ro)
-7. `clawkit_record_outcome` (sau khi co ket qua)
+1. `eidolon_tool_recommend`
+2. `eidolon_route_action`
+3. `eidolon_memory_query`
+4. `eidolon_compress_context`
+5. `eidolon_reason_chain`
+6. `eidolon_simulate_response` (neu co hanh dong rui ro)
+7. `eidolon_record_outcome` (sau khi co ket qua)
 
 Mac dinh:
 - Dung `recommender_model=v2`, `shadow_mode=true`.
@@ -31,7 +31,7 @@ Mac dinh:
 ### A. Q&A ngan, factual don gian
 
 - Khong can full pipeline.
-- Chi goi `clawkit_memory_query` neu can boi canh lich su.
+- Chi goi `eidolon_memory_query` neu can boi canh lich su.
 
 ### B. Planning / architecture / trade-off
 
@@ -50,7 +50,7 @@ Mac dinh:
 
 ## 4) Nguong quyet dinh de LLM tu xu ly
 
-Su dung ket qua `clawkit_route_action`:
+Su dung ket qua `eidolon_route_action`:
 
 - `AUTO`: tu thuc hien buoc tiep.
 - `PROPOSE`: dua 1 de xuat ro rang, cho user chap thuan nhanh.
@@ -58,23 +58,23 @@ Su dung ket qua `clawkit_route_action`:
 
 ## 5) Template tham so khuyen nghi
 
-### `clawkit_tool_recommend`
+### `eidolon_tool_recommend`
 
 ```json
 {
   "task": "analyze risk and retrieve relevant memory before action",
   "available_tools": [
-    "clawkit_memory_query",
-    "clawkit_reason_chain",
-    "clawkit_compress_context",
-    "clawkit_simulate_response"
+    "eidolon_memory_query",
+    "eidolon_reason_chain",
+    "eidolon_compress_context",
+    "eidolon_simulate_response"
   ],
   "recommender_model": "v2",
   "shadow_mode": true
 }
 ```
 
-### `clawkit_memory_query`
+### `eidolon_memory_query`
 
 ```json
 {
@@ -84,7 +84,7 @@ Su dung ket qua `clawkit_route_action`:
 }
 ```
 
-### `clawkit_compress_context`
+### `eidolon_compress_context`
 
 ```json
 {
@@ -95,7 +95,7 @@ Su dung ket qua `clawkit_route_action`:
 }
 ```
 
-### `clawkit_reason_chain`
+### `eidolon_reason_chain`
 
 ```json
 {
@@ -106,11 +106,11 @@ Su dung ket qua `clawkit_route_action`:
 }
 ```
 
-### `clawkit_route_action`
+### `eidolon_route_action`
 
 ```json
 {
-  "suggested_tool": "clawkit_reason_chain",
+  "suggested_tool": "eidolon_reason_chain",
   "intent_confidence": 0.74,
   "context_type": "risk_analysis"
 }
@@ -140,4 +140,4 @@ Gate toi thieu truoc promotion:
 - Gia tri lon nhat cua bo tool nay khong nam o mot tool le, ma o chu trinh:
   recommend -> route -> retrieve -> compress -> reason -> simulate -> learn.
 - Neu phai uu tien, uu tien 4 tool nay truoc:
-  `clawkit_memory_query`, `clawkit_compress_context`, `clawkit_reason_chain`, `clawkit_tool_recommend`.
+  `eidolon_memory_query`, `eidolon_compress_context`, `eidolon_reason_chain`, `eidolon_tool_recommend`.

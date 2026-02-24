@@ -16,11 +16,11 @@ const rl = readline.createInterface({
 
 let testIndex = 0;
 const tests = [
-    { method: 'clawkit_recall_user', params: { user_id: 'john_doe' } },
-    { method: 'clawkit_sense_intent', params: {} },
-    { method: 'clawkit_simulate_response', params: { action: 'greet' } },
-    { method: 'clawkit_reason_chain', params: { draft: 'hi', context: 'none', mode: 'fast' } },
-    { method: 'clawkit_record_outcome', params: { pattern: 'greeting', severity: 0 } },
+    { method: 'eidolon_recall_user', params: { user_id: 'john_doe' } },
+    { method: 'eidolon_sense_intent', params: {} },
+    { method: 'eidolon_simulate_response', params: { action: 'greet' } },
+    { method: 'eidolon_reason_chain', params: { draft: 'hi', context: 'none', mode: 'fast' } },
+    { method: 'eidolon_record_outcome', params: { pattern: 'greeting', severity: 0 } },
 ];
 
 function runNextTest() {

@@ -98,7 +98,7 @@ function evaluateTelemetryBreaches(args) {
       success_rate,
       ${p95Expr}
     FROM tool_performance
-    WHERE tool_name LIKE 'clawkit_%';
+    WHERE tool_name LIKE 'eidolon_%';
     `
   );
 

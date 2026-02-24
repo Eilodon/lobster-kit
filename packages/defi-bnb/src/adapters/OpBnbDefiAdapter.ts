@@ -3,8 +3,8 @@ import type {
   DomainActionContext,
   DomainActionDescriptor,
   IDomainAdapter
-} from '@clawkit/toolkit';
-import type { ClawKit as DeFiClawKit } from '../index';
+} from '@eidolon/toolkit';
+import type { Eidolon as DeFiEidolon } from '../index';
 
 type AdapterParams = Record<string, unknown>;
 
@@ -75,11 +75,11 @@ export class OpBnbDefiAdapter implements IDomainAdapter {
     id: 'opbnb-defi',
     domain: 'defi',
     version: '1.0.0',
-    description: 'Domain adapter for opBNB DeFi execution using @clawkit/defi-bnb.',
+    description: 'Domain adapter for opBNB DeFi execution using @eidolon/defi-bnb.',
     priority: 100
   };
 
-  constructor(private readonly kit: DeFiClawKit) { }
+  constructor(private readonly kit: DeFiEidolon) { }
 
   public listActions(): DomainActionDescriptor[] {
     return ACTIONS;

@@ -1,7 +1,7 @@
 {
-    "name": "@clawkit/core",
+    "name": "@eidolon/core",
     "version": "1.0.0",
-    "description": "ClawKit Core — shared events, memory, types, and utilities",
+    "description": "Eidolon Core — shared events, memory, types, and utilities",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {

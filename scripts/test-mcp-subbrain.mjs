@@ -4,7 +4,7 @@
  * 
  * Tests:
  * 1. MCP server responds to initialize
- * 2. clawkit_subbrain_auto tool is registered
+ * 2. eidolon_subbrain_auto tool is registered
  * 3. Sub-Brain tool executes correctly
  */
 
@@ -84,7 +84,7 @@ async function test1_Initialize() {
     ]);
     
     const init = responses.find(r => r.id === 1);
-    if (init?.result?.serverInfo?.name === 'clawkit-v4') {
+    if (init?.result?.serverInfo?.name === 'eidolon-v4') {
       logTest('Initialize', true, `Server: ${init.result.serverInfo.name} v${init.result.serverInfo.version}`);
     } else {
       logTest('Initialize', false, 'Invalid initialize response');
@@ -104,10 +104,10 @@ async function test2_ToolsList() {
     
     const toolsList = responses.find(r => r.id === 2);
     const tools = toolsList?.result?.tools || [];
-    const hasSubBrain = tools.some(t => t.name === 'clawkit_subbrain_auto');
+    const hasSubBrain = tools.some(t => t.name === 'eidolon_subbrain_auto');
     
     if (hasSubBrain) {
-      const subBrainTool = tools.find(t => t.name === 'clawkit_subbrain_auto');
+      const subBrainTool = tools.find(t => t.name === 'eidolon_subbrain_auto');
       logTest('Sub-Brain Tool Registered', true, `${tools.length} tools total`);
       logTest('Tool Description', true, subBrainTool.description.substring(0, 60) + '...');
     } else {
@@ -128,7 +128,7 @@ async function test3_SubBrainExecution() {
         id: 2, 
         method: 'tools/call',
         params: {
-          name: 'clawkit_subbrain_auto',
+          name: 'eidolon_subbrain_auto',
           arguments: {
             input: 'audit project code for security',
             user_id: 'test-user',

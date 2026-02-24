@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { EmotionalState } from '../eidolon/EmotionalCore';
-import { DecisionLog } from '@clawkit/core';
+import { DecisionLog } from '@eidolon/core';
 
 interface HolographicDisplayProps {
     emotionalState: EmotionalState;

@@ -1,1 +1,1 @@
-export { computeConfigHash, computeConfigHmac, verifyConfigIntegrity } from '@clawkit/toolkit';
+export { computeConfigHash, computeConfigHmac, verifyConfigIntegrity } from '@eidolon/toolkit';

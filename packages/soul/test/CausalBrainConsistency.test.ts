@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CausalBrain, SentinelVariable } from '@clawkit/core';
+import { CausalBrain, SentinelVariable } from '@eidolon/core';
 
 type LearnEvent = {
   cause: SentinelVariable;

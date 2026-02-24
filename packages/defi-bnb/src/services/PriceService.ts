@@ -1,1 +1,1 @@
-export { PriceService, getPriceService, type PriceOracle } from '@clawkit/toolkit';
+export { PriceService, getPriceService, type PriceOracle } from '@eidolon/toolkit';

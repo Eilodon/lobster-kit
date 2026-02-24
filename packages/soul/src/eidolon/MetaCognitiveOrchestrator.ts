@@ -142,7 +142,7 @@ export class MetaCognitiveOrchestrator {
         // ───────────────────────────────────────────────────────────────────────
 
         // 1a. Oracle-based Tool Calling & Intent Parsing
-        let suggestedTool = "clawkit_reason_chain";
+        let suggestedTool = "eidolon_reason_chain";
         let intentConfidence = 0.5;
 
         try {
@@ -150,11 +150,11 @@ export class MetaCognitiveOrchestrator {
                 const prompt = `Evaluate the user message and recommend the best MCP tool to handle it.
 Respond ONLY with a JSON object containing {"tool": "tool_name", "score": number between 0 and 1}.
 Available Tools:
-- clawkit_recall_user / clawkit_update_user
-- clawkit_memory_query / clawkit_compress_context / clawkit_recall_similar
-- clawkit_reason_chain / clawkit_simulate_response
-- clawkit_check_pattern / clawkit_commit_pattern / clawkit_record_outcome
-- clawkit_orchestrate / clawkit_dream_conversation
+- eidolon_recall_user / eidolon_update_user
+- eidolon_memory_query / eidolon_compress_context / eidolon_recall_similar
+- eidolon_reason_chain / eidolon_simulate_response
+- eidolon_check_pattern / eidolon_commit_pattern / eidolon_record_outcome
+- eidolon_orchestrate / eidolon_dream_conversation
 
 User Message: "${ctx.message}"
 Context Type: "${ctx.contextType}"`;
@@ -171,7 +171,7 @@ Context Type: "${ctx.contextType}"`;
             }
         } catch (error) {
             console.error("[MetaCognitiveOrchestrator] Failed to parse Oracle tool recommendation:", error);
-            // Fallback stays as clawkit_reason_chain with low confidence
+            // Fallback stays as eidolon_reason_chain with low confidence
         }
 
         // 1b. Thermodynamic State (Entropy)

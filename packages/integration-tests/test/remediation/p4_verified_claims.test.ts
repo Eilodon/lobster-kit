@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getTokenDecimals, OPBNB_CONFIG, CLAWKIT_CONTRACTS } from '../src/types';
+import { getTokenDecimals, OPBNB_CONFIG, EIDOLON_CONTRACTS } from '../src/types';
 import { AnalyticsModule } from '../src/analytics';
 
 // ─── F2: MCP oracle_sense dynamic symbol ────────────────────────────────────
@@ -44,8 +44,8 @@ describe('F4: Security knownSpenders includes chainConfig', () => {
             PANCAKE_ROUTER,
             chainConfig?.contracts?.pancakeRouter,
             chainConfig?.contracts?.batchExecutor,
-            CLAWKIT_CONTRACTS.BatchExecutor,
-            CLAWKIT_CONTRACTS.ApprovalRevoker,
+            EIDOLON_CONTRACTS.BatchExecutor,
+            EIDOLON_CONTRACTS.ApprovalRevoker,
         ].filter((addr): addr is string =>
             !!addr && addr !== '0x0000000000000000000000000000000000000000'
         );
@@ -61,7 +61,7 @@ describe('F4: Security knownSpenders includes chainConfig', () => {
 // ─── F5: Analytics historical snapshot persistence ──────────────────────────
 
 describe('F5: Analytics historical snapshot persistence', () => {
-    const HISTORY_DIR = path.resolve(process.cwd(), '.clawkit');
+    const HISTORY_DIR = path.resolve(process.cwd(), '.eidolon');
     const HISTORY_FILE = path.join(HISTORY_DIR, 'portfolio_history.json');
 
     const cleanupHistory = () => {

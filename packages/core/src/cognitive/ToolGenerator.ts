@@ -119,7 +119,7 @@ function safeName(input: string): string {
 
 export class ToolGenerator {
     private static readonly MAX_NEED_LENGTH = 280;
-    private static readonly NAME_PATTERN = /^clawkit_gen_[a-z0-9_]{3,64}$/;
+    private static readonly NAME_PATTERN = /^eidolon_gen_[a-z0-9_]{3,64}$/;
     private static readonly SAFE_CAPABILITIES = new Set([
         'read_only',
         'text_processing',
@@ -216,7 +216,7 @@ export class ToolGenerator {
             'Return JSON ONLY with keys:',
             'name, description, inputSchema, handlerHint, capabilities, allowed_domains.',
             'Rules:',
-            '- name must start with clawkit_gen_',
+            '- name must start with eidolon_gen_',
             '- inputSchema.type must be object',
             '- property types allowed: string|number|boolean',
             '- no side effects, no network, no file writes',
@@ -240,11 +240,11 @@ export class ToolGenerator {
         domain: string,
         fallbackSlug: string
     ): GeneratedToolSpec {
-        const rawName = typeof parsed.name === 'string' ? parsed.name : `clawkit_gen_${fallbackSlug}`;
-        const normalizedName = safeName(rawName.startsWith('clawkit_gen_') ? rawName : `clawkit_gen_${rawName}`);
-        const name = normalizedName.startsWith('clawkit_gen_')
+        const rawName = typeof parsed.name === 'string' ? parsed.name : `eidolon_gen_${fallbackSlug}`;
+        const normalizedName = safeName(rawName.startsWith('eidolon_gen_') ? rawName : `eidolon_gen_${rawName}`);
+        const name = normalizedName.startsWith('eidolon_gen_')
             ? normalizedName
-            : `clawkit_gen_${fallbackSlug}`;
+            : `eidolon_gen_${fallbackSlug}`;
 
         const rawDescription = typeof parsed.description === 'string'
             ? parsed.description
@@ -334,7 +334,7 @@ export class ToolGenerator {
         slug: string
     ): GeneratedToolSpec {
         return {
-            name: `clawkit_gen_${slug}`,
+            name: `eidolon_gen_${slug}`,
             description: `Generated read-only helper for need: ${need.trim().slice(0, 180)}`,
             inputSchema: {
                 type: 'object',

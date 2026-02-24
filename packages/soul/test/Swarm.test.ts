@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EidolonSwarm } from '../src/swarm/EidolonSwarm';
-import { EidolonBus, EidolonEventType } from '@clawkit/core';
+import { EidolonBus, EidolonEventType } from '@eidolon/core';
 
 // Mock BroadcastChannel if strictly necessary, but let's try to use the real one if available or a simple mock implementation
 

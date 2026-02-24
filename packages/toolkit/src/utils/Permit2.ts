@@ -13,8 +13,8 @@
  */
 
 import { encodeAbiParameters, parseAbi } from 'viem';
-import type { IReadClient } from '@clawkit/core';
-import { ClawKitWalletClient, toAddress } from '../types';
+import type { IReadClient } from '@eidolon/core';
+import { EidolonWalletClient, toAddress } from '../types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ const PERMIT2_ABI = parseAbi([
  * @param chainId      - Chain ID for EIP-712 domain
  */
 export async function signPermit2(
-    walletClient: ClawKitWalletClient,
+    walletClient: EidolonWalletClient,
     publicClient: Pick<IReadClient, 'readContract'>,
     token: string,
     spender: string,

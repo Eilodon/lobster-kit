@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EidolonGuard } from '../src/eidolon/EidolonGuard';
 import { WasmAdapter } from '../src/WasmAdapter';
-// import { ClawKit } from '../src/index'; // Unused
+// import { Eidolon } from '../src/index'; // Unused
 
 // Mock dependencies
 const mockKit = {

@@ -1,5 +1,5 @@
 import { MarketState, ReasoningWeights } from '../eidolon/EidolonTypes';
-import type { WorldState, CriticResult } from '@clawkit/core';
+import type { WorldState, CriticResult } from '@eidolon/core';
 
 export interface MarketContext {
     marketState: MarketState;

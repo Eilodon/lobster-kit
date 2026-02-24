@@ -238,7 +238,7 @@ impl EidolonMcpServer {
             }
             "eidolon://contracts" => serde_json::json!({
                 "runtime": {
-                    "name": "clawkit-v4",
+                    "name": "eidolon-v4",
                     "language": "rust",
                     "version": "4.0.0"
                 },

@@ -7,8 +7,8 @@ const mockGraph = {
     import_edges: vi.fn()
 };
 
-import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
-import { CausalBrain } from '@clawkit/core';
+import { WasmAdapter as CoreWasmAdapter } from '@eidolon/core';
+import { CausalBrain } from '@eidolon/core';
 
 describe('CausalBrain WASM schema regression', () => {
     beforeEach(() => {

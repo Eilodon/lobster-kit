@@ -48,13 +48,13 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
-      '@clawkit/core':
+      '@eidolon/core':
         specifier: workspace:^
         version: link:packages/core
-      '@clawkit/soul':
+      '@eidolon/soul':
         specifier: workspace:^
         version: link:packages/soul
-      '@clawkit/toolkit':
+      '@eidolon/toolkit':
         specifier: workspace:^
         version: link:packages/toolkit
       '@nomicfoundation/hardhat-toolbox':
@@ -115,7 +115,10 @@ importers:
 
   packages/defi-bnb:
     dependencies:
-      '@clawkit/toolkit':
+      '@eidolon/core':
+        specifier: workspace:*
+        version: link:../core
+      '@eidolon/toolkit':
         specifier: workspace:*
         version: link:../toolkit
       '@pancakeswap/sdk':
@@ -140,19 +143,16 @@ importers:
 
   packages/integration-tests:
     dependencies:
-      '@clawkit/core':
+      '@eidolon/core':
         specifier: workspace:*
         version: link:../core
-      '@clawkit/defi-bnb':
+      '@eidolon/defi-bnb':
         specifier: workspace:*
         version: link:../defi-bnb
-      '@clawkit/mcp':
-        specifier: workspace:*
-        version: link:../mcp
-      '@clawkit/soul':
+      '@eidolon/soul':
         specifier: workspace:*
         version: link:../soul
-      '@clawkit/toolkit':
+      '@eidolon/toolkit':
         specifier: workspace:*
         version: link:../toolkit
       dotenv:
@@ -175,43 +175,9 @@ importers:
         specifier: ^1.2.0
         version: 1.6.1(@types/node@20.19.33)
 
-  packages/mcp:
-    dependencies:
-      '@clawkit/core':
-        specifier: workspace:*
-        version: link:../core
-      '@clawkit/defi-bnb':
-        specifier: workspace:*
-        version: link:../defi-bnb
-      '@clawkit/soul':
-        specifier: workspace:*
-        version: link:../soul
-      '@clawkit/toolkit':
-        specifier: workspace:*
-        version: link:../toolkit
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.26.0
-        version: 1.26.0(zod@3.25.76)
-      dotenv:
-        specifier: ^16.4.1
-        version: 16.6.1
-      viem:
-        specifier: ^2.7.0
-        version: 2.46.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-    devDependencies:
-      tsx:
-        specifier: ^4.21.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
-
   packages/soul:
     dependencies:
-      '@clawkit/core':
+      '@eidolon/core':
         specifier: workspace:*
         version: link:../core
       react:
@@ -248,10 +214,10 @@ importers:
 
   packages/toolkit:
     dependencies:
-      '@clawkit/core':
+      '@eidolon/core':
         specifier: workspace:*
         version: link:../core
-      '@clawkit/soul':
+      '@eidolon/soul':
         specifier: workspace:*
         version: link:../soul
     devDependencies:

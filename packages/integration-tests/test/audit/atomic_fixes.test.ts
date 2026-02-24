@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // --- MOCKS ---
 
 // Mock WasmAdapter
-vi.mock('@clawkit/soul', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@clawkit/soul')>();
+vi.mock('@eidolon/soul', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@eidolon/soul')>();
     return {
         ...actual,
         WasmAdapter: {
@@ -29,9 +29,9 @@ vi.mock('@clawkit/soul', async (importOriginal) => {
 
 // Removed broken vi.mock of GoPlusSecurity
 
-import { GoPlusSecurity } from '@clawkit/soul';
-import { EidolonGuard } from '@clawkit/soul';
-import { ClawKit } from '../src/index';
+import { GoPlusSecurity } from '@eidolon/soul';
+import { EidolonGuard } from '@eidolon/soul';
+import { Eidolon } from '../src/index';
 
 // Mock Dependencies
 const mockPublicClient = { getBalance: vi.fn().mockResolvedValue(1000n) };
@@ -43,7 +43,7 @@ const mockKit = {
     writeClient: mockWalletClient,
     config: { deepSeekConfig: { apiKey: 'test' } },
     public: {}
-} as unknown as ClawKit;
+} as unknown as Eidolon;
 
 describe('🔒 ATOMIC FIXES VERIFICATION', () => {
     let guard: EidolonGuard;

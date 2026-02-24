@@ -1,7 +1,7 @@
 {
-    "name": "@clawkit/toolkit",
+    "name": "@eidolon/toolkit",
     "version": "1.0.0",
-    "description": "ClawKit Toolkit — abstract adapter interfaces for OpenClaw ecosystem",
+    "description": "Eidolon Toolkit — abstract adapter interfaces for OpenClaw ecosystem",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
@@ -11,8 +11,8 @@
     },
     "license": "MIT",
     "dependencies": {
-        "@clawkit/core": "workspace:*",
-        "@clawkit/soul": "workspace:*"
+        "@eidolon/core": "workspace:*",
+        "@eidolon/soul": "workspace:*"
     },
     "devDependencies": {
         "typescript": "^5.3.3"

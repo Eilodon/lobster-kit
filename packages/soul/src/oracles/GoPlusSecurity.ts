@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { withRetry } from '@clawkit/core';
+import { withRetry } from '@eidolon/core';
 
 /**
  * 🛡️ GoPlus Security API Client

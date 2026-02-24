@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DirtyComponentMask, DirtyMask, DirtyTracker } from '@clawkit/core';
+import { DirtyComponentMask, DirtyMask, DirtyTracker } from '@eidolon/core';
 
 describe('DirtyTracker', () => {
     it('should mark and query dirty peers by mask', () => {

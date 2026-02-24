@@ -13,7 +13,7 @@
  */
 
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { ClawKitConfig } from '../types';
+import { EidolonConfig } from '../types';
 
 // ─── Rate Limiter (Token Bucket) ─────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ export class ExternalAPIGateway {
     private buckets = new Map<string, TokenBucket>();
     private circuits = new Map<string, CircuitState>();
 
-    constructor(private config: ClawKitConfig) { }
+    constructor(private config: EidolonConfig) { }
 
     // ── Domain helpers ──────────────────────────────────────────────────────────
 
@@ -224,9 +224,9 @@ export class ExternalAPIGateway {
 // ─── Module-level singleton factory ──────────────────────────────────────────
 // One gateway per config instance (shared across modules).
 
-const gatewayCache = new WeakMap<ClawKitConfig, ExternalAPIGateway>();
+const gatewayCache = new WeakMap<EidolonConfig, ExternalAPIGateway>();
 
-export function getGateway(config: ClawKitConfig): ExternalAPIGateway {
+export function getGateway(config: EidolonConfig): ExternalAPIGateway {
     if (!gatewayCache.has(config)) {
         gatewayCache.set(config, new ExternalAPIGateway(config));
     }

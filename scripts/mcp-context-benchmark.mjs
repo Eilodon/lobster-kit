@@ -227,7 +227,7 @@ async function main() {
       let result;
       let error = null;
       try {
-        result = await mcp.call('clawkit_compress_context', {
+        result = await mcp.call('eidolon_compress_context', {
           context,
           target_tokens: targetTokens,
           focus_terms: focusTerms,

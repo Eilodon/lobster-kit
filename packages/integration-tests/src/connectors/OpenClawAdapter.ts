@@ -1,4 +1,4 @@
-import type { ValidationResult, EidolonGuard } from '@clawkit/soul';
+import type { ValidationResult, EidolonGuard } from '@eidolon/soul';
 
 export interface OpenClawSkill {
   name: string;

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DivineTransparency } from '@clawkit/core';
+import { DivineTransparency } from '@eidolon/core';
 import { DEFAULT_WEIGHTS, type MarketState } from '../src/eidolon/EidolonTypes';
 import type { IOracle } from '../src/ai/IOracle';
 

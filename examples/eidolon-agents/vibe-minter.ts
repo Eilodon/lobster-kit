@@ -4,10 +4,10 @@
  * This example shows the "Divine Hand" architecture:
  * 1. BRAIN (Simulated Loop): Decides what to do
  * 2. GUARD (Eidolon): Validates the decision for risk/safety
- * 3. HAND (ClawKit): Executes the validated action
+ * 3. HAND (Eidolon): Executes the validated action
  */
 
-import { ClawKit } from '../../src';
+import { Eidolon } from '../../src';
 import { EidolonGuard, MarketState, ActionType, TradeOutcome, ClawOracle } from '../../src/eidolon';
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { opBNB } from 'viem/chains';
@@ -37,7 +37,7 @@ const walletClient = createWalletClient({
   transport: http()
 });
 
-const kit = new ClawKit(walletClient, {
+const kit = new Eidolon(walletClient, {
   privateKey: process.env.PRIVATE_KEY!
 });
 

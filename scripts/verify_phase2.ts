@@ -1,7 +1,7 @@
 
 import { WalletModule } from '../src/wallet';
 import { SecurityModule } from '../src/security';
-import { CLAWKIT_CONTRACTS, OPBNB_CONFIG } from '../src/types';
+import { EIDOLON_CONTRACTS, OPBNB_CONFIG } from '../src/types';
 import { createPublicClient, createWalletClient, http, parseEther, encodeFunctionData, parseAbi, Log } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { opBNB } from 'viem/chains';
@@ -41,7 +41,7 @@ async function verifyWalletBatching() {
     console.log('\n--- Verifying Wallet Batching ---');
 
     // Set mock address
-    CLAWKIT_CONTRACTS.BatchExecutor = '0x1234567890123456789012345678901234567890';
+    EIDOLON_CONTRACTS.BatchExecutor = '0x1234567890123456789012345678901234567890';
 
     const wallet = new WalletModule(client as any, publicClient, mockConfig as any);
 
@@ -58,7 +58,7 @@ async function verifyWalletBatching() {
             return;
         }
 
-        if (pendingTransaction.to.toLowerCase() !== CLAWKIT_CONTRACTS.BatchExecutor.toLowerCase()) {
+        if (pendingTransaction.to.toLowerCase() !== EIDOLON_CONTRACTS.BatchExecutor.toLowerCase()) {
             console.error('❌ Transaction sent to wrong address:', pendingTransaction.to);
             return;
         }

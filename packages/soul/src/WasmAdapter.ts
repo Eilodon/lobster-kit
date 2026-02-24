@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { Logger, WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
+import { Logger } from '@eidolon/core';
 
 export interface InvariantCheckResult {
     safe: boolean;
@@ -891,7 +891,7 @@ export class WasmAdapter {
                         this.verifyABI(module.default);
                         this.coreModule = module.default;
                         this.fallbackMode = false;
-                        CoreWasmAdapter.setInstance(this);
+                        (globalThis as any).EIDOLON_WASM_ADAPTER = this;
                         Logger.info(`🦀 WASM Core Loaded (Node/Vitest Mode) from ${jsPath}`);
                     }
                     // Case 1B: Direct exports (ESM/CJS mixed)
@@ -899,7 +899,7 @@ export class WasmAdapter {
                         this.verifyABI(module);
                         this.coreModule = module;
                         this.fallbackMode = false;
-                        CoreWasmAdapter.setInstance(this);
+                        (globalThis as any).EIDOLON_WASM_ADAPTER = this;
                         Logger.info(`🦀 WASM Core Loaded (Direct Mode) from ${jsPath}`);
                     }
                     // Case 1C: Initialize WASM memory with Binary (Web/Bundler support)
@@ -910,7 +910,7 @@ export class WasmAdapter {
                             this.verifyABI(module);
                             this.coreModule = module;
                             this.fallbackMode = false;
-                            CoreWasmAdapter.setInstance(this);
+                            (globalThis as any).EIDOLON_WASM_ADAPTER = this;
                             Logger.info(`🦀 WASM Core Loaded & Initialized from ${wasmPath}`);
                         } else {
                             Logger.warn('⚠️ WASM module default export missing');

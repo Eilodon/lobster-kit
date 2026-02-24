@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeFiModule } from '@clawkit/defi-bnb';
-import { ClawKitConfig } from '@clawkit/defi-bnb';
+import { DeFiModule } from '@eidolon/defi-bnb';
+import { EidolonConfig } from '@eidolon/defi-bnb';
 import { parseEther } from 'viem';
 
 // Mock dependencies

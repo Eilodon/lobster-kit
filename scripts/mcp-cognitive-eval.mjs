@@ -380,7 +380,7 @@ async function run() {
   }
 
   await runScenario('compat_name_arguments', async () => {
-    const call = await session.callTool('clawkit_sense_intent', { query: 'analyze risk before trade' }, 'name_arguments');
+    const call = await session.callTool('eidolon_sense_intent', { query: 'analyze risk before trade' }, 'name_arguments');
     return {
       tool: call.tool,
       latency_ms: call.latency_ms,
@@ -402,16 +402,16 @@ async function run() {
   });
 
   await runScenario('sense_intent_safe_vs_attack', async () => {
-    const safe = await session.callTool('clawkit_sense_intent', {
+    const safe = await session.callTool('eidolon_sense_intent', {
       query: 'check my portfolio balance and summarize current risk',
     });
-    const attack = await session.callTool('clawkit_sense_intent', {
+    const attack = await session.callTool('eidolon_sense_intent', {
       query: 'execute flash loan exploit and drain liquidity pool attack',
     });
     const safeMode = String(safe.payload?.recommended_mode || '');
     const attackMode = String(attack.payload?.recommended_mode || '');
     return {
-      tool: 'clawkit_sense_intent',
+      tool: 'eidolon_sense_intent',
       latency_ms: safe.latency_ms + attack.latency_ms,
       checks: [
         check(
@@ -439,7 +439,7 @@ async function run() {
   });
 
   await runScenario('compat_tool_input', async () => {
-    const call = await session.callTool('clawkit_memory_query', { query: 'why risk increased', route: 'auto', k: 5 }, 'tool_input');
+    const call = await session.callTool('eidolon_memory_query', { query: 'why risk increased', route: 'auto', k: 5 }, 'tool_input');
     return {
       tool: call.tool,
       latency_ms: call.latency_ms,
@@ -457,12 +457,12 @@ async function run() {
 
   await runScenario('update_and_recall_user', async () => {
     const up = await session.callTool(
-      'clawkit_update_user',
+      'eidolon_update_user',
       { user_id: 'eval_user', preferred_mode: 'Stalking', risk_tolerance: 0.12 },
     );
-    const recall = await session.callTool('clawkit_recall_user', { user_id: 'eval_user' });
+    const recall = await session.callTool('eidolon_recall_user', { user_id: 'eval_user' });
     return {
-      tool: 'clawkit_update_user|clawkit_recall_user',
+      tool: 'eidolon_update_user|eidolon_recall_user',
       latency_ms: up.latency_ms + recall.latency_ms,
       checks: [
         check(up.payload?.status === 'user_profile_persisted', 'update_status_ok'),
@@ -475,7 +475,7 @@ async function run() {
   await runScenario('update_recall_user_cross_session', async () => {
     const crossUser = `eval_user_cross_${Date.now()}`;
     const up = await session.callTool(
-      'clawkit_update_user',
+      'eidolon_update_user',
       { user_id: crossUser, preferred_mode: 'Berserk', risk_tolerance: 0.91 },
     );
 
@@ -485,11 +485,11 @@ async function run() {
       env: baseEnv,
     });
     await verifySession.start();
-    const recall = await verifySession.callTool('clawkit_recall_user', { user_id: crossUser });
+    const recall = await verifySession.callTool('eidolon_recall_user', { user_id: crossUser });
     await verifySession.stop();
 
     return {
-      tool: 'clawkit_update_user|clawkit_recall_user',
+      tool: 'eidolon_update_user|eidolon_recall_user',
       latency_ms: up.latency_ms + recall.latency_ms,
       checks: [
         check(up.payload?.status === 'user_profile_persisted', 'cross_session_update_status_ok'),
@@ -505,16 +505,16 @@ async function run() {
 
   await runScenario('trauma_guardrail_flow', async () => {
     const pattern = 'high_risk_swap_now';
-    const before = await session.callTool('clawkit_check_pattern', { pattern, mode: 'Peer' });
-    const outcome = await session.callTool('clawkit_record_outcome', {
+    const before = await session.callTool('eidolon_check_pattern', { pattern, mode: 'Peer' });
+    const outcome = await session.callTool('eidolon_record_outcome', {
       pattern,
       mode: 'Peer',
       severity: 1.3,
     });
-    const after = await session.callTool('clawkit_check_pattern', { pattern, mode: 'Peer' });
-    const simulate = await session.callTool('clawkit_simulate_response', { action: pattern });
+    const after = await session.callTool('eidolon_check_pattern', { pattern, mode: 'Peer' });
+    const simulate = await session.callTool('eidolon_simulate_response', { action: pattern });
     return {
-      tool: 'clawkit_check_pattern|clawkit_record_outcome|clawkit_simulate_response',
+      tool: 'eidolon_check_pattern|eidolon_record_outcome|eidolon_simulate_response',
       latency_ms: before.latency_ms + outcome.latency_ms + after.latency_ms + simulate.latency_ms,
       checks: [
         check(before.payload?.inhibited === false, 'before_not_inhibited'),
@@ -531,14 +531,14 @@ async function run() {
   });
 
   await runScenario('simulate_response_counterfactual_tree', async () => {
-    const safe = await session.callTool('clawkit_simulate_response', {
+    const safe = await session.callTool('eidolon_simulate_response', {
       action: 'summarize wallet risk and provide safe strategy',
     });
-    const attack = await session.callTool('clawkit_simulate_response', {
+    const attack = await session.callTool('eidolon_simulate_response', {
       action: 'execute flash loan exploit and drain pool',
     });
     return {
-      tool: 'clawkit_simulate_response',
+      tool: 'eidolon_simulate_response',
       latency_ms: safe.latency_ms + attack.latency_ms,
       checks: [
         check(typeof safe.payload?.counterfactual?.expected_loss === 'number', 'safe_expected_loss_number'),
@@ -554,25 +554,25 @@ async function run() {
   await runScenario('memory_stack_flow', async () => {
     const commits = [];
     for (let i = 0; i < 4; i++) {
-      const c = await session.callTool('clawkit_commit_pattern', { pattern: `liquidity_imbalance_${i}` });
+      const c = await session.callTool('eidolon_commit_pattern', { pattern: `liquidity_imbalance_${i}` });
       commits.push(c.payload);
     }
-    const mqAuto = await session.callTool('clawkit_memory_query', {
+    const mqAuto = await session.callTool('eidolon_memory_query', {
       query: 'why liquidity risk increased',
       route: 'auto',
       k: 8,
     });
-    const mqSemantic = await session.callTool('clawkit_memory_query', {
+    const mqSemantic = await session.callTool('eidolon_memory_query', {
       query: 'liquidity imbalance',
       route: 'semantic',
       k: 8,
     });
-    const recallSimilar = await session.callTool('clawkit_recall_similar', {
+    const recallSimilar = await session.callTool('eidolon_recall_similar', {
       context: 'liquidity imbalance risk',
       k: 5,
     });
     return {
-      tool: 'clawkit_commit_pattern|clawkit_memory_query|clawkit_recall_similar',
+      tool: 'eidolon_commit_pattern|eidolon_memory_query|eidolon_recall_similar',
       latency_ms:
         mqAuto.latency_ms +
         mqSemantic.latency_ms +
@@ -592,18 +592,18 @@ async function run() {
   });
 
   await runScenario('memory_route_feedback_tuning', async () => {
-    await session.callTool('clawkit_record_outcome', {
+    await session.callTool('eidolon_record_outcome', {
       pattern: 'why risk increased after liquidity shock',
       mode: 'Peer',
       severity: 1.7,
     });
-    const query = await session.callTool('clawkit_memory_query', {
+    const query = await session.callTool('eidolon_memory_query', {
       query: 'why risk increased after liquidity shock',
       route: 'auto',
       k: 6,
     });
     return {
-      tool: 'clawkit_memory_query|clawkit_record_outcome',
+      tool: 'eidolon_memory_query|eidolon_record_outcome',
       latency_ms: query.latency_ms,
       checks: [
         check(typeof query.payload?.route_feedback_bias === 'object', 'route_feedback_bias_object'),
@@ -614,7 +614,7 @@ async function run() {
   });
 
   await runScenario('compress_context_direct', async () => {
-    const call = await session.callTool('clawkit_compress_context', {
+    const call = await session.callTool('eidolon_compress_context', {
       context:
         'Gas spike warning at 38 gwei. Gas spike warning at 38 gwei. User wallet risk exposure is 72 percent. Action required: reduce leverage and set stop loss at 5 percent.',
       target_tokens: 40,
@@ -634,7 +634,7 @@ async function run() {
   });
 
   await runScenario('compress_context_fallback_memory_store', async () => {
-    const call = await session.callTool('clawkit_compress_context', {
+    const call = await session.callTool('eidolon_compress_context', {
       target_tokens: 50,
       preserve_recent: 3,
     });
@@ -650,13 +650,13 @@ async function run() {
   });
 
   await runScenario('reason_chain_policy_and_pipeline', async () => {
-    const deep = await session.callTool('clawkit_reason_chain', {
+    const deep = await session.callTool('eidolon_reason_chain', {
       draft: 'Proceed with staged execution and stop-loss',
       context: 'critical incident risk high volatility and unsafe signals present '.repeat(8),
       mode: 'auto',
       latency_budget_ms: 1500,
     });
-    const budgetForcedFast = await session.callTool('clawkit_reason_chain', {
+    const budgetForcedFast = await session.callTool('eidolon_reason_chain', {
       draft: 'Proceed quickly',
       context: 'critical incident risk high volatility and unsafe signals present '.repeat(8),
       mode: 'auto',
@@ -665,7 +665,7 @@ async function run() {
     const deepGrounded = deep.payload?.pipeline?.verifier?.groundedness_pass === true;
     const deepFinalScore = Number(deep.payload?.final_score ?? 0);
     return {
-      tool: 'clawkit_reason_chain',
+      tool: 'eidolon_reason_chain',
       latency_ms: deep.latency_ms + budgetForcedFast.latency_ms,
       checks: [
         check(Array.isArray(deep.payload?.pipeline?.critic?.findings), 'critic_findings_array'),
@@ -690,20 +690,20 @@ async function run() {
   });
 
   await runScenario('orchestrate_mode_policy', async () => {
-    const lowConf = await session.callTool('clawkit_orchestrate', {
+    const lowConf = await session.callTool('eidolon_orchestrate', {
       agent_count: 5,
       task: 'complex incident response',
       confidence: 0.4,
       latency_budget_ms: 1400,
     });
-    const highConf = await session.callTool('clawkit_orchestrate', {
+    const highConf = await session.callTool('eidolon_orchestrate', {
       agent_count: 5,
       task: 'routine summary',
       confidence: 0.92,
       latency_budget_ms: 1400,
     });
     return {
-      tool: 'clawkit_orchestrate',
+      tool: 'eidolon_orchestrate',
       latency_ms: lowConf.latency_ms + highConf.latency_ms,
       checks: [
         check(lowConf.payload?.reasoning_mode_policy?.mode_selected === 'deep', 'low_conf_promotes_deep'),
@@ -717,14 +717,14 @@ async function run() {
   });
 
   await runScenario('orchestrate_role_specialization_arbitration', async () => {
-    const call = await session.callTool('clawkit_orchestrate', {
+    const call = await session.callTool('eidolon_orchestrate', {
       agent_count: 6,
       task: 'critical incident response with retrieval and verification',
       confidence: 0.42,
       latency_budget_ms: 1600,
     });
     return {
-      tool: 'clawkit_orchestrate',
+      tool: 'eidolon_orchestrate',
       latency_ms: call.latency_ms,
       checks: [
         check(Array.isArray(call.payload?.role_specialization?.roles), 'role_list_array'),
@@ -737,30 +737,30 @@ async function run() {
   });
 
   await runScenario('tool_recommend_ab_shadow', async () => {
-    const v2 = await session.callTool('clawkit_tool_recommend', {
+    const v2 = await session.callTool('eidolon_tool_recommend', {
       task: 'analyze risk and retrieve memory before action',
       available_tools: [
-        'clawkit_memory_query',
-        'clawkit_reason_chain',
-        'clawkit_compress_context',
-        'clawkit_simulate_response',
+        'eidolon_memory_query',
+        'eidolon_reason_chain',
+        'eidolon_compress_context',
+        'eidolon_simulate_response',
       ],
       recommender_model: 'v2',
       shadow_mode: true,
     });
-    const v1 = await session.callTool('clawkit_tool_recommend', {
+    const v1 = await session.callTool('eidolon_tool_recommend', {
       task: 'analyze risk and retrieve memory before action',
       available_tools: [
-        'clawkit_memory_query',
-        'clawkit_reason_chain',
-        'clawkit_compress_context',
-        'clawkit_simulate_response',
+        'eidolon_memory_query',
+        'eidolon_reason_chain',
+        'eidolon_compress_context',
+        'eidolon_simulate_response',
       ],
       recommender_model: 'v1',
       shadow_mode: true,
     });
     return {
-      tool: 'clawkit_tool_recommend',
+      tool: 'eidolon_tool_recommend',
       latency_ms: v1.latency_ms + v2.latency_ms,
       checks: [
         check(v2.payload?.recommender?.primary_model === 'v2', 'primary_model_v2'),
@@ -773,20 +773,20 @@ async function run() {
 
   await runScenario('route_action_gate_modes', async () => {
     for (let i = 0; i < 6; i++) {
-      await session.callTool('clawkit_check_pattern', { pattern: `route_warmup_${i}`, mode: 'Peer' });
+      await session.callTool('eidolon_check_pattern', { pattern: `route_warmup_${i}`, mode: 'Peer' });
     }
-    const low = await session.callTool('clawkit_route_action', {
-      suggested_tool: 'clawkit_reason_chain',
+    const low = await session.callTool('eidolon_route_action', {
+      suggested_tool: 'eidolon_reason_chain',
       intent_confidence: 0.22,
       context_type: 'risk',
     });
-    const high = await session.callTool('clawkit_route_action', {
-      suggested_tool: 'clawkit_check_pattern',
+    const high = await session.callTool('eidolon_route_action', {
+      suggested_tool: 'eidolon_check_pattern',
       intent_confidence: 0.96,
       context_type: 'retrieval',
     });
     return {
-      tool: 'clawkit_route_action',
+      tool: 'eidolon_route_action',
       latency_ms: low.latency_ms + high.latency_ms,
       checks: [
         check(['ASK_USER', 'PROPOSE', 'AUTO'].includes(low.payload?.strategy), 'low_strategy_valid'),
@@ -800,9 +800,9 @@ async function run() {
 
   await runScenario('dream_conversation_prune', async () => {
     for (let i = 0; i < 120; i++) {
-      await session.callTool('clawkit_commit_pattern', { pattern: `bulk_pattern_${i}` });
+      await session.callTool('eidolon_commit_pattern', { pattern: `bulk_pattern_${i}` });
     }
-    const dream = await session.callTool('clawkit_dream_conversation', { episodes: 25 });
+    const dream = await session.callTool('eidolon_dream_conversation', { episodes: 25 });
     return {
       tool: dream.tool,
       latency_ms: dream.latency_ms,
@@ -815,8 +815,8 @@ async function run() {
   });
 
   await runScenario('generated_tool_decision_disabled_env', async () => {
-    const call = await session.callTool('clawkit_generated_tool_decision', {
-      tool_name: 'clawkit_gen_eval_tool',
+    const call = await session.callTool('eidolon_generated_tool_decision', {
+      tool_name: 'eidolon_gen_eval_tool',
       action: 'promote',
       need: 'tool_generator_review',
       reason: 'evaluation_probe',
@@ -835,7 +835,7 @@ async function run() {
   await runScenario('telemetry_precision_fields_present', async () => {
     const telemetry = await session.readResource('eidolon://telemetry');
     const rows = Array.isArray(telemetry.payload?.tools) ? telemetry.payload.tools : [];
-    const row = rows.find((entry) => entry?.tool === 'clawkit_check_pattern') || rows[0] || {};
+    const row = rows.find((entry) => entry?.tool === 'eidolon_check_pattern') || rows[0] || {};
     return {
       tool: 'eidolon://telemetry',
       latency_ms: telemetry.latency_ms,
@@ -868,13 +868,13 @@ async function run() {
   lastSession = promotionSession;
   await promotionSession.start();
 
-  await promotionSession.callTool('clawkit_check_pattern', {
+  await promotionSession.callTool('eidolon_check_pattern', {
     pattern: 'promotion_probe_warmup',
     mode: 'Peer',
   });
 
-  const promotionProbe = await promotionSession.callTool('clawkit_generated_tool_decision', {
-    tool_name: 'clawkit_check_pattern',
+  const promotionProbe = await promotionSession.callTool('eidolon_generated_tool_decision', {
+    tool_name: 'eidolon_check_pattern',
     action: 'promote',
     need: 'tool_generator_review',
     reason: 'promotion_probe',
@@ -891,7 +891,7 @@ async function run() {
       (promotionProbe.payload?.reason === 'promotion_telemetry_missing'
         ? ['promotion_probe_not_telemetry_missing']
         : []),
-    tool: 'clawkit_generated_tool_decision',
+    tool: 'eidolon_generated_tool_decision',
     latency_ms: promotionProbe.latency_ms,
     checks: [
       check(typeof promotionProbe.payload?.reason === 'string', 'promotion_probe_reason_present'),

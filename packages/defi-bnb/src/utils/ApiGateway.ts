@@ -1,1 +1,1 @@
-export { ExternalAPIGateway, getGateway } from '@clawkit/toolkit';
+export { ExternalAPIGateway, getGateway } from '@eidolon/toolkit';

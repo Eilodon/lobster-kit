@@ -1,1 +1,1 @@
-export * from '@clawkit/defi-bnb';
+export * from '@eidolon/defi-bnb';

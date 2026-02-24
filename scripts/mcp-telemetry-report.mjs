@@ -90,7 +90,7 @@ const rows = tableExists(args.db, 'tool_performance')
         ${selectExpr(args.db, 'tool_performance', 'fallback_rate', '0.0')},
         last_called
       FROM tool_performance
-      WHERE tool_name LIKE 'clawkit_%'
+      WHERE tool_name LIKE 'eidolon_%'
       ORDER BY last_called DESC
       LIMIT ${limit};
       `

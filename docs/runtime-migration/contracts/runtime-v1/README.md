@@ -17,7 +17,7 @@ Files:
 
 Compatibility rules:
 - `eidolon_*` tools remain stable during dual-stack window.
-- `clawkit_*` tools canary-gated and auto-rollback capable.
+- `eidolon_*` tools canary-gated and auto-rollback capable.
 - Gateway accepts both modern and legacy call payload shape.
 
 Promotion rule:

@@ -2,13 +2,13 @@
  * 🔶 opBNB CHAIN CONFIGURATION
  *
  * BNB-specific constants, contract addresses, and token registry.
- * Import from '@clawkit/toolkit/chains/opbnb' (or './chains/opbnb')
+ * Import from '@eidolon/toolkit/chains/opbnb' (or './chains/opbnb')
  * only in domain adapters — never in the universal kernel.
  *
  * Sources: pancakeswap.finance, binance.org (verified 2026)
  */
 
-import { ChainConfig, TokenInfo, ClawKitConfig } from '../types';
+import { ChainConfig, TokenInfo, EidolonConfig } from '../types';
 
 // ═══════════════════════════════════════════════════════
 //  OPBNB CHAIN CONFIG
@@ -63,17 +63,17 @@ export const PANCAKE_ROUTER = OPBNB_CONFIG.contracts.pancakeRouter;
 export const PANCAKE_QUOTER = OPBNB_CONFIG.contracts.pancakeQuoter;
 
 // ═══════════════════════════════════════════════════════
-//  CLAWKIT HELPER CONTRACTS
+//  EIDOLON HELPER CONTRACTS
 // ═══════════════════════════════════════════════════════
 
-export const CLAWKIT_CONTRACTS = {
+export const EIDOLON_CONTRACTS = {
     DynamicBadge: '0x0000000000000000000000000000000000000000' as string,
     BatchExecutor: '0x0000000000000000000000000000000000000000' as string,
     ApprovalRevoker: '0x0000000000000000000000000000000000000000' as string,
 };
 
-export function assertDeployed(name: keyof typeof CLAWKIT_CONTRACTS): string {
-    const addr = CLAWKIT_CONTRACTS[name];
+export function assertDeployed(name: keyof typeof EIDOLON_CONTRACTS): string {
+    const addr = EIDOLON_CONTRACTS[name];
     if (!addr || addr === '0x0000000000000000000000000000000000000000') {
         throw new Error(
             `${name} contract not deployed. Run: npx hardhat run scripts/deploy.ts --network opbnb`
@@ -111,7 +111,7 @@ export function resolveTokenAddress(tokenOrSymbol: string): string {
     return tokenOrSymbol;
 }
 
-export const BATCH_EXECUTOR = CLAWKIT_CONTRACTS.BatchExecutor;
-export const APPROVAL_REVOKER = CLAWKIT_CONTRACTS.ApprovalRevoker;
+export const BATCH_EXECUTOR = EIDOLON_CONTRACTS.BatchExecutor;
+export const APPROVAL_REVOKER = EIDOLON_CONTRACTS.ApprovalRevoker;
 
 export type TokenSymbol = keyof typeof TOKENS;

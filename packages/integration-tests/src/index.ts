@@ -1,20 +1,20 @@
 import { PublicClient, createPublicClient, http } from 'viem';
 import { opBNB } from 'viem/chains';
-import type { ClawKitConfig, ClawKitWalletClient } from './types';
+import type { EidolonConfig, EidolonWalletClient } from './types';
 import { OPBNB_CONFIG } from './types';
 import { DeFiModule } from './defi';
 import { NFTModule } from './nft';
-import { SecurityModule, WalletModule, GasModule } from '@clawkit/defi-bnb';
+import { SecurityModule, WalletModule, GasModule } from '@eidolon/defi-bnb';
 import { AnalyticsModule } from './analytics';
 import { getPriceService } from './services/PriceService';
-import { MarketStream, EidolonSwarm } from '@clawkit/soul';
+import { MarketStream, EidolonSwarm } from '@eidolon/soul';
 
 /**
  * Legacy compatibility facade used by integration tests.
  * Reconstructs old monolith behavior (constructor side-effects + module layout)
  * while internal modules are now sourced from package split outputs.
  */
-export class ClawKit {
+export class Eidolon {
   public readonly defi: DeFiModule;
   public readonly nft: NFTModule;
   public readonly security: SecurityModule;
@@ -22,17 +22,17 @@ export class ClawKit {
   public readonly gas: GasModule;
   public readonly analytics: AnalyticsModule;
 
-  public readonly walletClient: ClawKitWalletClient;
+  public readonly walletClient: EidolonWalletClient;
   public readonly publicClient: PublicClient;
-  /** Generic aliases for IClawKit compatibility */
+  /** Generic aliases for IEidolon compatibility */
   public readonly readClient: PublicClient;
-  public readonly writeClient: ClawKitWalletClient;
-  public readonly config: ClawKitConfig;
+  public readonly writeClient: EidolonWalletClient;
+  public readonly config: EidolonConfig;
 
   private marketStream?: MarketStream;
   private swarm?: EidolonSwarm;
 
-  constructor(walletClient: ClawKitWalletClient, config: ClawKitConfig) {
+  constructor(walletClient: EidolonWalletClient, config: EidolonConfig) {
     this.walletClient = walletClient;
     this.config = {
       ...config,
@@ -84,4 +84,4 @@ export class ClawKit {
   }
 }
 
-export default ClawKit;
+export default Eidolon;

@@ -58,7 +58,7 @@ function readRollbackPassed(reportPath) {
 function readTelemetry(dbPath) {
   if (!fs.existsSync(dbPath)) {
     return {
-      clawkitCalls: 0,
+      eidolonCalls: 0,
       eidolonCalls: 0,
       weightedErrorRate: 0,
       rows: 0,
@@ -70,10 +70,10 @@ function readTelemetry(dbPath) {
     const rows = db.prepare(`
       SELECT tool_name, call_count, success_rate
       FROM tool_performance
-      WHERE tool_name LIKE 'clawkit_%' OR tool_name LIKE 'eidolon_%'
+      WHERE tool_name LIKE 'eidolon_%' OR tool_name LIKE 'eidolon_%'
     `).all();
 
-    let clawkitCalls = 0;
+    let eidolonCalls = 0;
     let eidolonCalls = 0;
     let weightedErrors = 0;
     let totalCalls = 0;
@@ -84,7 +84,7 @@ function readTelemetry(dbPath) {
       const successRate = clamp01(Number(row.success_rate ?? 0));
       const errorRate = 1 - successRate;
 
-      if (toolName.startsWith('clawkit_')) clawkitCalls += calls;
+      if (toolName.startsWith('eidolon_')) eidolonCalls += calls;
       if (toolName.startsWith('eidolon_')) eidolonCalls += calls;
 
       weightedErrors += calls * errorRate;
@@ -92,7 +92,7 @@ function readTelemetry(dbPath) {
     }
 
     return {
-      clawkitCalls,
+      eidolonCalls,
       eidolonCalls,
       weightedErrorRate: totalCalls > 0 ? clamp01(weightedErrors / totalCalls) : 0,
       rows: rows.length,
@@ -107,7 +107,7 @@ function main() {
 
   const telemetry = readTelemetry(args.db);
   const rollbackPassed = readRollbackPassed(args.rollbackReport);
-  const totalCalls = telemetry.clawkitCalls + telemetry.eidolonCalls;
+  const totalCalls = telemetry.eidolonCalls + telemetry.eidolonCalls;
   const eidolonUsageRatio = totalCalls > 0 ? clamp01(telemetry.eidolonCalls / totalCalls) : 0;
 
   const prodStableDays = Number.isFinite(args.prodStableDays) ? Math.max(0, Math.floor(args.prodStableDays)) : 0;
@@ -122,7 +122,7 @@ function main() {
       prod_stable_days: prodStableDays,
       rollback_drill_passed: rollbackPassed,
       telemetry_rows: telemetry.rows,
-      clawkit_calls: telemetry.clawkitCalls,
+      eidolon_calls: telemetry.eidolonCalls,
       eidolon_calls: telemetry.eidolonCalls,
       eidolon_usage_ratio: eidolonUsageRatio,
       weighted_error_rate: telemetry.weightedErrorRate,
@@ -156,7 +156,7 @@ function main() {
   console.log(`mcp-phase-f-metrics report=${path.relative(repoRoot, args.reportOut)}`);
   console.log(`mcp-phase-f-metrics metrics=${path.relative(repoRoot, args.metricsOut)}`);
   console.log(
-    `mcp-phase-f-metrics summary primary_runtime=${primaryRuntime} stable_days=${prodStableDays} rollback_passed=${rollbackPassed} clawkit_calls=${telemetry.clawkitCalls} eidolon_calls=${telemetry.eidolonCalls} eidolon_usage_ratio=${(eidolonUsageRatio * 100).toFixed(2)}%`
+    `mcp-phase-f-metrics summary primary_runtime=${primaryRuntime} stable_days=${prodStableDays} rollback_passed=${rollbackPassed} eidolon_calls=${telemetry.eidolonCalls} eidolon_calls=${telemetry.eidolonCalls} eidolon_usage_ratio=${(eidolonUsageRatio * 100).toFixed(2)}%`
   );
 
   if (args.strict) {

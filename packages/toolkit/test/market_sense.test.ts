@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PriceService } from '../src/services/PriceService';
-import { ClawKitConfig } from '../src/types';
+import { EidolonConfig } from '../src/types';
 
 // Mock Gateway
 const mockGateway = {
@@ -14,7 +14,7 @@ vi.mock('../src/utils/ApiGateway', () => ({
 
 describe('Feature: Market Sense (PriceService)', () => {
     let service: PriceService;
-    const mockConfig: ClawKitConfig = {
+    const mockConfig: EidolonConfig = {
         chainConfig: {} as any,
         walletConfig: {} as any,
         aiConfig: {} as any,

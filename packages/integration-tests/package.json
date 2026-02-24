@@ -1,7 +1,7 @@
 {
-    "name": "@clawkit/integration-tests",
+    "name": "@eidolon/integration-tests",
     "version": "1.0.0",
-    "description": "Integration and System Tests for ClawKit Monorepo",
+    "description": "Integration and System Tests for Eidolon Monorepo",
     "private": true,
     "scripts": {
         "pretest": "node ../../scripts/sync-integration-mirrors.mjs",
@@ -10,10 +10,10 @@
     },
     "license": "MIT",
     "dependencies": {
-        "@clawkit/core": "workspace:*",
-        "@clawkit/soul": "workspace:*",
-        "@clawkit/toolkit": "workspace:*",
-        "@clawkit/defi-bnb": "workspace:*",
+        "@eidolon/core": "workspace:*",
+        "@eidolon/soul": "workspace:*",
+        "@eidolon/toolkit": "workspace:*",
+        "@eidolon/defi-bnb": "workspace:*",
         "viem": "^2.7.0",
         "zod": "^3.25.76",
         "dotenv": "^16.4.1"

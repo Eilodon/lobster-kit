@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package clawkit.runtime.v1.context;
+package eidolon.runtime.v1.context;
 
 import "common.proto";
 
@@ -19,7 +19,7 @@ message CompressionPolicy {
 }
 
 message CompressContextRequest {
-  clawkit.runtime.v1.RequestMeta meta = 1;
+  eidolon.runtime.v1.RequestMeta meta = 1;
   repeated Message messages = 2;
   CompressionPolicy policy = 3;
   string model_profile = 4;
@@ -37,7 +37,7 @@ message CompressContextResponse {
   repeated string key_facts = 3;
   int32 estimated_tokens = 4;
   int64 latency_ms = 5;
-  clawkit.runtime.v1.ErrorEnvelope error = 6;
+  eidolon.runtime.v1.ErrorEnvelope error = 6;
 }
 
 service ContextService {

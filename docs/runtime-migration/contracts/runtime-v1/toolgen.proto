@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-package clawkit.runtime.v1.toolgen;
+package eidolon.runtime.v1.toolgen;
 
 import "common.proto";
 
 message GenerateToolRequest {
-  clawkit.runtime.v1.RequestMeta meta = 1;
+  eidolon.runtime.v1.RequestMeta meta = 1;
   string need = 2;
   string world_state_json = 3;
 }
@@ -29,18 +29,18 @@ message GenerateToolResponse {
   ToolSpec spec = 2;
   CapabilityPolicy policy = 3;
   string audit_id = 4;
-  clawkit.runtime.v1.ErrorEnvelope error = 5;
+  eidolon.runtime.v1.ErrorEnvelope error = 5;
 }
 
 message ValidateToolRequest {
-  clawkit.runtime.v1.RequestMeta meta = 1;
+  eidolon.runtime.v1.RequestMeta meta = 1;
   ToolSpec spec = 2;
 }
 
 message ValidateToolResponse {
   bool valid = 1;
   repeated string violations = 2;
-  clawkit.runtime.v1.ErrorEnvelope error = 3;
+  eidolon.runtime.v1.ErrorEnvelope error = 3;
 }
 
 service ToolgenService {

@@ -45,7 +45,7 @@ contract DynamicBadge is ERC721Enumerable, Ownable {
         _;
     }
 
-    constructor() ERC721("ClawKit Badge", "CLAW") Ownable(msg.sender) {}
+    constructor() ERC721("Eidolon Badge", "CLAW") Ownable(msg.sender) {}
 
     // ═══════════════════════════════════════════════════════
     //  MINTER MANAGEMENT (FIX F3)

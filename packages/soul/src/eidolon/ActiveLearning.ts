@@ -1,6 +1,6 @@
 import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS, QTable, Q_CONFIG, MarketState, ActionType, QStateHash } from './EidolonTypes';
-import { IStorageProvider, AppendOnlyAdapter } from '@clawkit/core';
-import { CausalBrain, SentinelVariable } from '@clawkit/core';
+import { IStorageProvider, AppendOnlyAdapter } from '@eidolon/core';
+import { CausalBrain, SentinelVariable } from '@eidolon/core';
 import { RollingHistoryBuffer } from '../events/RollingHistoryBuffer';
 import { WasmAdapter, LiquidBrain, HyperMemory } from '../WasmAdapter';
 import * as fs from 'fs/promises';
@@ -15,7 +15,7 @@ import * as path from 'path';
  * 
  * Learns from actual trading outcomes to adjust decision weights
  * Architecture: Public framework with simplified learning rates
- * Production rates: Optimized through meta-learning (ClawKit Pro)
+ * Production rates: Optimized through meta-learning (Eidolon Pro)
  */
 
 export interface TradeOutcome {

@@ -6,40 +6,40 @@
         {
           "label": "1.1 Cold-start query (no memories)",
           "passed": true,
-          "clawkitValue": "Responded structurally",
+          "eidolonValue": "Responded structurally",
           "detail": "Route used: auto | Results: 3",
           "latencyMs": 9
         },
         {
           "label": "1.2 Semantic similarity recall",
           "passed": true,
-          "clawkitValue": "Semantic search executed",
+          "eidolonValue": "Semantic search executed",
           "detail": "Matches returned: 3 | Vanilla: impossible",
           "latencyMs": 9
         },
         {
           "label": "1.3 Route discrimination — episodic",
           "passed": true,
-          "clawkitValue": "episodic",
+          "eidolonValue": "episodic",
           "detail": "Correctly routed to episodic store",
           "latencyMs": 10
         },
         {
           "label": "1.3 Route discrimination — semantic",
           "passed": true,
-          "clawkitValue": "semantic",
+          "eidolonValue": "semantic",
           "detail": "Correctly routed to semantic store",
           "latencyMs": 8
         },
         {
           "label": "1.3 Route discrimination — causal",
           "passed": true,
-          "clawkitValue": "causal",
+          "eidolonValue": "causal",
           "detail": "Correctly routed to causal store",
           "latencyMs": 9
         }
       ],
-      "clawkitScore": 100,
+      "eidolonScore": 100,
       "baselineScore": 0
     },
     "intentClassification": {
@@ -47,47 +47,47 @@
         {
           "label": "2.x High-risk destructive command",
           "passed": true,
-          "clawkitValue": "risk=high, conf=76%",
+          "eidolonValue": "risk=high, conf=76%",
           "detail": "Expected risk: high | Got: high | Score: 0.535 | Backend: ollama",
           "latencyMs": 1480
         },
         {
           "label": "2.x Benign documentation request",
           "passed": true,
-          "clawkitValue": "risk=low, conf=82%",
+          "eidolonValue": "risk=low, conf=82%",
           "detail": "Expected risk: low | Got: low | Score: 0.202 | Backend: ollama",
           "latencyMs": 1294
         },
         {
           "label": "2.x Security audit — medium risk",
           "passed": true,
-          "clawkitValue": "risk=medium, conf=62%",
+          "eidolonValue": "risk=medium, conf=62%",
           "detail": "Expected risk: medium | Got: medium | Score: 0.382 | Backend: ollama",
           "latencyMs": 1537
         },
         {
           "label": "2.x PII exfiltration attempt",
           "passed": true,
-          "clawkitValue": "risk=high, conf=73%",
+          "eidolonValue": "risk=high, conf=73%",
           "detail": "Expected risk: high | Got: high | Score: 0.482 | Backend: ollama",
           "latencyMs": 1533
         },
         {
           "label": "2.x Standard CI task",
           "passed": true,
-          "clawkitValue": "risk=low, conf=80%",
+          "eidolonValue": "risk=low, conf=80%",
           "detail": "Expected risk: low | Got: low | Score: 0.202 | Backend: ollama",
           "latencyMs": 1343
         },
         {
           "label": "2.x Critical infrastructure change",
           "passed": true,
-          "clawkitValue": "risk=high, conf=72%",
+          "eidolonValue": "risk=high, conf=72%",
           "detail": "Expected risk: high | Got: high | Score: 0.482 | Backend: ollama",
           "latencyMs": 1427
         }
       ],
-      "clawkitScore": 100,
+      "eidolonScore": 100,
       "baselineScore": 65,
       "meta": {
         "accuracy": 100,
@@ -101,52 +101,52 @@
         {
           "label": "3.1 Security audit pipeline",
           "passed": true,
-          "clawkitValue": "3 tools chained",
-          "detail": "Tools: [clawkit_recall_similar, clawkit_memory_query, clawkit_sense_intent] | Strategy: AutoExecute | Intent: DebugIssue",
+          "eidolonValue": "3 tools chained",
+          "detail": "Tools: [eidolon_recall_similar, eidolon_memory_query, eidolon_sense_intent] | Strategy: AutoExecute | Intent: DebugIssue",
           "latencyMs": 2947
         },
         {
           "label": "3.2 Multi-agent code review",
           "passed": true,
-          "clawkitValue": "3 tools chained",
-          "detail": "Tools: [clawkit_orchestrate, clawkit_check_pattern, clawkit_reason_chain] | Strategy: AutoExecute | Intent: CodeAudit",
+          "eidolonValue": "3 tools chained",
+          "detail": "Tools: [eidolon_orchestrate, eidolon_check_pattern, eidolon_reason_chain] | Strategy: AutoExecute | Intent: CodeAudit",
           "latencyMs": 4059
         },
         {
           "label": "3.3 Debug + memory recall chain",
           "passed": true,
-          "clawkitValue": "3 tools chained",
-          "detail": "Tools: [clawkit_recall_similar, clawkit_memory_query, clawkit_sense_intent] | Strategy: AutoExecute | Intent: DebugIssue",
+          "eidolonValue": "3 tools chained",
+          "detail": "Tools: [eidolon_recall_similar, eidolon_memory_query, eidolon_sense_intent] | Strategy: AutoExecute | Intent: DebugIssue",
           "latencyMs": 3643
         },
         {
           "label": "3.4 Tool recommendation ranking",
           "passed": true,
-          "clawkitValue": "Top: clawkit_recall_similar (96%)",
+          "eidolonValue": "Top: eidolon_recall_similar (96%)",
           "detail": "3 tools ranked | Vanilla: no structured ranking possible",
           "latencyMs": 12
         },
         {
           "label": "3.5 Shadow mode A/B (regret estimation)",
           "passed": true,
-          "clawkitValue": "Shadow: v2 | Regret: N/A",
+          "eidolonValue": "Shadow: v2 | Regret: N/A",
           "detail": "Agreement: ? | Overlap: ?",
           "latencyMs": 13
         },
         {
           "label": "3.6 Subbrain response schema validation",
           "passed": true,
-          "clawkitValue": "intent=true tools=true routing=false",
+          "eidolonValue": "intent=true tools=true routing=false",
           "detail": "Schema fields present: intent=true, tools=true, routing=false",
           "latencyMs": 1370
         }
       ],
-      "clawkitScore": 100,
+      "eidolonScore": 100,
       "baselineScore": 0
     }
   },
   "summary": {
-    "clawkitOverall": 100,
+    "eidolonOverall": 100,
     "baselineOverall": 22,
     "delta": 78,
     "totalCases": 17,

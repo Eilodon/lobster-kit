@@ -2,7 +2,7 @@
  * @fileoverview Cognitive Tool Audit Benchmark Test
  *
  * Thiết kế kiểm toán so sánh độ hiệu quả giữa:
- * - **Cognitive Tool Approach**: Sử dụng MCP cognitive tools (clawkit_reason_chain, clawkit_memory_query, etc.)
+ * - **Cognitive Tool Approach**: Sử dụng MCP cognitive tools (eidolon_reason_chain, eidolon_memory_query, etc.)
  * - **Manual Approach**: Phân tích thủ công qua code review patterns thông thường
  *
  * Metrics đánh giá:
@@ -337,10 +337,10 @@ class CognitiveToolAuditor {
 
     // Use MCP tools để analyze codebase
     const scenarios = [
-      { tool: 'clawkit_reason_chain', params: { query: 'Find ghost files and duplicates in codebase' } },
-      { tool: 'clawkit_memory_query', params: { pattern: 'security vulnerability patterns' } },
-      { tool: 'clawkit_check_pattern', params: { pattern: 'WASM loading timeout', mode: 'Audit' } },
-      { tool: 'clawkit_sense_intent', params: { text: 'audit codebase for correctness issues' } },
+      { tool: 'eidolon_reason_chain', params: { query: 'Find ghost files and duplicates in codebase' } },
+      { tool: 'eidolon_memory_query', params: { pattern: 'security vulnerability patterns' } },
+      { tool: 'eidolon_check_pattern', params: { pattern: 'WASM loading timeout', mode: 'Audit' } },
+      { tool: 'eidolon_sense_intent', params: { text: 'audit codebase for correctness issues' } },
     ];
 
     for (const scenario of scenarios) {
@@ -454,11 +454,11 @@ class CognitiveToolAuditor {
         filesScanned: 150,
         totalFiles: 150,
         patternsChecked: [
-          'clawkit_reason_chain',
-          'clawkit_memory_query',
-          'clawkit_check_pattern',
-          'clawkit_sense_intent',
-          'clawkit_recall_similar',
+          'eidolon_reason_chain',
+          'eidolon_memory_query',
+          'eidolon_check_pattern',
+          'eidolon_sense_intent',
+          'eidolon_recall_similar',
         ],
       },
       metrics: this.calculateMetrics(findings),

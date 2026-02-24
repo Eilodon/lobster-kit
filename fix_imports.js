@@ -18,18 +18,18 @@ const filesToUpdate = [
 for (const file of filesToUpdate) {
     let content = fs.readFileSync(file, 'utf8');
 
-    content = content.replace(/from '\.\.\/ai\/CausalBrain'/g, "from '@clawkit/core'");
-    content = content.replace(/from '\.\/eidolon\/DivineTransparency'/g, "from '@clawkit/core'");
-    content = content.replace(/from '\.\/DivineTransparency'/g, "from '@clawkit/core'");
-    content = content.replace(/from '\.\.\/src\/eidolon\/DivineTransparency'/g, "from '@clawkit/core'");
-    content = content.replace(/from '\.\.\/src\/ai\/CausalBrain'/g, "from '@clawkit/core'");
+    content = content.replace(/from '\.\.\/ai\/CausalBrain'/g, "from '@eidolon/core'");
+    content = content.replace(/from '\.\/eidolon\/DivineTransparency'/g, "from '@eidolon/core'");
+    content = content.replace(/from '\.\/DivineTransparency'/g, "from '@eidolon/core'");
+    content = content.replace(/from '\.\.\/src\/eidolon\/DivineTransparency'/g, "from '@eidolon/core'");
+    content = content.replace(/from '\.\.\/src\/ai\/CausalBrain'/g, "from '@eidolon/core'");
 
     fs.writeFileSync(file, content);
 }
 
 // Fix CausalBrain.ts inside core
 let cb = fs.readFileSync('packages/core/src/ai/CausalBrain.ts', 'utf8');
-cb = cb.replace(/from '@clawkit\/core'/g, "from '../memory/IStorageProvider'");
+cb = cb.replace(/from '@eidolon\/core'/g, "from '../memory/IStorageProvider'");
 fs.writeFileSync('packages/core/src/ai/CausalBrain.ts', cb);
 
 // Fix DivineTransparency.ts inside core

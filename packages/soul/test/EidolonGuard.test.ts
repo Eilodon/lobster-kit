@@ -2,8 +2,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EidolonGuard } from '../src/eidolon/EidolonGuard';
 import { PublicClient, WalletClient } from 'viem';
-import { EidolonBus, EidolonEventType } from '@clawkit/core';
-import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
+import { EidolonBus, EidolonEventType } from '@eidolon/core';
+import { WasmAdapter as CoreWasmAdapter } from '@eidolon/core';
 import { WasmAdapter as SoulWasmAdapter } from '../src/WasmAdapter';
 
 // Mock WasmAdapter
@@ -211,7 +211,7 @@ describe('EidolonGuard', () => {
             getOptimalExecutionTime: vi.fn().mockResolvedValue({ currentGasPrice: '0.000005' })
         },
         config: {}
-    } as unknown as any; // Using any to avoid importing full ClawKit type complexity in test, or cast to ClawKit if imported
+    } as unknown as any; // Using any to avoid importing full Eidolon type complexity in test, or cast to Eidolon if imported
 
 
     beforeEach(() => {

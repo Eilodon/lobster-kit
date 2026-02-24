@@ -4,7 +4,7 @@ import { EmotionalState } from './EmotionalCore';
 import { IOracle } from '../ai/IOracle';
 import { ConversationSimulator } from '../simulation/ConversationSimulator';
 import { ConversationAction, ConversationSensory, ConversationMode, SimulationResult, VariableID } from './CognitiveTypes';
-import { Logger } from '@clawkit/core';
+import { Logger } from '@eidolon/core';
 
 export class CognitiveArbiter {
     private adapter: WasmAdapter;

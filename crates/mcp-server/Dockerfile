@@ -9,8 +9,8 @@ RUN cargo build --release
 
 FROM debian:bookworm-slim
 
-RUN useradd --create-home --uid 10001 clawkit
+RUN useradd --create-home --uid 10001 eidolon
 COPY --from=builder /app/packages/mcp-rust/target/release/mcp-rust /usr/local/bin/mcp-rust
 
-USER clawkit
+USER eidolon
 ENTRYPOINT ["/usr/local/bin/mcp-rust"]

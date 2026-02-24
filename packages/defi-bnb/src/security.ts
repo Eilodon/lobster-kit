@@ -1,5 +1,5 @@
 import { WalletClient, PublicClient, parseAbi, encodeFunctionData } from 'viem';
-import { ClawKitConfig, PANCAKE_ROUTER, CLAWKIT_CONTRACTS, ClawKitWalletClient, toAddress } from './types';
+import { EidolonConfig, PANCAKE_ROUTER, EIDOLON_CONTRACTS, EidolonWalletClient, toAddress } from './types';
 import axios from 'axios';
 import { withRetry } from './utils/Resilience';
 import { verifyConfigIntegrity } from './utils/ConfigIntegrity';
@@ -26,9 +26,9 @@ export class SecurityModule {
   private scanCache: Map<string, { result: SecurityScanResult; timestamp: number }> = new Map();
 
   constructor(
-    private walletClient: ClawKitWalletClient,
+    private walletClient: EidolonWalletClient,
     private publicClient: PublicClient,
-    private config: ClawKitConfig
+    private config: EidolonConfig
   ) {
     this.validateConfig();
     // In-memory cache starts empty, no file loading needed.
@@ -39,7 +39,7 @@ export class SecurityModule {
    * "Bio-Check": Refuse to start if environment is hostile (missing critical config)
    */
   private validateConfig() {
-    // FIX: Relax strict check. ClawKit can operate with just publicClient.
+    // FIX: Relax strict check. Eidolon can operate with just publicClient.
     // if (!this.config.rpcUrl) throw new Error("CRITICAL: Missing RPC URL. Agent cannot see.");
     if (!this.config.chainConfig) throw new Error("CRITICAL: Missing Chain Config. Agent is lost.");
     verifyConfigIntegrity(this.config, 'SecurityModule');
@@ -481,8 +481,8 @@ export class SecurityModule {
       PANCAKE_ROUTER,
       this.config.chainConfig?.contracts?.pancakeRouter,
       this.config.chainConfig?.contracts?.batchExecutor,
-      CLAWKIT_CONTRACTS.BatchExecutor,
-      CLAWKIT_CONTRACTS.ApprovalRevoker,
+      EIDOLON_CONTRACTS.BatchExecutor,
+      EIDOLON_CONTRACTS.ApprovalRevoker,
     ].filter((addr): addr is string =>
       !!addr && addr !== '0x0000000000000000000000000000000000000000'
     );
@@ -587,14 +587,13 @@ export class SecurityModule {
 
     const safeSpenders = [
       PANCAKE_ROUTER.toLowerCase(),
-      CLAWKIT_CONTRACTS.BatchExecutor.toLowerCase(),
-      CLAWKIT_CONTRACTS.ApprovalRevoker.toLowerCase(),
+      EIDOLON_CONTRACTS.BatchExecutor.toLowerCase(),
+      EIDOLON_CONTRACTS.ApprovalRevoker.toLowerCase(),
       '0x0000000000000000000000000000000000000000' // Zero address
     ];
 
     // Try to mount the WASM scanner
-    const { WasmAdapter } = await import('@clawkit/core');
-    const adapter = WasmAdapter.getInstance();
+    const adapter = (globalThis as any).EIDOLON_WASM_ADAPTER ?? {};
     let wasmScanner: any = null;
     if (typeof (adapter as any).createBatchApprovalScanner === 'function') {
       wasmScanner = (adapter as any).createBatchApprovalScanner();

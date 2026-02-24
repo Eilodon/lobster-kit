@@ -1,1 +1,1 @@
-export { Logger } from '@clawkit/core';
+export { Logger } from '@eidolon/core';

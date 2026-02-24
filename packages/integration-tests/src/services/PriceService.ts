@@ -19,7 +19,7 @@
  *   const bnbPrice = await svc.getBNBPrice();
  */
 
-import { ClawKitConfig } from '../types';
+import { EidolonConfig } from '../types';
 import { getGateway } from '../utils/ApiGateway';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ export class PriceService {
     private cache = new Map<string, CacheEntry>();
     private oracle?: PriceOracle;
 
-    constructor(private config: ClawKitConfig) { }
+    constructor(private config: EidolonConfig) { }
 
     // ── Oracle injection (for privacy mode / testing) ───────────────────────────
 
@@ -318,9 +318,9 @@ export class PriceService {
 
 // ─── Singleton factory ────────────────────────────────────────────────────────
 
-const serviceCache = new WeakMap<ClawKitConfig, PriceService>();
+const serviceCache = new WeakMap<EidolonConfig, PriceService>();
 
-export function getPriceService(config: ClawKitConfig): PriceService {
+export function getPriceService(config: EidolonConfig): PriceService {
     if (!serviceCache.has(config)) {
         serviceCache.set(config, new PriceService(config));
     }

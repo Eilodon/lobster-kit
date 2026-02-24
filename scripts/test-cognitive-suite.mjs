@@ -75,8 +75,8 @@ async function callMcp(tool, args) {
 }
 
 async function testSenseIntent() {
-  console.log('\n🧠 Test: clawkit_sense_intent');
-  const result = await callMcp('clawkit_sense_intent', {
+  console.log('\n🧠 Test: eidolon_sense_intent');
+  const result = await callMcp('eidolon_sense_intent', {
     query: 'audit code for security vulnerabilities',
     user_id: 'test-user'
   });
@@ -91,10 +91,10 @@ async function testSenseIntent() {
 }
 
 async function testToolRecommend() {
-  console.log('\n🧠 Test: clawkit_tool_recommend');
-  const result = await callMcp('clawkit_tool_recommend', {
+  console.log('\n🧠 Test: eidolon_tool_recommend');
+  const result = await callMcp('eidolon_tool_recommend', {
     task: 'audit project code for security issues',
-    available_tools: ['clawkit_check_pattern', 'clawkit_reason_chain', 'clawkit_orchestrate']
+    available_tools: ['eidolon_check_pattern', 'eidolon_reason_chain', 'eidolon_orchestrate']
   });
   
   if (result.error) {
@@ -108,8 +108,8 @@ async function testToolRecommend() {
 }
 
 async function testOrchestrate() {
-  console.log('\n🧠 Test: clawkit_orchestrate');
-  const result = await callMcp('clawkit_orchestrate', {
+  console.log('\n🧠 Test: eidolon_orchestrate');
+  const result = await callMcp('eidolon_orchestrate', {
     task: 'analyze codebase for performance bottlenecks',
     agent_count: 3,
     confidence: 0.8
@@ -125,8 +125,8 @@ async function testOrchestrate() {
 }
 
 async function testCheckPattern() {
-  console.log('\n🧠 Test: clawkit_check_pattern');
-  const result = await callMcp('clawkit_check_pattern', {
+  console.log('\n🧠 Test: eidolon_check_pattern');
+  const result = await callMcp('eidolon_check_pattern', {
     pattern: 'unsafe memory access in rust',
     mode: 'zen'
   });
@@ -141,8 +141,8 @@ async function testCheckPattern() {
 }
 
 async function testMemoryQuery() {
-  console.log('\n🧠 Test: clawkit_memory_query');
-  const result = await callMcp('clawkit_memory_query', {
+  console.log('\n🧠 Test: eidolon_memory_query');
+  const result = await callMcp('eidolon_memory_query', {
     query: 'previous security audit results',
     route: 'auto',
     k: 5
@@ -159,8 +159,8 @@ async function testMemoryQuery() {
 }
 
 async function testRecallSimilar() {
-  console.log('\n🧠 Test: clawkit_recall_similar');
-  const result = await callMcp('clawkit_recall_similar', {
+  console.log('\n🧠 Test: eidolon_recall_similar');
+  const result = await callMcp('eidolon_recall_similar', {
     context: 'debugging wasm memory issues',
     k: 3
   });
@@ -173,9 +173,9 @@ async function testRecallSimilar() {
 }
 
 async function testRouteAction() {
-  console.log('\n🧠 Test: clawkit_route_action');
-  const result = await callMcp('clawkit_route_action', {
-    suggested_tool: 'clawkit_check_pattern',
+  console.log('\n🧠 Test: eidolon_route_action');
+  const result = await callMcp('eidolon_route_action', {
+    suggested_tool: 'eidolon_check_pattern',
     intent_confidence: 0.85,
     context_type: 'security_audit'
   });
@@ -190,8 +190,8 @@ async function testRouteAction() {
 }
 
 async function testSubBrainFull() {
-  console.log('\n🧠 Test: clawkit_subbrain_auto (End-to-End)');
-  const result = await callMcp('clawkit_subbrain_auto', {
+  console.log('\n🧠 Test: eidolon_subbrain_auto (End-to-End)');
+  const result = await callMcp('eidolon_subbrain_auto', {
     input: 'audit project code for security vulnerabilities and fix any issues found',
     user_id: 'test-user',
     auto_execute: true,
@@ -212,7 +212,7 @@ async function testSubBrainFull() {
 
 async function main() {
   console.log('╔════════════════════════════════════════════════════╗');
-  console.log('║   Cognitive Tools Test Suite - ClawKit MCP         ║');
+  console.log('║   Cognitive Tools Test Suite - Eidolon MCP         ║');
   console.log('╚════════════════════════════════════════════════════╝');
   console.log(`Binary: ${MCP_BIN}`);
   

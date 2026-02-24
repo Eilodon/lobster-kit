@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package clawkit.runtime.v1;
+package eidolon.runtime.v1;
 
 message RequestMeta {
   string request_id = 1;

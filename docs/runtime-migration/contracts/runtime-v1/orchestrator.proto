@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package clawkit.runtime.v1.orchestrator;
+package eidolon.runtime.v1.orchestrator;
 
 import "common.proto";
 
@@ -14,25 +14,25 @@ message Task {
 }
 
 message SubmitTaskRequest {
-  clawkit.runtime.v1.RequestMeta meta = 1;
+  eidolon.runtime.v1.RequestMeta meta = 1;
   Task task = 2;
 }
 
 message SubmitTaskResponse {
   string task_id = 1;
   string state = 2;
-  clawkit.runtime.v1.ErrorEnvelope error = 3;
+  eidolon.runtime.v1.ErrorEnvelope error = 3;
 }
 
 message CancelTaskRequest {
-  clawkit.runtime.v1.RequestMeta meta = 1;
+  eidolon.runtime.v1.RequestMeta meta = 1;
   string task_id = 2;
   string reason = 3;
 }
 
 message CancelTaskResponse {
   bool cancelled = 1;
-  clawkit.runtime.v1.ErrorEnvelope error = 2;
+  eidolon.runtime.v1.ErrorEnvelope error = 2;
 }
 
 message TaskResult {
@@ -45,14 +45,14 @@ message TaskResult {
 }
 
 message PollTaskRequest {
-  clawkit.runtime.v1.RequestMeta meta = 1;
+  eidolon.runtime.v1.RequestMeta meta = 1;
   string task_id = 2;
 }
 
 message PollTaskResponse {
   string state = 1;
   TaskResult result = 2;
-  clawkit.runtime.v1.ErrorEnvelope error = 3;
+  eidolon.runtime.v1.ErrorEnvelope error = 3;
 }
 
 service OrchestratorService {

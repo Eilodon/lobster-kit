@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DeFiModule } from '../src/defi';
-import { ClawKitConfig } from '../src/types';
+import { EidolonConfig } from '../src/types';
 
 // Mock viem clients
 const mockWalletClient = {
@@ -19,7 +19,7 @@ const mockPublicClient = {
 
 describe('DeFiModule', () => {
     let defi: DeFiModule;
-    const config: ClawKitConfig = {
+    const config: EidolonConfig = {
         chainConfig: {
             name: 'opBNB-Test',
             chainId: 204,

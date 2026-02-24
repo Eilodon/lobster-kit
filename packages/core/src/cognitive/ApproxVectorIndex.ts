@@ -30,16 +30,14 @@ function compareDesc(a: SearchResult, b: SearchResult): number {
  * Lightweight ANN index for episodic memory.
  * Uses deterministic random-hyperplane signatures (SimHash-like buckets).
  */
-import { WasmAdapter } from '../WasmAdapter';
-
 export class ApproxVectorIndex {
     private dimension = 0;
     private items: IndexedVector[] = [];
     private wasmIndex: any = null;
 
     constructor(options?: { hyperplanes?: number; probes?: number }) {
-        const adapter = WasmAdapter.getInstance() as any;
-        if (typeof adapter.createApproxVectorIndex === 'function') {
+        const adapter = (globalThis as any).EIDOLON_WASM_ADAPTER as any;
+        if (adapter && typeof adapter.createApproxVectorIndex === 'function') {
             this.wasmIndex = adapter.createApproxVectorIndex(options?.hyperplanes, options?.probes);
         }
     }

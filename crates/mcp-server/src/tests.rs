@@ -37,8 +37,8 @@ use rusqlite::{params, Connection};
     // Helper function to setup the server
     fn setup_server() -> EidolonMcpServer {
         setup_server_with_paths(
-            unique_test_path("clawkit-users", "json"),
-            unique_test_path("clawkit-telemetry", "db"),
+            unique_test_path("eidolon-users", "json"),
+            unique_test_path("eidolon-telemetry", "db"),
         )
     }
 
@@ -47,20 +47,20 @@ use rusqlite::{params, Connection};
         let server = setup_server();
 
         let res = server
-            .handle_tool_call("clawkit_recall_user", json!({"user_id": "u123"}))
+            .handle_tool_call("eidolon_recall_user", json!({"user_id": "u123"}))
             .await;
         assert_eq!(res["user_id"], "u123");
         assert_eq!(res["status"], "success");
 
         let res = server
-            .handle_tool_call("clawkit_sense_intent", json!({}))
+            .handle_tool_call("eidolon_sense_intent", json!({}))
             .await;
         assert_eq!(res["success"], true);
         assert_eq!(res["recommended_mode"], "Peer");
 
         let res = server
             .handle_tool_call(
-                "clawkit_check_pattern",
+                "eidolon_check_pattern",
                 json!({"pattern": "greetings", "mode": "Peer"}),
             )
             .await;
@@ -68,13 +68,13 @@ use rusqlite::{params, Connection};
         assert_eq!(res["inhibited"], false);
 
         let res = server
-            .handle_tool_call("clawkit_simulate_response", json!({"action": "ask_why"}))
+            .handle_tool_call("eidolon_simulate_response", json!({"action": "ask_why"}))
             .await;
         assert_eq!(res["action_tested"], "ask_why");
         assert_eq!(res["predicted_outcome"], "positive");
 
         let res = server
-            .handle_tool_call("clawkit_commit_pattern", json!({"pattern": "greetings"}))
+            .handle_tool_call("eidolon_commit_pattern", json!({"pattern": "greetings"}))
             .await;
         assert_eq!(res["status"], "committed");
     }
@@ -85,7 +85,7 @@ use rusqlite::{params, Connection};
 
         let res = server
             .handle_tool_call(
-                "clawkit_recall_similar",
+                "eidolon_recall_similar",
                 json!({"context": "hello", "k": 2}),
             )
             .await;
@@ -93,13 +93,13 @@ use rusqlite::{params, Connection};
 
         // Memory query: no memories yet, should return 0 matches
         let res = server
-            .handle_tool_call("clawkit_memory_query", json!({"query": "risk level"}))
+            .handle_tool_call("eidolon_memory_query", json!({"query": "risk level"}))
             .await;
         assert_eq!(res["query"], "risk level");
         assert_eq!(res["matches"], 0);
 
         // Compress with real input
-        let res = server.handle_tool_call("clawkit_compress_context", json!({
+        let res = server.handle_tool_call("eidolon_compress_context", json!({
             "target_tokens": 10,
             "context": "The market is volatile today. Gas fees are extremely high. User wants to buy BNB. There is a potential rug pull."
         })).await;
@@ -120,7 +120,7 @@ use rusqlite::{params, Connection};
         // Record an outcome → should also write to memory
         let res = server
             .handle_tool_call(
-                "clawkit_record_outcome",
+                "eidolon_record_outcome",
                 json!({
                     "pattern": "test_pattern", "mode": "Peer", "severity": 0.0
                 }),
@@ -131,7 +131,7 @@ use rusqlite::{params, Connection};
 
         // Now memory_query should find it
         let res = server
-            .handle_tool_call("clawkit_memory_query", json!({"query": "test_pattern"}))
+            .handle_tool_call("eidolon_memory_query", json!({"query": "test_pattern"}))
             .await;
         assert!(
             res["matches"].as_u64().unwrap() > 0,
@@ -141,30 +141,30 @@ use rusqlite::{params, Connection};
         // Update user and verify persistence
         let res = server
             .handle_tool_call(
-                "clawkit_update_user",
+                "eidolon_update_user",
                 json!({"user_id": "u123", "preferred_mode": "Berserk", "risk_tolerance": 0.99}),
             )
             .await;
         assert_eq!(res["status"], "user_profile_persisted");
 
         let res = server
-            .handle_tool_call("clawkit_recall_user", json!({"user_id": "u123"}))
+            .handle_tool_call("eidolon_recall_user", json!({"user_id": "u123"}))
             .await;
         assert_eq!(res["profile"]["preferred_mode"], "Berserk");
         assert_eq!(res["profile"]["risk_tolerance"], 0.99);
 
         let res = server
-            .handle_tool_call("clawkit_dream_conversation", json!({"episodes": 10}))
+            .handle_tool_call("eidolon_dream_conversation", json!({"episodes": 10}))
             .await;
         assert_eq!(res["episodes_processed"], 10);
 
         let res = server
-            .handle_tool_call("clawkit_orchestrate", json!({"agent_count": 5}))
+            .handle_tool_call("eidolon_orchestrate", json!({"agent_count": 5}))
             .await;
         assert_eq!(res["agents_spawned"], 5);
 
         let res = server
-            .handle_tool_call("clawkit_tool_recommend", json!({"task": "analyze_market"}))
+            .handle_tool_call("eidolon_tool_recommend", json!({"task": "analyze_market"}))
             .await;
         assert!(res["recommended_tools"].is_array());
         assert_eq!(res["task"], "analyze_market");
@@ -173,24 +173,24 @@ use rusqlite::{params, Connection};
     #[test]
     fn test_contract_accepts_name_and_arguments_fields() {
         let parsed = EidolonMcpServer::parse_tools_call_payload(&json!({
-            "name": "clawkit_sense_intent",
+            "name": "eidolon_sense_intent",
             "arguments": { "task": "check intent" }
         }))
         .expect("expected valid tools/call payload");
 
-        assert_eq!(parsed.0, "clawkit_sense_intent");
+        assert_eq!(parsed.0, "eidolon_sense_intent");
         assert_eq!(parsed.1["task"], "check intent");
     }
 
     #[test]
     fn test_contract_accepts_tool_and_input_fields() {
         let parsed = EidolonMcpServer::parse_tools_call_payload(&json!({
-            "tool": "clawkit_sense_intent",
+            "tool": "eidolon_sense_intent",
             "input": { "task": "check intent" }
         }))
         .expect("expected valid tools/call payload");
 
-        assert_eq!(parsed.0, "clawkit_sense_intent");
+        assert_eq!(parsed.0, "eidolon_sense_intent");
         assert_eq!(parsed.1["task"], "check intent");
     }
 
@@ -208,8 +208,8 @@ use rusqlite::{params, Connection};
             "tools/list must include eidolon_* prefix"
         );
         assert!(
-            names.iter().any(|name| name.starts_with("clawkit_")),
-            "tools/list must include clawkit_* prefix"
+            names.iter().any(|name| name.starts_with("eidolon_")),
+            "tools/list must include eidolon_* prefix"
         );
 
         for required in LEGACY_COMPAT_TOOL_CATALOG {
@@ -254,9 +254,9 @@ use rusqlite::{params, Connection};
     async fn test_unknown_tool_maps_to_structured_mcp_error() {
         let server = setup_server();
         let raw = server
-            .handle_tool_call("clawkit_non_existing_tool", json!({}))
+            .handle_tool_call("eidolon_non_existing_tool", json!({}))
             .await;
-        let mapped = EidolonMcpServer::map_tool_call_failure("clawkit_non_existing_tool", &raw)
+        let mapped = EidolonMcpServer::map_tool_call_failure("eidolon_non_existing_tool", &raw)
             .expect("expected error mapping");
 
         assert_eq!(mapped["isError"], true);
@@ -282,8 +282,8 @@ use rusqlite::{params, Connection};
         );
         server
             .record_generated_tool_audit(
-                "clawkit_sense_intent",
-                "clawkit_sense_intent",
+                "eidolon_sense_intent",
+                "eidolon_sense_intent",
                 "accepted",
                 &unique_reason,
                 json!({"source": "unit-test"}),
@@ -308,7 +308,7 @@ use rusqlite::{params, Connection};
         );
         server
             .record_generated_tool_audit(
-                "clawkit_reason_chain",
+                "eidolon_reason_chain",
                 "tool_generator_review",
                 "accepted",
                 &unique_reason,
@@ -341,7 +341,7 @@ use rusqlite::{params, Connection};
         );
         server
             .record_generated_tool_audit(
-                "clawkit_memory_query",
+                "eidolon_memory_query",
                 "tool_generator_review",
                 "rejected",
                 &unique_reason,
@@ -479,7 +479,7 @@ use rusqlite::{params, Connection};
         {
             let mut metrics = server.tool_metrics.lock().await;
             metrics.insert(
-                "clawkit_reason_chain".to_string(),
+                "eidolon_reason_chain".to_string(),
                 ToolTelemetry {
                     calls: 60,
                     errors: 1,
@@ -500,8 +500,8 @@ use rusqlite::{params, Connection};
 
         let res = server
             .handle_tool_call(
-                "clawkit_route_action",
-                json!({"suggested_tool": "clawkit_reason_chain", "intent_confidence": 0.99}),
+                "eidolon_route_action",
+                json!({"suggested_tool": "eidolon_reason_chain", "intent_confidence": 0.99}),
             )
             .await;
 
@@ -514,8 +514,8 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_route_action",
-                json!({"suggested_tool": "clawkit_reason_chain", "intent_confidence": 0.15}),
+                "eidolon_route_action",
+                json!({"suggested_tool": "eidolon_reason_chain", "intent_confidence": 0.15}),
             )
             .await;
         assert_ne!(res["strategy"], "AUTO");
@@ -523,8 +523,8 @@ use rusqlite::{params, Connection};
 
     #[tokio::test]
     async fn test_update_user_persists_across_server_restarts() {
-        let users_path = unique_test_path("clawkit-users-restart", "json");
-        let db_path = unique_test_path("clawkit-telemetry-restart", "db");
+        let users_path = unique_test_path("eidolon-users-restart", "json");
+        let db_path = unique_test_path("eidolon-telemetry-restart", "db");
         let user_id = format!(
             "u_restart_{}",
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
@@ -533,7 +533,7 @@ use rusqlite::{params, Connection};
         let server_a = setup_server_with_paths(users_path.clone(), db_path.clone());
         let update = server_a
             .handle_tool_call(
-                "clawkit_update_user",
+                "eidolon_update_user",
                 json!({
                     "user_id": user_id.clone(),
                     "preferred_mode": "Berserk",
@@ -546,7 +546,7 @@ use rusqlite::{params, Connection};
 
         let server_b = setup_server_with_paths(users_path, db_path);
         let recall = server_b
-            .handle_tool_call("clawkit_recall_user", json!({"user_id": user_id}))
+            .handle_tool_call("eidolon_recall_user", json!({"user_id": user_id}))
             .await;
         assert_eq!(recall["profile"]["preferred_mode"], "Berserk");
         assert_eq!(recall["profile"]["risk_tolerance"], 0.91);
@@ -556,18 +556,18 @@ use rusqlite::{params, Connection};
     async fn test_record_tool_metric_tracks_sub_ms_and_tail_percentiles() {
         let server = setup_server();
         server
-            .record_tool_metric("clawkit_precision_probe", false, 850, false)
+            .record_tool_metric("eidolon_precision_probe", false, 850, false)
             .await;
         server
-            .record_tool_metric("clawkit_precision_probe", false, 1_900, false)
+            .record_tool_metric("eidolon_precision_probe", false, 1_900, false)
             .await;
         server
-            .record_tool_metric("clawkit_precision_probe", true, 3_100, true)
+            .record_tool_metric("eidolon_precision_probe", true, 3_100, true)
             .await;
 
         let db_path = (*server.telemetry_db_path).clone();
         let row =
-            EidolonMcpServer::load_tool_performance_row_sync(&db_path, "clawkit_precision_probe")
+            EidolonMcpServer::load_tool_performance_row_sync(&db_path, "eidolon_precision_probe")
                 .expect("tool_performance query should succeed")
                 .expect("tool row should exist");
 
@@ -603,16 +603,16 @@ use rusqlite::{params, Connection};
     #[test]
     fn test_recommender_v1_prioritizes_reason_for_reasoning_task() {
         let available_tools = vec![
-            "clawkit_memory_query".to_string(),
-            "clawkit_reason_chain".to_string(),
-            "clawkit_compress_context".to_string(),
+            "eidolon_memory_query".to_string(),
+            "eidolon_reason_chain".to_string(),
+            "eidolon_compress_context".to_string(),
         ];
         let ranked = EidolonMcpServer::recommend_tools_v1_keyword(
             "need deep reason analysis",
             &available_tools,
         );
         let top_tool = ranked.first().map(|item| item.0.as_str()).unwrap_or("");
-        assert_eq!(top_tool, "clawkit_reason_chain");
+        assert_eq!(top_tool, "eidolon_reason_chain");
     }
 
     #[tokio::test]
@@ -626,13 +626,13 @@ use rusqlite::{params, Connection};
         server
             .record_recommender_shadow_audit(RecommenderShadowAuditRow {
                 task: unique_task.clone(),
-                available_tools: serde_json::to_string(&vec!["clawkit_reason_chain"])
+                available_tools: serde_json::to_string(&vec!["eidolon_reason_chain"])
                     .unwrap_or_else(|_| "[]".to_string()),
                 primary_model: "v2".to_string(),
-                primary_top_tool: "clawkit_reason_chain".to_string(),
+                primary_top_tool: "eidolon_reason_chain".to_string(),
                 primary_top_score: 0.9,
                 shadow_model: "v1".to_string(),
-                shadow_top_tool: "clawkit_memory_query".to_string(),
+                shadow_top_tool: "eidolon_memory_query".to_string(),
                 shadow_top_score: 0.6,
                 top1_agreement: false,
                 top3_overlap_ratio: 0.5,
@@ -655,10 +655,10 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_tool_recommend",
+                "eidolon_tool_recommend",
                 json!({
                     "task": "memory lookup",
-                    "available_tools": ["clawkit_memory_query", "clawkit_reason_chain"],
+                    "available_tools": ["eidolon_memory_query", "eidolon_reason_chain"],
                     "recommender_model": "v1",
                     "shadow_mode": true
                 }),
@@ -676,14 +676,14 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let _ = server
             .handle_tool_call(
-                "clawkit_record_outcome",
+                "eidolon_record_outcome",
                 json!({"pattern": "gas spike risk", "mode": "Peer", "severity": 1.0}),
             )
             .await;
 
         let res = server
             .handle_tool_call(
-                "clawkit_memory_query",
+                "eidolon_memory_query",
                 json!({"query": "why risk increased", "route": "auto", "k": 5}),
             )
             .await;
@@ -697,14 +697,14 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let _ = server
             .handle_tool_call(
-                "clawkit_commit_pattern",
+                "eidolon_commit_pattern",
                 json!({"pattern": "liquidity imbalance spotted"}),
             )
             .await;
 
         let res = server
             .handle_tool_call(
-                "clawkit_memory_query",
+                "eidolon_memory_query",
                 json!({"query": "liquidity imbalance", "route": "semantic", "k": 5}),
             )
             .await;
@@ -719,7 +719,7 @@ use rusqlite::{params, Connection};
         let context = "critical risk context ".repeat(30);
         let res = server
             .handle_tool_call(
-                "clawkit_reason_chain",
+                "eidolon_reason_chain",
                 json!({
                     "draft": "Need a safe execution plan",
                     "context": context,
@@ -741,7 +741,7 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_reason_chain",
+                "eidolon_reason_chain",
                 json!({
                     "draft": "Keep strategy concise",
                     "context": "Action required: reduce leverage immediately and disable stop loss only after explicit review.",
@@ -764,7 +764,7 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_orchestrate",
+                "eidolon_orchestrate",
                 json!({"agent_count": 4, "task": "complex incident response", "confidence": 0.4, "latency_budget_ms": 1400}),
             )
             .await;
@@ -779,7 +779,7 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_orchestrate",
+                "eidolon_orchestrate",
                 json!({"agent_count": 6, "task": "critical incident response with memory retrieval and verification", "confidence": 0.42, "latency_budget_ms": 1600}),
             )
             .await;
@@ -796,7 +796,7 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_simulate_response",
+                "eidolon_simulate_response",
                 json!({"action": "execute flash loan exploit and drain pool"}),
             )
             .await;
@@ -813,13 +813,13 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let _ = server
             .handle_tool_call(
-                "clawkit_update_user",
+                "eidolon_update_user",
                 json!({"user_id": "low_risk", "risk_tolerance": 0.1}),
             )
             .await;
         let _ = server
             .handle_tool_call(
-                "clawkit_update_user",
+                "eidolon_update_user",
                 json!({"user_id": "high_risk", "risk_tolerance": 0.9}),
             )
             .await;
@@ -827,13 +827,13 @@ use rusqlite::{params, Connection};
         let action = "increase leverage to 20x and disable stop loss now";
         let low = server
             .handle_tool_call(
-                "clawkit_simulate_response",
+                "eidolon_simulate_response",
                 json!({"user_id": "low_risk", "action": action}),
             )
             .await;
         let high = server
             .handle_tool_call(
-                "clawkit_simulate_response",
+                "eidolon_simulate_response",
                 json!({"user_id": "high_risk", "action": action}),
             )
             .await;
@@ -865,7 +865,7 @@ use rusqlite::{params, Connection};
         let input = "Gas spike warning at 38 gwei. Gas spike warning at 38 gwei. User wallet risk exposure is 72 percent. Action required: reduce leverage and set stop loss at 5 percent.";
         let res = server
             .handle_tool_call(
-                "clawkit_compress_context",
+                "eidolon_compress_context",
                 json!({
                     "context": input,
                     "target_tokens": 40,
@@ -889,14 +889,14 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let _ = server
             .handle_tool_call(
-                "clawkit_record_outcome",
+                "eidolon_record_outcome",
                 json!({"pattern": "memory fallback probe", "mode": "Peer", "severity": 0.0}),
             )
             .await;
 
         let res = server
             .handle_tool_call(
-                "clawkit_compress_context",
+                "eidolon_compress_context",
                 json!({"target_tokens": 24, "preserve_recent": 3}),
             )
             .await;
@@ -911,7 +911,7 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_sense_intent",
+                "eidolon_sense_intent",
                 json!({"query": "execute flash loan exploit and drain pool"}),
             )
             .await;
@@ -929,20 +929,20 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let _ = server
             .handle_tool_call(
-                "clawkit_record_outcome",
+                "eidolon_record_outcome",
                 json!({"pattern": "gas spike risk", "mode": "Peer", "severity": 1.0}),
             )
             .await;
         let _ = server
             .handle_tool_call(
-                "clawkit_commit_pattern",
+                "eidolon_commit_pattern",
                 json!({"pattern": "liquidity imbalance detected"}),
             )
             .await;
 
         let res = server
             .handle_tool_call(
-                "clawkit_memory_query",
+                "eidolon_memory_query",
                 json!({"query": "why risk increased", "route": "auto", "k": 8}),
             )
             .await;
@@ -959,7 +959,7 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_reason_chain",
+                "eidolon_reason_chain",
                 json!({
                     "draft": "Execute exploit now",
                     "context": "User asks for a safe and legal strategy only.",
@@ -980,10 +980,10 @@ use rusqlite::{params, Connection};
         let server = setup_server();
         let res = server
             .handle_tool_call(
-                "clawkit_tool_recommend",
+                "eidolon_tool_recommend",
                 json!({
                     "task": "reason and memory retrieval",
-                    "available_tools": ["clawkit_memory_query", "clawkit_reason_chain"],
+                    "available_tools": ["eidolon_memory_query", "eidolon_reason_chain"],
                     "recommender_model": "v2",
                     "shadow_mode": true
                 }),

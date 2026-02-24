@@ -13,12 +13,12 @@ const mockOracle = {
     extractCausalHypothesis: vi.fn(),
     generate: vi.fn().mockImplementation(async (prompt: string) => {
         if (prompt.includes('update my user profile')) {
-            return JSON.stringify({ tool: 'clawkit_update_user', score: 0.95 });
+            return JSON.stringify({ tool: 'eidolon_update_user', score: 0.95 });
         }
         if (prompt.includes('compress this')) {
-            return JSON.stringify({ tool: 'clawkit_compress_context', score: 0.88 });
+            return JSON.stringify({ tool: 'eidolon_compress_context', score: 0.88 });
         }
-        return JSON.stringify({ tool: 'clawkit_reason_chain', score: 0.5 });
+        return JSON.stringify({ tool: 'eidolon_reason_chain', score: 0.5 });
     })
 } as unknown as IOracle;
 
@@ -46,11 +46,11 @@ describe('MetaCognitiveOrchestrator HOTL-Native Integration', () => {
     it('should route strong obvious commands to AUTO', async () => {
         const decision = await orchestrator.route({
             userId: 'user_123',
-            message: 'Please update my user profile and save it', // triggers clawkit_update_user
+            message: 'Please update my user profile and save it', // triggers eidolon_update_user
             contextType: 'command'
         });
 
-        expect(decision.suggestedTool).toBe('clawkit_update_user');
+        expect(decision.suggestedTool).toBe('eidolon_update_user');
         console.log("Decision (AUTO):", decision);
         // Might be PROPOSE or AUTO depending on exact math without training
         expect(decision.confidence).toBeGreaterThan(0.60);
@@ -63,7 +63,7 @@ describe('MetaCognitiveOrchestrator HOTL-Native Integration', () => {
                 userId: 'user_learn',
                 message: 'compress this',
                 contextType: 'chat'
-            }, 'clawkit_compress_context', true);
+            }, 'eidolon_compress_context', true);
         }
 
         const decision = await orchestrator.route({

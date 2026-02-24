@@ -4,4 +4,4 @@ export {
     type Permit2Signature,
     signPermit2,
     encodePermit2Data
-} from '@clawkit/toolkit';
+} from '@eidolon/toolkit';

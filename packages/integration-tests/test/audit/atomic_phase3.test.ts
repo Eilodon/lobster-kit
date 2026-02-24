@@ -1,8 +1,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EidolonSimulator, ShadowTransaction } from '@clawkit/soul';
-import { GoPlusSecurity } from '@clawkit/soul';
-import { PythAdapter } from '@clawkit/soul';
+import { EidolonSimulator, ShadowTransaction } from '@eidolon/soul';
+import { GoPlusSecurity } from '@eidolon/soul';
+import { PythAdapter } from '@eidolon/soul';
 import axios from 'axios';
 
 // Mock dependencies

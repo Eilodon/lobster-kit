@@ -42,13 +42,13 @@ impl IntentCategory {
 
     fn suggested_tools(&self) -> Vec<&str> {
         match self {
-            IntentCategory::CodeAudit => vec!["clawkit_check_pattern", "clawkit_reason_chain", "clawkit_orchestrate"],
-            IntentCategory::DebugIssue => vec!["clawkit_recall_similar", "clawkit_memory_query", "clawkit_sense_intent"],
-            IntentCategory::ExplainCode => vec!["clawkit_sense_intent", "clawkit_memory_query", "clawkit_reason_chain"],
-            IntentCategory::CreateFeature => vec!["clawkit_tool_recommend", "clawkit_reason_chain", "clawkit_orchestrate"],
-            IntentCategory::SecurityScan => vec!["clawkit_check_pattern", "eidolon_security_scan", "clawkit_orchestrate"],
-            IntentCategory::MemoryQuery => vec!["clawkit_recall_user", "clawkit_memory_query", "clawkit_recall_similar"],
-            IntentCategory::GeneralQuery => vec!["clawkit_sense_intent", "clawkit_reason_chain", "clawkit_tool_recommend"],
+            IntentCategory::CodeAudit => vec!["eidolon_check_pattern", "eidolon_reason_chain", "eidolon_orchestrate"],
+            IntentCategory::DebugIssue => vec!["eidolon_recall_similar", "eidolon_memory_query", "eidolon_sense_intent"],
+            IntentCategory::ExplainCode => vec!["eidolon_sense_intent", "eidolon_memory_query", "eidolon_reason_chain"],
+            IntentCategory::CreateFeature => vec!["eidolon_tool_recommend", "eidolon_reason_chain", "eidolon_orchestrate"],
+            IntentCategory::SecurityScan => vec!["eidolon_check_pattern", "eidolon_security_scan", "eidolon_orchestrate"],
+            IntentCategory::MemoryQuery => vec!["eidolon_recall_user", "eidolon_memory_query", "eidolon_recall_similar"],
+            IntentCategory::GeneralQuery => vec!["eidolon_sense_intent", "eidolon_reason_chain", "eidolon_tool_recommend"],
         }
     }
 }
@@ -190,12 +190,12 @@ impl EidolonMcpServer {
                 });
 
                 let result = match tool_name.as_str() {
-                    "clawkit_sense_intent" => self.handle_sense_intent(tool_params).await,
-                    "clawkit_check_pattern" => self.handle_check_pattern(tool_params).await,
-                    "clawkit_reason_chain" => self.handle_reason_chain(tool_params).await,
-                    "clawkit_memory_query" => self.handle_memory_query(tool_params).await,
-                    "clawkit_recall_similar" => self.handle_recall_similar(tool_params).await,
-                    "clawkit_orchestrate" => {
+                    "eidolon_sense_intent" => self.handle_sense_intent(tool_params).await,
+                    "eidolon_check_pattern" => self.handle_check_pattern(tool_params).await,
+                    "eidolon_reason_chain" => self.handle_reason_chain(tool_params).await,
+                    "eidolon_memory_query" => self.handle_memory_query(tool_params).await,
+                    "eidolon_recall_similar" => self.handle_recall_similar(tool_params).await,
+                    "eidolon_orchestrate" => {
                         let orch_params = json!({
                             "task": input,
                             "confidence": confidence,
@@ -330,17 +330,17 @@ impl EidolonMcpServer {
         for result in tool_results {
             if let Some(tool) = result["tool"].as_str() {
                 match tool {
-                    "clawkit_sense_intent" => {
+                    "eidolon_sense_intent" => {
                         if let Some(entities) = result["result"]["entities"].as_array() {
                             key_findings.extend(entities.iter().cloned());
                         }
                     }
-                    "clawkit_check_pattern" => {
+                    "eidolon_check_pattern" => {
                         if let Some(patterns) = result["result"]["patterns"].as_array() {
                             patterns_detected.extend(patterns.iter().cloned());
                         }
                     }
-                    "clawkit_memory_query" | "clawkit_recall_similar" => {
+                    "eidolon_memory_query" | "eidolon_recall_similar" => {
                         if let Some(memories) = result["result"]["memories"].as_array() {
                             relevant_memories.extend(memories.iter().cloned());
                         }

@@ -1,4 +1,4 @@
-import { DeFiModule as BaseDeFiModule } from '@clawkit/defi-bnb';
+import { DeFiModule as BaseDeFiModule } from '@eidolon/defi-bnb';
 
 type PriceOracle = {
   fetchTokenPrices: () => Promise<Record<string, number>>;

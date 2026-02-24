@@ -1,5 +1,5 @@
 #!/bin/bash
-# download-onnx-model.sh — Download all-MiniLM-L6-v2 ONNX model for ClawKit embedding engine
+# download-onnx-model.sh — Download all-MiniLM-L6-v2 ONNX model for Eidolon embedding engine
 #
 # This downloads the sentence-transformers model used by sense_intent for
 # zero-shot risk classification via cosine similarity against safe/danger centroids.
@@ -15,7 +15,7 @@ HF_BASE="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/m
 
 mkdir -p "$MODEL_DIR"
 
-echo "[ClawKit] Downloading all-MiniLM-L6-v2 ONNX model..."
+echo "[Eidolon] Downloading all-MiniLM-L6-v2 ONNX model..."
 
 # Download ONNX model
 if [ ! -f "$MODEL_DIR/model.onnx" ]; then
@@ -41,13 +41,13 @@ fi
 if [ -f "$MODEL_DIR/model.onnx" ] && [ -f "$MODEL_DIR/tokenizer.json" ]; then
     MODEL_SIZE=$(du -h "$MODEL_DIR/model.onnx" | cut -f1)
     echo ""
-    echo "[ClawKit] ✅ ONNX model ready at $MODEL_DIR"
+    echo "[Eidolon] ✅ ONNX model ready at $MODEL_DIR"
     echo "  model.onnx    : $MODEL_SIZE"
     echo "  tokenizer.json: $(du -h "$MODEL_DIR/tokenizer.json" | cut -f1)"
     echo ""
     echo "To use: set ONNX_MODEL_DIR=$MODEL_DIR before running the MCP server."
     echo "The server will automatically use ONNX embeddings for sense_intent (~2-5ms vs ~2-10s Ollama)."
 else
-    echo "[ClawKit] ❌ Download failed. Check network and try again."
+    echo "[Eidolon] ❌ Download failed. Check network and try again."
     exit 1
 fi

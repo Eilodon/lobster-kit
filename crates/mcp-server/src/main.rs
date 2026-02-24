@@ -49,29 +49,29 @@ const DEFAULT_TOOL_GEN_AUTOPILOT_MAX_P95_MS: f64 = 2200.0;
 const DEFAULT_TOOL_GEN_AUTOPILOT_MAX_P99_P50_RATIO: f64 = 3.0;
 const DEFAULT_TOOL_GEN_AUTOPILOT_MIN_SAMPLE_COUNT: u64 = 30;
 const CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS: [&str; 5] = [
-    "clawkit_recall_user",
-    "clawkit_sense_intent",
-    "clawkit_reason_chain",
-    "clawkit_memory_query",
-    "clawkit_compress_context",
+    "eidolon_recall_user",
+    "eidolon_sense_intent",
+    "eidolon_reason_chain",
+    "eidolon_memory_query",
+    "eidolon_compress_context",
 ];
 const DEFAULT_COGNITIVE_TOOL_CATALOG: [&str; 16] = [
-    "clawkit_recall_user",
-    "clawkit_sense_intent",
-    "clawkit_check_pattern",
-    "clawkit_simulate_response",
-    "clawkit_commit_pattern",
-    "clawkit_reason_chain",
-    "clawkit_recall_similar",
-    "clawkit_memory_query",
-    "clawkit_compress_context",
-    "clawkit_record_outcome",
-    "clawkit_update_user",
-    "clawkit_dream_conversation",
-    "clawkit_orchestrate",
-    "clawkit_tool_recommend",
-    "clawkit_subbrain_auto",
-    "clawkit_generated_tool_decision",
+    "eidolon_recall_user",
+    "eidolon_sense_intent",
+    "eidolon_check_pattern",
+    "eidolon_simulate_response",
+    "eidolon_commit_pattern",
+    "eidolon_reason_chain",
+    "eidolon_recall_similar",
+    "eidolon_memory_query",
+    "eidolon_compress_context",
+    "eidolon_record_outcome",
+    "eidolon_update_user",
+    "eidolon_dream_conversation",
+    "eidolon_orchestrate",
+    "eidolon_tool_recommend",
+    "eidolon_subbrain_auto",
+    "eidolon_generated_tool_decision",
 ];
 const LEGACY_COMPAT_TOOL_CATALOG: [&str; 9] = [
     "eidolon_oracle_sense",
@@ -145,12 +145,12 @@ impl EidolonMcpServer {
         let embedding_engine = match Self::prepare_ort_runtime_for_embedding() {
             Ok(_) => match EmbeddingEngine::load(&model_dir) {
                 Ok(engine) => {
-                    eprintln!("[ClawKit] ONNX EmbeddingEngine loaded from {:?}", model_dir);
+                    eprintln!("[Eidolon] ONNX EmbeddingEngine loaded from {:?}", model_dir);
                     Some(engine)
                 }
                 Err(e) => {
                     eprintln!(
-                        "[ClawKit] ONNX EmbeddingEngine unavailable: {}. Falling back to Ollama.",
+                        "[Eidolon] ONNX EmbeddingEngine unavailable: {}. Falling back to Ollama.",
                         e
                     );
                     None
@@ -158,7 +158,7 @@ impl EidolonMcpServer {
             },
             Err(err) => {
                 eprintln!(
-                    "[ClawKit] ONNX runtime unavailable: {}. Falling back to Ollama.",
+                    "[Eidolon] ONNX runtime unavailable: {}. Falling back to Ollama.",
                     err
                 );
                 None
@@ -169,7 +169,7 @@ impl EidolonMcpServer {
         let memories_file_path = users_file_path
             .parent()
             .unwrap_or(std::path::Path::new("."))
-            .join("clawkit_memories.json");
+            .join("eidolon_memories.json");
 
         // Phase 3: Load memories from disk if available
         let memories = Self::load_memories_from_disk_sync(&memories_file_path);
@@ -257,14 +257,14 @@ async fn main() {
     let server = EidolonMcpServer::new(oracle);
 
     // Initializing Phase 6: The Epistemic Core
-    eprintln!("[ClawKit TensorOracle] Booting internal LLM Engine...");
+    eprintln!("[Eidolon TensorOracle] Booting internal LLM Engine...");
     if let Err(e) = server.tensor_oracle.boot_engine().await {
-        eprintln!("[ClawKit TensorOracle] CRITICAL ENGINE BOOT FAILURE: {}", e);
+        eprintln!("[Eidolon TensorOracle] CRITICAL ENGINE BOOT FAILURE: {}", e);
     } else {
-        eprintln!("[ClawKit TensorOracle] Precomputing Epistemic Pre-Hook (Zero-Allocation Memory Profile)");
+        eprintln!("[Eidolon TensorOracle] Precomputing Epistemic Pre-Hook (Zero-Allocation Memory Profile)");
         let user_profile = "Eidolon-V Operating Context. Core Directives: Ruthless efficiency. Optimization is paramount. Maximize Thermodynamic Entropy in exploration.";
         if let Err(e) = server.tensor_oracle.precompute_epistemic_hook(user_profile).await {
-            eprintln!("[ClawKit] Failed to preload Epistemic Pre-Hook: {}", e);
+            eprintln!("[Eidolon] Failed to preload Epistemic Pre-Hook: {}", e);
         }
     }
 

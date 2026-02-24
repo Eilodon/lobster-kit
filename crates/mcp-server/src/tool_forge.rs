@@ -24,7 +24,7 @@ impl EidolonMcpServer {
         }
 
         let forge_id = chrono::Utc::now().timestamp_millis().to_string();
-        let tmp_dir = PathBuf::from(format!("/tmp/clawkit_forge_{}", forge_id));
+        let tmp_dir = PathBuf::from(format!("/tmp/eidolon_forge_{}", forge_id));
 
         if let Err(e) = fs::create_dir_all(&tmp_dir) {
             return serde_json::json!({ "error": format!("Failed to create forge dir: {}", e) });
@@ -67,7 +67,7 @@ crate-type = ["cdylib"]
                 }
                 
                 // Read WASM
-                let wasm_path = PathBuf::from(format!("/tmp/clawkit_forge_{}/target/wasm32-unknown-unknown/release/{}.wasm", forge_id, tool_name.replace('-', "_")));
+                let wasm_path = PathBuf::from(format!("/tmp/eidolon_forge_{}/target/wasm32-unknown-unknown/release/{}.wasm", forge_id, tool_name.replace('-', "_")));
                 if let Ok(wasm_bytes) = fs::read(&wasm_path) {
                     
                     // Validate it can load in Wasmtime

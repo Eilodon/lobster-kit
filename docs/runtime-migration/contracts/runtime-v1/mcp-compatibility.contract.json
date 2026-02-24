@@ -4,10 +4,10 @@
   "gateway": {
     "mode": "dual_stack",
     "legacy_prefix": "eidolon_",
-    "next_prefix": "clawkit_"
+    "next_prefix": "eidolon_"
   },
   "list_tools": {
-    "must_include_prefixes": ["eidolon_", "clawkit_"],
+    "must_include_prefixes": ["eidolon_", "eidolon_"],
     "required_legacy_tools": [
       "eidolon_oracle_sense",
       "eidolon_defi_quote",
@@ -20,11 +20,11 @@
       "eidolon_dream"
     ],
     "required_cognitive_core_tools": [
-      "clawkit_recall_user",
-      "clawkit_sense_intent",
-      "clawkit_reason_chain",
-      "clawkit_memory_query",
-      "clawkit_compress_context"
+      "eidolon_recall_user",
+      "eidolon_sense_intent",
+      "eidolon_reason_chain",
+      "eidolon_memory_query",
+      "eidolon_compress_context"
     ]
   },
   "call_tool": {

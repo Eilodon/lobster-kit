@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ClawKit } from '../src/index';
+import { Eidolon } from '../src/index';
 
 // Mock dependencies
 const mockWalletClient: any = {
@@ -16,7 +16,7 @@ const mockConfig: any = {
 };
 
 const mockStart = vi.fn();
-vi.mock('@clawkit/soul', async (importOriginal) => {
+vi.mock('@eidolon/soul', async (importOriginal) => {
     const actual = await importOriginal() as Record<string, unknown>;
     return {
         ...actual,
@@ -31,7 +31,7 @@ vi.mock('@clawkit/soul', async (importOriginal) => {
 // Mock modules to avoid complex init
 vi.mock('../src/defi', () => ({ DeFiModule: vi.fn().mockReturnValue({ setPriceOracle: vi.fn() }) }));
 vi.mock('../src/nft', () => ({ NFTModule: vi.fn() }));
-vi.mock('@clawkit/defi-bnb', async (importOriginal) => {
+vi.mock('@eidolon/defi-bnb', async (importOriginal) => {
     const actual = await importOriginal() as Record<string, unknown>;
     return {
         ...actual,
@@ -42,19 +42,19 @@ vi.mock('@clawkit/defi-bnb', async (importOriginal) => {
 });
 vi.mock('../src/analytics', () => ({ AnalyticsModule: vi.fn() }));
 
-describe('ClawKit Usage P1 Fixes', () => {
+describe('Eidolon Usage P1 Fixes', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
     describe('Privacy Guard', () => {
         it('should NOT start market stream in strict privacy mode', () => {
-            new ClawKit(mockWalletClient, { ...mockConfig, privacyMode: 'strict' });
+            new Eidolon(mockWalletClient, { ...mockConfig, privacyMode: 'strict' });
             expect(mockStart).not.toHaveBeenCalled();
         });
 
         it('should start market stream in normal mode', () => {
-            new ClawKit(mockWalletClient, { ...mockConfig, privacyMode: 'balanced' });
+            new Eidolon(mockWalletClient, { ...mockConfig, privacyMode: 'balanced' });
             expect(mockStart).toHaveBeenCalled();
         });
     });

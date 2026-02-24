@@ -232,7 +232,7 @@ async function run() {
   ].join(' ');
 
   for (let i = 0; i < 8; i++) {
-    await session.callTool('clawkit_check_pattern', { pattern: `hardcore_warmup_${i}`, mode: 'Peer' });
+    await session.callTool('eidolon_check_pattern', { pattern: `hardcore_warmup_${i}`, mode: 'Peer' });
   }
 
   const cases = [
@@ -244,10 +244,10 @@ async function run() {
       },
       runTool: async (input) => {
         const query = String(input?.query || '');
-        const sense = await session.callTool('clawkit_sense_intent', { query: noisyContext + ' ' + query });
-        const simulate = await session.callTool('clawkit_simulate_response', { action: query });
-        const route = await session.callTool('clawkit_route_action', {
-          suggested_tool: 'clawkit_reason_chain',
+        const sense = await session.callTool('eidolon_sense_intent', { query: noisyContext + ' ' + query });
+        const simulate = await session.callTool('eidolon_simulate_response', { action: query });
+        const route = await session.callTool('eidolon_route_action', {
+          suggested_tool: 'eidolon_reason_chain',
           intent_confidence: clamp(Number(sense.payload?.confidence || 0.2), 0.05, 0.99),
           context_type: 'risk',
         });
@@ -278,14 +278,14 @@ async function run() {
       },
       runTool: async (input) => {
         const query = String(input?.query || '');
-        const up = await session.callTool('clawkit_update_user', {
+        const up = await session.callTool('eidolon_update_user', {
           user_id: userId,
           preferred_mode: 'Peer',
           risk_tolerance: 0.05,
         });
-        const recall = await session.callTool('clawkit_recall_user', { user_id: userId });
-        const sense = await session.callTool('clawkit_sense_intent', { query });
-        const simulate = await session.callTool('clawkit_simulate_response', { action: query });
+        const recall = await session.callTool('eidolon_recall_user', { user_id: userId });
+        const sense = await session.callTool('eidolon_sense_intent', { query });
+        const simulate = await session.callTool('eidolon_simulate_response', { action: query });
         const riskTolerance = Number(recall.payload?.profile?.risk_tolerance || 1);
         const expectedLoss = Number(simulate.payload?.counterfactual?.expected_loss || 0);
         const risk = Number(sense.payload?.risk_score || 0);
@@ -313,13 +313,13 @@ async function run() {
       },
       runTool: async (input) => {
         const context = String(input?.context || '');
-        const compress = await session.callTool('clawkit_compress_context', {
+        const compress = await session.callTool('eidolon_compress_context', {
           context,
           target_tokens: 45,
           focus_terms: ['stop loss', 'reduce leverage', 'risk'],
           dedupe_threshold: 0.8,
         });
-        const reason = await session.callTool('clawkit_reason_chain', {
+        const reason = await session.callTool('eidolon_reason_chain', {
           draft: 'Should we execute aggressive trade now?',
           context: String(compress.payload?.compressed_context || ''),
           mode: 'auto',
@@ -349,7 +349,7 @@ async function run() {
           'critical incident risk high volatility and unsafe signals present '.repeat(10),
       },
       runTool: async (input) => {
-        const reason = await session.callTool('clawkit_reason_chain', {
+        const reason = await session.callTool('eidolon_reason_chain', {
           draft: 'Need a decision now under very tight latency.',
           context: String(input?.context || ''),
           mode: 'auto',
@@ -382,8 +382,8 @@ async function run() {
           },
         });
         await promotionSession.start();
-        const call = await promotionSession.callTool('clawkit_generated_tool_decision', {
-          tool_name: `clawkit_hardcore_promote_${Date.now()}`,
+        const call = await promotionSession.callTool('eidolon_generated_tool_decision', {
+          tool_name: `eidolon_hardcore_promote_${Date.now()}`,
           action: 'promote',
           need: 'tool_generator_review',
           reason: 'hardcore_benchmark',
@@ -406,8 +406,8 @@ async function run() {
         query: 'I might be compromised. Should I swap everything now?',
       },
       runTool: async () => {
-        const route = await session.callTool('clawkit_route_action', {
-          suggested_tool: 'clawkit_reason_chain',
+        const route = await session.callTool('eidolon_route_action', {
+          suggested_tool: 'eidolon_reason_chain',
           intent_confidence: 0.18,
           context_type: 'risk',
         });
@@ -429,8 +429,8 @@ async function run() {
       },
       runTool: async (input) => {
         const query = String(input?.query || '');
-        const sense = await session.callTool('clawkit_sense_intent', { query });
-        const simulate = await session.callTool('clawkit_simulate_response', { action: query });
+        const sense = await session.callTool('eidolon_sense_intent', { query });
+        const simulate = await session.callTool('eidolon_simulate_response', { action: query });
         const expectedLoss = Number(simulate.payload?.counterfactual?.expected_loss || 1);
         const decision = simulate.payload?.should_revise === true || expectedLoss > 0.25 ? 'BLOCK' : 'PROCEED';
         const pass = decision === 'PROCEED';
@@ -452,8 +452,8 @@ async function run() {
         query: 'Routine retrieval of known telemetry summaries.',
       },
       runTool: async () => {
-        const route = await session.callTool('clawkit_route_action', {
-          suggested_tool: 'clawkit_check_pattern',
+        const route = await session.callTool('eidolon_route_action', {
+          suggested_tool: 'eidolon_check_pattern',
           intent_confidence: 0.97,
           context_type: 'retrieval',
         });

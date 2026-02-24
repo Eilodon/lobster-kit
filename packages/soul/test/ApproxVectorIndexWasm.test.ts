@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { WasmAdapter } from '../src/WasmAdapter';
-import { ApproxVectorIndex } from '@clawkit/core';
+import { ApproxVectorIndex } from '@eidolon/core';
 
 describe('ApproxVectorIndex WASM Bridge', () => {
     beforeAll(async () => {
@@ -9,13 +9,13 @@ describe('ApproxVectorIndex WASM Bridge', () => {
         await adapter.init();
         console.log("After init:", adapter.isReady());
 
-        const coreAdapter = (await import('@clawkit/core')).WasmAdapter.getInstance();
+        const coreAdapter = (await import('@eidolon/core')).WasmAdapter.getInstance();
         console.log("Core adapter has createApproxVectorIndex:", typeof (coreAdapter as any).createApproxVectorIndex === 'function');
         console.log("Is CoreAdapter overridden:", coreAdapter === adapter);
     });
 
     it('should initialize and perform vector search via WASM', () => {
-        // Since we are in @clawkit/soul, WasmAdapter will intercept and return the WASM index
+        // Since we are in @eidolon/soul, WasmAdapter will intercept and return the WASM index
         const index = new ApproxVectorIndex({ hyperplanes: 8, probes: 2 });
 
         // Mock vectors

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EidolonBus, EidolonEventType } from '@clawkit/core';
+import { EidolonBus, EidolonEventType } from '@eidolon/core';
 
 describe('EidolonBus re-entrancy guard', () => {
     let bus: EidolonBus;

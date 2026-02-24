@@ -106,7 +106,7 @@ export interface PythConfig {
   priceFeedIds: Record<string, string>;
 }
 
-export interface ClawKitConfig {
+export interface EidolonConfig {
   privateKey?: string; // Optional if WalletClient provided with account
   chainId?: number;
   rpcUrl?: string;
@@ -134,7 +134,7 @@ export interface ClawKitConfig {
 }
 
 // Strict WalletClient type enforcing Account presence (viem-specific)
-export type ClawKitWalletClient = WalletClient<Transport, Chain, Account>;
+export type EidolonWalletClient = WalletClient<Transport, Chain, Account>;
 
 // ═══════════════════════════════════════════════════════
 //  CHAIN CONFIGURATION (Generic)
@@ -173,7 +173,7 @@ export {
   TOKENS,
   PANCAKE_ROUTER,
   PANCAKE_QUOTER,
-  CLAWKIT_CONTRACTS,
+  EIDOLON_CONTRACTS,
   BATCH_EXECUTOR,
   APPROVAL_REVOKER,
   assertDeployed,

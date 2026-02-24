@@ -309,12 +309,12 @@ export class SwarmOrchestrator {
     }
 
     private capabilitiesFor(role: AgentRole, task: string): string[] {
-        const base = ['clawkit_memory_query', 'clawkit_reason_chain'];
-        if (role === 'planner') return ['clawkit_compress_context', ...base];
-        if (role === 'executor') return ['clawkit_commit_pattern', 'clawkit_record_outcome', ...base];
-        if (role === 'critic') return ['clawkit_reason_chain', 'clawkit_tool_recommend'];
-        if (role === 'memory_keeper') return ['clawkit_recall_user', 'clawkit_update_user', ...base];
-        if (task.toLowerCase().includes('consensus')) return ['clawkit_orchestrate', ...base];
-        return ['clawkit_orchestrate', ...base];
+        const base = ['eidolon_memory_query', 'eidolon_reason_chain'];
+        if (role === 'planner') return ['eidolon_compress_context', ...base];
+        if (role === 'executor') return ['eidolon_commit_pattern', 'eidolon_record_outcome', ...base];
+        if (role === 'critic') return ['eidolon_reason_chain', 'eidolon_tool_recommend'];
+        if (role === 'memory_keeper') return ['eidolon_recall_user', 'eidolon_update_user', ...base];
+        if (task.toLowerCase().includes('consensus')) return ['eidolon_orchestrate', ...base];
+        return ['eidolon_orchestrate', ...base];
     }
 }

@@ -54,7 +54,7 @@ async function runScenario() {
 
     server.stderr.on('data', (data) => {
         const logData = data.toString();
-        if (logData.includes("[ClawKit TensorOracle]")) {
+        if (logData.includes("[Eidolon TensorOracle]")) {
             console.log("🧠", logData.trim());
         }
         if (logData.includes("Server Started")) {
@@ -85,14 +85,14 @@ async function runScenario() {
         console.log("----------------------------------------------------------");
 
         await sendRequest("tools/call", {
-            name: "clawkit_set_entropy",
+            name: "eidolon_set_entropy",
             arguments: { target_entropy: 0.9, duration_ms: 10000 }
         });
 
         console.log("\n>> [Analysis Thread] Đang quét mã độc...");
         let start1 = Date.now();
         let res1 = await sendRequest("tools/call", {
-            name: "clawkit_reason_chain",
+            name: "eidolon_reason_chain",
             arguments: { draft: testDraft, context: testContext, mode: "deep" }
         });
         let time1 = Date.now() - start1;
@@ -113,7 +113,7 @@ async function runScenario() {
 
         // Giả lập cực hạn: Set entropy thấp để mô phỏng sự hoang mang/phản xạ đóng (Reflex Lock)
         await sendRequest("tools/call", {
-            name: "clawkit_set_entropy",
+            name: "eidolon_set_entropy",
             // in reality, the `systems.rs` triggers high trauma > 0.8 during liquidation/loss
             arguments: { target_entropy: 0.1, duration_ms: 10000 }
         });
@@ -124,7 +124,7 @@ async function runScenario() {
         // to bypass the `/no_think` reflex.
         let start2 = Date.now();
         let res2 = await sendRequest("tools/call", {
-            name: "clawkit_reason_chain",
+            name: "eidolon_reason_chain",
             arguments: { draft: testDraft, context: testContext, mode: "deep" }
         });
         let time2 = Date.now() - start2;

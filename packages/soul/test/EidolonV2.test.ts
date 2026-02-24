@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeFiModule } from '@clawkit/defi-bnb';
+import { DeFiModule } from '@eidolon/defi-bnb';
 import { ClawOracle } from '../src/sensors/ClawOracle';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
 import { parseEther } from 'viem';
@@ -95,7 +95,7 @@ describe('🦅 EIDOLON-V: The Singularity Upgrade Verification', () => {
 
     describe('👁️ OMNISCIENT ORACLE (Liquidity Probing)', () => {
         it('should detect THIN liquidity when slippage is high', async () => {
-            // Mock ClawKit context
+            // Mock Eidolon context
             const mockKit = {
                 config: {
                     pythConfig: { priceServiceUrl: 'https://hermes.pyth.network' }

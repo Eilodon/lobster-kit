@@ -5,7 +5,7 @@
  * writing files, sending messages, etc.
  *
  * Any module that only needs to *act* should depend on IActuatorHub,
- * not the full IClawKit. This enables safe, testable actuator mocking.
+ * not the full IEidolon. This enables safe, testable actuator mocking.
  */
 
 import { CapabilityAction, ActionResult } from '../types/CapabilityAction';

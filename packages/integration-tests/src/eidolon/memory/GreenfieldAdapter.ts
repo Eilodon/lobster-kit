@@ -1,7 +1,7 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 import { IStorageProvider } from "./IStorageProvider";
-import { AsyncLock } from '@clawkit/core';
+import { AsyncLock } from '@eidolon/core';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';

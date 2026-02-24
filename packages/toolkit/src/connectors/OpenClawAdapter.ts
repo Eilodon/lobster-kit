@@ -1,10 +1,10 @@
-import { EidolonGuard, type ValidationResult } from '@clawkit/soul';
-import { type ActionType, EidolonBus, EidolonEventType } from '@clawkit/core';
+import { EidolonGuard, type ValidationResult } from '@eidolon/soul';
+import { type ActionType, EidolonBus, EidolonEventType } from '@eidolon/core';
 
 /**
  * 🔌 OPENCLAW ADAPTER
  * 
- * Connects ClawKit capabilities to OpenClaw's Skill System.
+ * Connects Eidolon capabilities to OpenClaw's Skill System.
  * Defines the standard interface for "The Hand".
  */
 

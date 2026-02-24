@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ChaosHarness } from '@clawkit/core';
+import { ChaosHarness } from '@eidolon/core';
 
 describe('ChaosHarness skeleton', () => {
     it('should raise CRITICAL alarm on RPC outage', async () => {

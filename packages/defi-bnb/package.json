@@ -1,7 +1,7 @@
 {
-    "name": "@clawkit/defi-bnb",
+    "name": "@eidolon/defi-bnb",
     "version": "1.0.0",
-    "description": "ClawKit DeFi adapter for BNB Chain / opBNB",
+    "description": "Eidolon DeFi adapter for BNB Chain / opBNB",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
@@ -11,8 +11,8 @@
     },
     "license": "MIT",
     "dependencies": {
-        "@clawkit/core": "workspace:*",
-        "@clawkit/toolkit": "workspace:*",
+        "@eidolon/core": "workspace:*",
+        "@eidolon/toolkit": "workspace:*",
         "@pancakeswap/sdk": "^5.7.0",
         "@pancakeswap/smart-router": "^4.7.0",
         "axios": "^1.6.5",

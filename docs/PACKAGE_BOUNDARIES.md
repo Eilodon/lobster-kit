@@ -1,16 +1,16 @@
 # Package Boundaries And Source Of Truth
 
 ## Purpose
-Define strict package ownership so ClawKit can evolve from a DeFi-first product into a universal agent OS without code drift.
+Define strict package ownership so Eidolon can evolve from a DeFi-first product into a universal agent OS without code drift.
 
 ## Current Package Roles
 | Package | Role | Source of Truth |
 | --- | --- | --- |
-| `@clawkit/core` | Domain primitives, interfaces, shared utilities, event bus, metrics | Core contracts and reusable abstractions |
-| `@clawkit/soul` | Agent cognition, emotional model, guard logic, swarm behavior | Brain and soul runtime |
-| `@clawkit/toolkit` | Concrete execution toolkit and external capability wiring | Action body and adapters for domains |
+| `@eidolon/core` | Domain primitives, interfaces, shared utilities, event bus, metrics | Core contracts and reusable abstractions |
+| `@eidolon/soul` | Agent cognition, emotional model, guard logic, swarm behavior | Brain and soul runtime |
+| `@eidolon/toolkit` | Concrete execution toolkit and external capability wiring | Action body and adapters for domains |
 | `packages/mcp-rust` | Public MCP runtime (Rust stdio server) | Universal interface layer |
-| `@clawkit/defi-bnb` | DeFi-specific adapter surface and migration compatibility | Domain adapter (legacy + focused DeFi use) |
+| `@eidolon/defi-bnb` | DeFi-specific adapter surface and migration compatibility | Domain adapter (legacy + focused DeFi use) |
 
 ## Architectural Guardrails
 1. `mcp` must only orchestrate via `toolkit`/`soul` public APIs and never duplicate execution logic.
@@ -33,12 +33,12 @@ Define strict package ownership so ClawKit can evolve from a DeFi-first product 
 - Do not replace these mirrors with package re-export wrappers unless corresponding tests are rewritten away from local path mocking.
 
 ## Phase-1 Status (Adapter Registry)
-- `@clawkit/toolkit` now exposes `DomainAdapterRegistry` for domain-agnostic action routing.
-- `@clawkit/toolkit` stays domain-agnostic and does **not** ship built-in domain adapters.
-- Runtime hosts (`packages/mcp-rust`, apps, workers) must register domain adapters explicitly (for example `@clawkit/defi-bnb` -> `OpBnbDefiAdapter`).
+- `@eidolon/toolkit` now exposes `DomainAdapterRegistry` for domain-agnostic action routing.
+- `@eidolon/toolkit` stays domain-agnostic and does **not** ship built-in domain adapters.
+- Runtime hosts (`packages/mcp-rust`, apps, workers) must register domain adapters explicitly (for example `@eidolon/defi-bnb` -> `OpBnbDefiAdapter`).
 - MCP runtime calls domain actions through adapter contracts instead of hard-coding module internals.
 
 ## Next Refactor Targets
 1. Split DeFi-specific services in `toolkit` into `defi-bnb` adapters behind stable interfaces.
 2. Add adapter registry in `toolkit` so new domains can plug in without changing `mcp`.
-3. Keep `soul` domain-agnostic by passing capabilities through interfaces (`IClawKit` or successor contracts).
+3. Keep `soul` domain-agnostic by passing capabilities through interfaces (`IEidolon` or successor contracts).

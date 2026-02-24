@@ -7,18 +7,18 @@ import { WalletModule } from './wallet';
 import { GasModule } from './gas';
 import { AnalyticsModule } from './analytics';
 
-import { ClawKitConfig, ClawKitWalletClient, OPBNB_CONFIG } from './types';
+import { EidolonConfig, EidolonWalletClient, OPBNB_CONFIG } from './types';
 import { verifyConfigIntegrity } from './utils/ConfigIntegrity';
 import { getPriceService } from './services/PriceService';
 
 /**
- * ClawKit — BNB Chain DeFi Toolkit
+ * Eidolon — BNB Chain DeFi Toolkit
  *
  * This is the adapter facade for DeFi operations on opBNB.
- * For Eidolon soul/AI features, use @clawkit/soul.
+ * For Eidolon soul/AI features, use @eidolon/soul.
  * For MCP runtime, use packages/mcp-rust (via `pnpm mcp`).
  */
-export class ClawKit {
+export class Eidolon {
   public readonly defi: DeFiModule;
   public readonly nft: NFTModule;
   public readonly security: SecurityModule;
@@ -26,11 +26,11 @@ export class ClawKit {
   public readonly gas: GasModule;
   public readonly analytics: AnalyticsModule;
 
-  public readonly walletClient: ClawKitWalletClient;
+  public readonly walletClient: EidolonWalletClient;
   public readonly publicClient: PublicClient;
-  public readonly config: ClawKitConfig;
+  public readonly config: EidolonConfig;
 
-  constructor(walletClient: ClawKitWalletClient, config: ClawKitConfig) {
+  constructor(walletClient: EidolonWalletClient, config: EidolonConfig) {
     this.validateConfig(config);
 
     this.walletClient = walletClient;
@@ -63,8 +63,8 @@ export class ClawKit {
     }
   }
 
-  private validateConfig(config: ClawKitConfig) {
-    verifyConfigIntegrity(config, 'ClawKit');
+  private validateConfig(config: EidolonConfig) {
+    verifyConfigIntegrity(config, 'Eidolon');
 
     if (!config.chainConfig) {
       console.warn("⚠️ ChainConfig missing - Defaulting to opBNB (Standard Mode)");
@@ -114,4 +114,4 @@ export * from './services/PriceService';
 export * from './utils/ApiGateway';
 export * from './adapters/OpBnbDefiAdapter';
 
-export default ClawKit;
+export default Eidolon;

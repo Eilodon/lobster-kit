@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DivineTransparency } from '@clawkit/core';
+import { DivineTransparency } from '@eidolon/core';
 import { IOracle, OracleInsight } from '../src/ai/IOracle';
 import { MarketState, ReasoningWeights, DEFAULT_WEIGHTS } from '../src/eidolon/EidolonTypes';
 

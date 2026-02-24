@@ -1,5 +1,5 @@
 import { WalletClient, PublicClient, formatEther, formatUnits, parseAbi } from 'viem';
-import { ClawKitConfig, PortfolioHealth, Position, ClawKitWalletClient, getTokenDecimals, resolveTokenAddress } from './types';
+import { EidolonConfig, PortfolioHealth, Position, EidolonWalletClient, getTokenDecimals, resolveTokenAddress } from './types';
 import axios from 'axios';
 import { getGateway } from './utils/ApiGateway';
 import { ERC20_BALANCE_OF_ABI } from './abi/erc20';
@@ -13,13 +13,13 @@ export class AnalyticsModule {
   // FIXED: Add price caching to prevent rate limiting
   private priceCache: { [key: string]: { value: number; timestamp: number } } = {};
   private readonly CACHE_DURATION = 60000; // 1 minute cache
-  private static readonly HISTORY_FILE = path.resolve(process.cwd(), '.clawkit', 'portfolio_history.json');
+  private static readonly HISTORY_FILE = path.resolve(process.cwd(), '.eidolon', 'portfolio_history.json');
   private static readonly MAX_HISTORY_ENTRIES = 365;
 
   constructor(
-    private walletClient: ClawKitWalletClient,
+    private walletClient: EidolonWalletClient,
     private publicClient: PublicClient,
-    private config: ClawKitConfig
+    private config: EidolonConfig
   ) { }
 
   /**

@@ -1,8 +1,8 @@
 {
-  "name": "@clawkit/monorepo",
+  "name": "@eidolon/monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "ClawKit Monorepo — BNB Chain toolkit for AI agents",
+  "description": "Eidolon Monorepo — BNB Chain toolkit for AI agents",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -35,7 +35,7 @@
     "mcp:rollback:drill": "node scripts/mcp-rollback-drill.mjs",
     "mcp:phase-f:metrics": "node scripts/mcp-phase-f-metrics.mjs",
     "mcp:phase-gate": "node scripts/runtime-phase-gate.mjs",
-    "docker:build": "docker build -f crates/mcp-server/Dockerfile -t clawkit/mcp-server .",
+    "docker:build": "docker build -f crates/mcp-server/Dockerfile -t eidolon/mcp-server .",
     "sync:integration-mirrors": "node scripts/sync-integration-mirrors.mjs",
     "sync:integration-mirrors:check": "node scripts/sync-integration-mirrors.mjs --check",
     "clean": "turbo run clean && rm -rf node_modules"
@@ -51,7 +51,7 @@
     "pancakeswap",
     "venus"
   ],
-  "author": "ClawKit Team",
+  "author": "Eidolon Team",
   "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.990.0",
@@ -69,9 +69,9 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@clawkit/core": "workspace:^",
-    "@clawkit/soul": "workspace:^",
-    "@clawkit/toolkit": "workspace:^",
+    "@eidolon/core": "workspace:^",
+    "@eidolon/soul": "workspace:^",
+    "@eidolon/toolkit": "workspace:^",
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@openzeppelin/contracts": "^5.0.1",
     "@types/minimatch": "^6.0.0",
@@ -88,12 +88,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/clawkit/bnb"
+    "url": "https://github.com/eidolon/bnb"
   },
   "bugs": {
-    "url": "https://github.com/clawkit/bnb/issues"
+    "url": "https://github.com/eidolon/bnb/issues"
   },
-  "homepage": "https://clawkit-bnb.dev",
+  "homepage": "https://eidolon-bnb.dev",
   "engines": {
     "node": ">=20.0.0"
   },

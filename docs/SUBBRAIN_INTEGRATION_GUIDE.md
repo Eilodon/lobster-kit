@@ -18,20 +18,20 @@
                        ↓
 ┌─────────────────────────────────────────────────────────────┐
 │              Cascade LLM (Windsurf)                         │
-│  Gọi: clawkit_subbrain_auto({input: "..."})                 │
+│  Gọi: eidolon_subbrain_auto({input: "..."})                 │
 └──────────────────────┬──────────────────────────────────────┘
                        ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              MCP Server: clawkit_subbrain_auto              │
+│              MCP Server: eidolon_subbrain_auto              │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │ Layer 1: Intent Classification                        │ │
-│  │   - clawkit_sense_intent                              │ │
+│  │   - eidolon_sense_intent                              │ │
 │  │   - Rule-based intent matching                        │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                         ↓                                   │
 │  ┌─────────────────────────────────────────────────────────┐ │
 │  │ Layer 2: Tool Recommendation                            │ │
-│  │   - clawkit_tool_recommend                            │ │
+│  │   - eidolon_tool_recommend                            │ │
 │  │   - Embedding-based ranking                           │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                         ↓                                   │
@@ -73,7 +73,7 @@
 | File | Mô tả |
 |------|-------|
 | `crates/mcp-server/src/subbrain_auto.rs` | Core Sub-Brain implementation |
-| `crates/mcp-server/src/dispatch.rs` | Register `clawkit_subbrain_auto` handler |
+| `crates/mcp-server/src/dispatch.rs` | Register `eidolon_subbrain_auto` handler |
 | `crates/mcp-server/src/main.rs` | Add module + tool catalog |
 
 ### TypeScript (Client)
@@ -88,7 +88,7 @@
 ### 1. Trong Cascade Agent (Recommended)
 
 ```typescript
-import { SubBrainOrchestratorClient, withSubBrainAnalysis } from '@clawkit/core';
+import { SubBrainOrchestratorClient, withSubBrainAnalysis } from '@eidolon/core';
 
 // Option A: Direct usage
 const subbrain = new SubBrainOrchestratorClient();
@@ -104,7 +104,7 @@ if (!('error' in analysis) && analysis.ready_for_llm_analysis) {
   // analysis.subbrain_analysis chứa:
   // - intent_classification: {category, confidence, entities, sentiment}
   // - tool_recommendations: [{tool, relevance_score}]
-  // - executed_tools: ['clawkit_check_pattern', 'clawkit_reason_chain']
+  // - executed_tools: ['eidolon_check_pattern', 'eidolon_reason_chain']
   // - tool_results: [...]
   // - enriched_context: {user_intent, tools_data, llm_guidance}
   // - suggested_approach: "Audit results ready..."
@@ -144,7 +144,7 @@ const intent = await subbrain.classifyIntent("fix bug in WasmAdapter");
 // {
 //   intent: "DebugIssue",
 //   confidence: 0.85,
-//   suggestedTools: ["clawkit_recall_similar", "clawkit_memory_query"]
+//   suggestedTools: ["eidolon_recall_similar", "eidolon_memory_query"]
 // }
 ```
 
@@ -157,7 +157,7 @@ echo '{
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "clawkit_subbrain_auto",
+    "name": "eidolon_subbrain_auto",
     "arguments": {
       "input": "audit project code",
       "user_id": "user123",
@@ -191,7 +191,7 @@ echo '{
 ## Testing
 
 ```typescript
-import { runSubBrainTests } from '@clawkit/core';
+import { runSubBrainTests } from '@eidolon/core';
 
 const results = await runSubBrainTests();
 console.log(`Passed: ${results.passed}/${results.passed + results.failed}`);
@@ -232,7 +232,7 @@ echo '{
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "clawkit_subbrain_auto",
+    "name": "eidolon_subbrain_auto",
     "arguments": {"input": "audit project", "auto_execute": false}
   }
 }' | ./target/release/mcp-server
@@ -258,7 +258,7 @@ echo '{
 
 ## Next Steps
 
-1. ✅ Implement `clawkit_subbrain_auto` (Rust)
+1. ✅ Implement `eidolon_subbrain_auto` (Rust)
 2. ✅ Create TypeScript client
 3. ⏳ **Build & test MCP server**
 4. ⏳ **Update Cascade system prompt** để auto-gọi Sub-Brain

@@ -5,7 +5,7 @@
  * key-value store, episodic memory, etc.
  *
  * Any module that needs to *remember* or *recall* state should depend
- * on IMemoryHub, not the full IClawKit.
+ * on IMemoryHub, not the full IEidolon.
  */
 
 export interface IMemoryHub {

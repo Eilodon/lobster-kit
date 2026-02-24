@@ -117,8 +117,8 @@ async function runTest1_Memory_Efficiency() {
     const baseRes = await fetchBaselineLLM(thickContext);
 
     // MCP: Context is compressed locally, sent via vector ID
-    console.log("Running ClawKit MCP...");
-    const mcpRes = await callMCP('clawkit_compress_context', { target_tokens: 50 });
+    console.log("Running Eidolon MCP...");
+    const mcpRes = await callMCP('eidolon_compress_context', { target_tokens: 50 });
 
     results.push({
         Test: 'Memory & Context Efficiency',
@@ -139,8 +139,8 @@ async function runTest2_Safety_Inhibition() {
     const baseRes = await fetchBaselineLLM(maliciousPrompt, sysPrompt);
 
     // MCP: Use TraumaRegistry Hash O(1)
-    console.log("Running ClawKit MCP TraumaRegistry...");
-    const mcpRes = await callMCP('clawkit_check_pattern', { pattern: maliciousPrompt });
+    console.log("Running Eidolon MCP TraumaRegistry...");
+    const mcpRes = await callMCP('eidolon_check_pattern', { pattern: maliciousPrompt });
 
     results.push({
         Test: 'Inhibition (Guardrail)',
@@ -160,8 +160,8 @@ async function runTest3_Cognitive_Causal() {
     const baseRes = await fetchBaselineLLM(causalPrompt);
 
     // MCP: Direct Math node
-    console.log("Running ClawKit MCP Causal Graph...");
-    const mcpRes = await callMCP('clawkit_simulate_response', { action: "increase_fee" });
+    console.log("Running Eidolon MCP Causal Graph...");
+    const mcpRes = await callMCP('eidolon_simulate_response', { action: "increase_fee" });
 
     results.push({
         Test: 'Causal Inference',
@@ -181,8 +181,8 @@ async function runTest4_Zero_Hallucination() {
     const baseRes = await fetchBaselineLLM(amnesiaPrompt);
 
     // MCP: Vector Episodic Memory + Thermo State
-    console.log("Running ClawKit MCP Liquid Brain...");
-    const mcpRes = await callMCP('clawkit_memory_query', { query: "Risk Tolerance State" });
+    console.log("Running Eidolon MCP Liquid Brain...");
+    const mcpRes = await callMCP('eidolon_memory_query', { query: "Risk Tolerance State" });
 
     results.push({
         Test: 'Zero Hallucination (Memory)',

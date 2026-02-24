@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SecurityModule } from '../src/security';
-import { ClawKitConfig, OPBNB_CONFIG, CLAWKIT_CONTRACTS } from '../src/types';
+import { EidolonConfig, OPBNB_CONFIG, EIDOLON_CONTRACTS } from '../src/types';
 import { parseAbi, encodeFunctionData } from 'viem';
 import { computeConfigHash } from '../src/utils/ConfigIntegrity';
 
@@ -21,7 +21,7 @@ describe('SecurityModule', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        const config: ClawKitConfig = {
+        const config: EidolonConfig = {
             chainConfig: OPBNB_CONFIG,
             rpcUrl: 'https://opbnb.rpc.url'
         };
@@ -55,11 +55,11 @@ describe('SecurityModule', () => {
     });
 
     it('should fail fast on config checksum mismatch when strict integrity is enabled', () => {
-        const baseConfig: ClawKitConfig = {
+        const baseConfig: EidolonConfig = {
             chainConfig: OPBNB_CONFIG,
             rpcUrl: 'https://opbnb.rpc.url',
         };
-        const tamperedConfig: ClawKitConfig = {
+        const tamperedConfig: EidolonConfig = {
             ...baseConfig,
             configIntegrity: {
                 expectedHash: 'deadbeef',
@@ -71,7 +71,7 @@ describe('SecurityModule', () => {
     });
 
     it('should allow boot when config checksum matches', () => {
-        const baseConfig: ClawKitConfig = {
+        const baseConfig: EidolonConfig = {
             chainConfig: OPBNB_CONFIG,
             rpcUrl: 'https://opbnb.rpc.url',
             configIntegrity: {

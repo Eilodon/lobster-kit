@@ -1,6 +1,6 @@
 # 🔌 EIDOLON-V MCP SERVER
 
-This module exposes **ClawKit-BNB** as a Model Context Protocol (MCP) server, allowing AI agents (like Antigravity, Claude, or Cursor) to directly interact with the DeFi, Security, and Oracle modules.
+This module exposes **Eidolon-BNB** as a Model Context Protocol (MCP) server, allowing AI agents (like Antigravity, Claude, or Cursor) to directly interact with the DeFi, Security, and Oracle modules.
 
 ## 🚀 Quick Start
 
@@ -29,10 +29,10 @@ Add this to your `mcp-config.json` (or equivalent settings):
 ```json
 {
   "mcpServers": {
-    "clawkit-eidolon": {
+    "eidolon-eidolon": {
       "command": "pnpm",
       "args": ["mcp"],
-      "cwd": "/absolute/path/to/clawkit-bnb",
+      "cwd": "/absolute/path/to/eidolon-bnb",
       "env": {
         "PRIVATE_KEY": "YOUR_PRIVATE_KEY_HERE" 
       }
@@ -49,7 +49,7 @@ Add this to your `mcp-config.json` (or equivalent settings):
 | `eidolon_oracle_sense` | **Omniscient Oracle:** Get real-time price, gas, and liquidity depth (THIN/DEEP). |
 | `eidolon_defi_quote` | **Hyper-Routing:** Get the best swap quote across all V3 fee tiers. |
 | `eidolon_security_scan` | **Anti-Rug:** Scan a contract for honeypots, ownership issues, and risks. |
-| `...` | Legacy `eidolon_*` and Cognitive `clawkit_*` run in dual-stack mode. |
+| `...` | Legacy `eidolon_*` and Cognitive `eidolon_*` run in dual-stack mode. |
 
 ## 📦 Resources
 
@@ -81,8 +81,8 @@ Runtime contract freeze artifacts: `docs/runtime-migration/contracts/runtime-v1/
 
 ## 🧠 System Architecture
 
-The MCP server wraps the core `ClawKit` instance:
+The MCP server wraps the core `Eidolon` instance:
 1.  **Antigravity** sends a JSON-RPC request (e.g., `call_tool`).
-2.  **MCP Server** translates this to a `ClawKit` method call (e.g., `kit.defi.getRealQuote`).
-3.  **ClawKit** queries the blockchain (opBNB) via `viem`.
+2.  **MCP Server** translates this to a `Eidolon` method call (e.g., `kit.defi.getRealQuote`).
+3.  **Eidolon** queries the blockchain (opBNB) via `viem`.
 4.  **Result** is returned as a structured text response.

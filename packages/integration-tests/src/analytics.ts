@@ -1,4 +1,4 @@
-import { AnalyticsModule as BaseAnalyticsModule } from '@clawkit/defi-bnb';
+import { AnalyticsModule as BaseAnalyticsModule } from '@eidolon/defi-bnb';
 
 type PriceMap = Record<string, number>;
 

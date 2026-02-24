@@ -20,7 +20,7 @@ const mirrorRules = [
     transform: (content) =>
       content.replace(
         "import { PythConfig } from '../config/PythConfig';",
-        "import type { PythConfig } from '@clawkit/soul';"
+        "import type { PythConfig } from '@eidolon/soul';"
       )
   },
   {
@@ -29,10 +29,10 @@ const mirrorRules = [
     transform: (content) =>
       content.replace(
         "import { IStorageProvider } from './IStorageProvider';",
-        "import type { IStorageProvider } from '@clawkit/core';"
+        "import type { IStorageProvider } from '@eidolon/core';"
       ).replace(
         "import { AsyncLock } from \"../utils/AsyncLock\";",
-        "import { AsyncLock } from '@clawkit/core';"
+        "import { AsyncLock } from '@eidolon/core';"
       )
   },
   {
@@ -41,7 +41,7 @@ const mirrorRules = [
     transform: (content) =>
       content.replace(
         "import { IStorageProvider } from './IStorageProvider';",
-        "import type { IStorageProvider } from '@clawkit/core';"
+        "import type { IStorageProvider } from '@eidolon/core';"
       )
   },
   {
@@ -50,10 +50,10 @@ const mirrorRules = [
     transform: (content) =>
       content.replace(
         "import { IStorageProvider } from './IStorageProvider';",
-        "import type { IStorageProvider } from '@clawkit/core';"
+        "import type { IStorageProvider } from '@eidolon/core';"
       ).replace(
         "import { AsyncLock } from '../utils/AsyncLock';",
-        "import { AsyncLock } from '@clawkit/core';"
+        "import { AsyncLock } from '@eidolon/core';"
       )
   },
   { from: 'packages/defi-bnb/src/utils/ApiGateway.ts', to: 'packages/integration-tests/src/utils/ApiGateway.ts' },

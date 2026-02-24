@@ -64,9 +64,9 @@ function getLineNumber(text, index) {
 function findWorkspaceImports(sourceText) {
   const results = [];
   const patterns = [
-    /\bfrom\s+["'](@clawkit\/[a-z0-9-]+)(?:\/[^"']*)?["']/g,
-    /\bimport\s+["'](@clawkit\/[a-z0-9-]+)(?:\/[^"']*)?["']/g,
-    /\brequire\(\s*["'](@clawkit\/[a-z0-9-]+)(?:\/[^"']*)?["']\s*\)/g,
+    /\bfrom\s+["'](@eidolon\/[a-z0-9-]+)(?:\/[^"']*)?["']/g,
+    /\bimport\s+["'](@eidolon\/[a-z0-9-]+)(?:\/[^"']*)?["']/g,
+    /\brequire\(\s*["'](@eidolon\/[a-z0-9-]+)(?:\/[^"']*)?["']\s*\)/g,
   ];
 
   for (const pattern of patterns) {

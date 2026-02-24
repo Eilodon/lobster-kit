@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeFiModule } from '@clawkit/defi-bnb';
-import { ClawKitConfig, OPBNB_CONFIG, resolveTokenAddress } from '@clawkit/defi-bnb';
+import { DeFiModule } from '@eidolon/defi-bnb';
+import { EidolonConfig, OPBNB_CONFIG, resolveTokenAddress } from '@eidolon/defi-bnb';
 
 describe('DeFiModule', () => {
     let defi: DeFiModule;
@@ -25,7 +25,7 @@ describe('DeFiModule', () => {
             waitForTransactionReceipt: vi.fn().mockResolvedValue({}),
         };
 
-        const config: ClawKitConfig = {
+        const config: EidolonConfig = {
             chainConfig: OPBNB_CONFIG,
             privacyMode: 'strict',
             fallbackBNBPrice: 600
@@ -81,7 +81,7 @@ describe('DeFiModule', () => {
             mockPublic.readContract.mockResolvedValueOnce(0n); // allowance
             mockPublic.estimateGas.mockResolvedValue(1n);
             mockPublic.getGasPrice.mockResolvedValue(1n);
-            const config: ClawKitConfig = {
+            const config: EidolonConfig = {
                 chainConfig: OPBNB_CONFIG,
                 approvalMode: 'EXACT',
                 privacyMode: 'strict',

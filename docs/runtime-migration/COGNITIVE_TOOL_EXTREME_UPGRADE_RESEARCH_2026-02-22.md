@@ -3,7 +3,7 @@
 ## 1) Scope and Method
 
 Evaluation scope:
-- All current cognitive tools exposed by MCP runtime (`clawkit_*`).
+- All current cognitive tools exposed by MCP runtime (`eidolon_*`).
 - Real runtime invocation via `tools/call` against `packages/mcp-rust/target/release/mcp-rust`.
 - Multi-scenario evaluation: compatibility fields, guardrail flow, retrieval/compression/reasoning/orchestration/governance.
 
@@ -33,22 +33,22 @@ pnpm mcp:cognitive:eval
 
 | Tool | Current Utility | Potential Ceiling | Current Constraint |
 |---|---|---|---|
-| `clawkit_sense_intent` | Medium-Low | Very High | In test, safe and malicious prompts both returned same mode/confidence (flat behavior when no strong backend signal). |
-| `clawkit_route_action` | Medium | Very High | `AUTO` effectively unreachable in observed runtime due confidence composition saturation. |
-| `clawkit_recall_user` | Medium | High | Works in-session, but cross-session persistence behavior is inconsistent in real process restarts. |
-| `clawkit_update_user` | Medium | High | Returns success and works in-session; persistence semantics need hard verification/fix. |
-| `clawkit_check_pattern` | High | High | Guardrail state transitions worked as expected after negative outcome injection. |
-| `clawkit_simulate_response` | Medium-High | High | Useful for inhibition-aware revise/no-revise gate; still rule-based. |
-| `clawkit_record_outcome` | High | Very High | Strong leverage point for learning loop and safety memory updates. |
-| `clawkit_commit_pattern` | Medium | High | Useful for memory seeding; semantics still shallow. |
-| `clawkit_memory_query` | High | Very High | Route + fallback are useful; causal route often low-informative due weak causal edge weights. |
-| `clawkit_recall_similar` | Medium | High | Retrieval works, but embedding quality currently heuristic-limited. |
-| `clawkit_compress_context` | High | Very High | Effective token reduction + dedupe + focus-term retention observed. |
-| `clawkit_reason_chain` | High | Very High | Policy and pipeline metadata are good; scoring depends on fallback heuristics when LLM backend weak/unavailable. |
-| `clawkit_orchestrate` | Medium-High | Very High | Mode policy works; consensus output currently synthetic/single-metric. |
-| `clawkit_tool_recommend` | High | Very High | v1/v2 + shadow A/B are operational; quality bottleneck is tracker feature richness and feedback quality. |
-| `clawkit_dream_conversation` | Medium | High | Pruning and relaxation run, but consolidation semantics are primitive. |
-| `clawkit_generated_tool_decision` | High (governance) | Very High | Env gating and threshold checks good; promotion blocked without telemetry (correct, but operationally heavy). |
+| `eidolon_sense_intent` | Medium-Low | Very High | In test, safe and malicious prompts both returned same mode/confidence (flat behavior when no strong backend signal). |
+| `eidolon_route_action` | Medium | Very High | `AUTO` effectively unreachable in observed runtime due confidence composition saturation. |
+| `eidolon_recall_user` | Medium | High | Works in-session, but cross-session persistence behavior is inconsistent in real process restarts. |
+| `eidolon_update_user` | Medium | High | Returns success and works in-session; persistence semantics need hard verification/fix. |
+| `eidolon_check_pattern` | High | High | Guardrail state transitions worked as expected after negative outcome injection. |
+| `eidolon_simulate_response` | Medium-High | High | Useful for inhibition-aware revise/no-revise gate; still rule-based. |
+| `eidolon_record_outcome` | High | Very High | Strong leverage point for learning loop and safety memory updates. |
+| `eidolon_commit_pattern` | Medium | High | Useful for memory seeding; semantics still shallow. |
+| `eidolon_memory_query` | High | Very High | Route + fallback are useful; causal route often low-informative due weak causal edge weights. |
+| `eidolon_recall_similar` | Medium | High | Retrieval works, but embedding quality currently heuristic-limited. |
+| `eidolon_compress_context` | High | Very High | Effective token reduction + dedupe + focus-term retention observed. |
+| `eidolon_reason_chain` | High | Very High | Policy and pipeline metadata are good; scoring depends on fallback heuristics when LLM backend weak/unavailable. |
+| `eidolon_orchestrate` | Medium-High | Very High | Mode policy works; consensus output currently synthetic/single-metric. |
+| `eidolon_tool_recommend` | High | Very High | v1/v2 + shadow A/B are operational; quality bottleneck is tracker feature richness and feedback quality. |
+| `eidolon_dream_conversation` | Medium | High | Pruning and relaxation run, but consolidation semantics are primitive. |
+| `eidolon_generated_tool_decision` | High (governance) | Very High | Env gating and threshold checks good; promotion blocked without telemetry (correct, but operationally heavy). |
 
 ## 4) Empirical Findings That Matter
 
@@ -179,7 +179,7 @@ The fastest path to a decisive leap is:
 Implemented and verified:
 
 1. Route-action autonomy ceiling fixed
-- `clawkit_route_action` recalibrated to make `AUTO` reachable only when confidence and policy history are both strong.
+- `eidolon_route_action` recalibrated to make `AUTO` reachable only when confidence and policy history are both strong.
 - Empirical result from latest eval report:
   - high signal case: `strategy=AUTO`, `confidence=0.8858`
   - low signal case: `strategy=ASK_USER`, `confidence=0.4558`
@@ -188,7 +188,7 @@ Implemented and verified:
   - `test_route_action_low_confidence_does_not_auto`
 
 2. Cross-session user persistence hardened
-- User storage path now resolves to a writable location with fallback (`CLAWKIT_USERS_PATH` -> writable HOME path -> workspace `data/memory` -> `/tmp`).
+- User storage path now resolves to a writable location with fallback (`EIDOLON_USERS_PATH` -> writable HOME path -> workspace `data/memory` -> `/tmp`).
 - Atomic persistence path strengthened (temp file + `sync_all` + atomic rename fallback).
 - Restart persistence regression test added:
   - `test_update_user_persists_across_server_restarts`
@@ -224,7 +224,7 @@ Artifacts (latest run):
 Implemented in `packages/mcp-rust/src/main.rs` and validated end-to-end.
 
 1. Intent stack v2 shipped
-- `clawkit_sense_intent` now uses ensemble scoring:
+- `eidolon_sense_intent` now uses ensemble scoring:
   - model signal (ONNX when available, Ollama fallback),
   - lexical risk cues,
   - historical risk prior from memory,
@@ -238,14 +238,14 @@ Implemented in `packages/mcp-rust/src/main.rs` and validated end-to-end.
 2. Memory retrieval v2 shipped
 - Semantic/similar retrieval now uses true embedding path when ONNX is available:
   - `embed_text_with_fallback` -> `onnx_minilm` or `pseudo_embed`.
-- `clawkit_recall_similar` and semantic route in `clawkit_memory_query` now expose embedding backend metadata.
+- `eidolon_recall_similar` and semantic route in `eidolon_memory_query` now expose embedding backend metadata.
 - Added route quality scorer for auto-routing:
   - `route_quality_scores.{episodic,semantic,causal}`,
   - `route_selected_quality`,
   - causal-intent override when causal route has evidence.
 
 3. Reasoning quality gates shipped
-- `clawkit_reason_chain` now builds an evidence pool (context + retrieved memory).
+- `eidolon_reason_chain` now builds an evidence pool (context + retrieved memory).
 - Added groundedness verifier tied to evidence coverage:
   - `pipeline.verifier.groundedness_coverage`,
   - `pipeline.verifier.groundedness_threshold`,
@@ -259,7 +259,7 @@ Implemented in `packages/mcp-rust/src/main.rs` and validated end-to-end.
   - success/fallback/latency/satisfaction,
   - correction-rate penalty,
   - disagreement-rate + regret penalties from shadow audit.
-- `clawkit_tool_recommend` now logs online regret estimate in shadow audit metadata and returns:
+- `eidolon_tool_recommend` now logs online regret estimate in shadow audit metadata and returns:
   - `recommender.shadow_regret_estimate`,
   - `recommender.primary_tool_correction_rate`.
 
@@ -289,7 +289,7 @@ Implemented in `packages/mcp-rust/src/main.rs` and validated end-to-end.
 Implemented in `packages/mcp-rust/src/main.rs` and validated with extended evaluator.
 
 1. Multi-agent orchestration with role specialization
-- `clawkit_orchestrate` upgraded from entropy-only consensus to role-specialized orchestration:
+- `eidolon_orchestrate` upgraded from entropy-only consensus to role-specialized orchestration:
   - roles: planner/retriever/critic/verifier (+ dynamic specialist roles),
   - role-level outputs (`score`, `uncertainty`, `recommendation`),
   - arbitration decision with confidence and vote breakdown,
@@ -300,7 +300,7 @@ Implemented in `packages/mcp-rust/src/main.rs` and validated with extended evalu
   - `budget_allocation`.
 
 2. Counterfactual safety simulator
-- `clawkit_simulate_response` now returns scenario tree:
+- `eidolon_simulate_response` now returns scenario tree:
   - `best/base/worst` with probability and expected loss.
 - Added risk statistics:
   - `counterfactual.expected_loss`,
@@ -310,15 +310,15 @@ Implemented in `packages/mcp-rust/src/main.rs` and validated with extended evalu
   - `predicted_outcome`, `confidence`, `should_revise`, `reason`.
 
 3. Long-horizon learning loop foundation
-- `clawkit_record_outcome` now writes route-policy feedback memory entries:
+- `eidolon_record_outcome` now writes route-policy feedback memory entries:
   - `category=route_feedback`,
   - includes `route=<episodic|semantic|causal>`, pattern, severity.
-- `clawkit_memory_query` auto router now consumes historical route feedback bias:
+- `eidolon_memory_query` auto router now consumes historical route feedback bias:
   - `route_feedback_bias` returned in response,
   - bias contributes to route scoring in addition to quality signals.
 
 4. Tool governance autopilot foundation
-- Added autopilot guardrails for promote decisions in `clawkit_generated_tool_decision`:
+- Added autopilot guardrails for promote decisions in `eidolon_generated_tool_decision`:
   - error/fallback/p95/p99:p50/sample-count checks.
 - If promotion thresholds pass but guardrails fail:
   - decision -> `status=quarantined`,

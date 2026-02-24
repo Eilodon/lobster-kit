@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EidolonGuard } from '../src/eidolon/EidolonGuard';
 import { WasmAdapter as SoulWasmAdapter } from '../src/WasmAdapter';
-import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
+import { WasmAdapter as CoreWasmAdapter } from '@eidolon/core';
 
 function stableBucket(seed: string): number {
     let hash = 2166136261 >>> 0;

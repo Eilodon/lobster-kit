@@ -1,1 +1,1 @@
-export { TokenAmount } from '@clawkit/toolkit';
+export { TokenAmount } from '@eidolon/toolkit';

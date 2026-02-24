@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { PythAdapter } from '../oracles/PythAdapter';
-import { IClawKit } from '@clawkit/core';
+import { IEidolon } from '@eidolon/core';
 
 import { formatUnits } from 'viem';
 
@@ -12,7 +12,7 @@ export interface PriceSource {
 
 export class PriceAggregator {
     constructor(
-        private kit: IClawKit,
+        private kit: IEidolon,
         private pyth: PythAdapter
     ) { }
 

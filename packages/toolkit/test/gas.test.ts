@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GasModule } from '../src/gas';
-import { ClawKitConfig, OPBNB_CONFIG, CLAWKIT_CONTRACTS } from '../src/types';
+import { EidolonConfig, OPBNB_CONFIG, EIDOLON_CONTRACTS } from '../src/types';
 import { parseAbi, encodeFunctionData } from 'viem';
 
 // Mock assertDeployed to avoid "not deployed" error
@@ -29,7 +29,7 @@ describe('GasModule', () => {
             waitForTransactionReceipt: vi.fn().mockResolvedValue({}) // Add waitForTransactionReceipt mock
         };
 
-        const config: ClawKitConfig = {
+        const config: EidolonConfig = {
             chainConfig: {
                 ...OPBNB_CONFIG,
                 contracts: {
@@ -105,7 +105,7 @@ describe('GasModule', () => {
     });
 
     it('should block external price feeds in strict privacy mode without oracle/cache', async () => {
-        const strictConfig: ClawKitConfig = {
+        const strictConfig: EidolonConfig = {
             chainConfig: OPBNB_CONFIG,
             rpcUrl: 'https://opbnb.rpc.url',
             privacyMode: 'strict'

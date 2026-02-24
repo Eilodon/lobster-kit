@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DeFiModule } from '../packages/defi-bnb/src/defi';
 import { GasModule } from '../packages/defi-bnb/src/gas';
-import { ClawKitConfig, ChainConfig, ClawKitWalletClient } from '../packages/defi-bnb/src/types';
+import { EidolonConfig, ChainConfig, EidolonWalletClient } from '../packages/defi-bnb/src/types';
 import { PublicClient, parseEther, formatUnits } from 'viem';
 
 // Mocks
@@ -17,9 +17,9 @@ const mockWalletClient = {
     account: { address: '0xUser' },
     sendTransaction: vi.fn(),
     getAddresses: vi.fn().mockResolvedValue(['0xUser']),
-} as unknown as ClawKitWalletClient;
+} as unknown as EidolonWalletClient;
 
-const mockConfig: ClawKitConfig = {
+const mockConfig: EidolonConfig = {
     rpcUrl: 'https://mock-rpc.com',
     privateKey: '0xPrivate',
     contracts: {
@@ -34,7 +34,7 @@ const mockConfig: ClawKitConfig = {
             USDT: { address: '0xUSDT', decimals: 18, symbol: 'USDT' }, // Using 18 for test simplicity
         }
     } as unknown as ChainConfig
-} as unknown as ClawKitConfig;
+} as unknown as EidolonConfig;
 
 describe('Biological Enhancements (Therapies)', () => {
 

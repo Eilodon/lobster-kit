@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { IOracle, MarketContext, OracleGenerationOptions, OracleInsight } from './IOracle';
 import { DEFAULT_WEIGHTS, ReasoningWeights } from '../eidolon/EidolonTypes';
-import { withRetry } from '@clawkit/core';
-import type { CriticResult, WorldState } from '@clawkit/core';
+import { withRetry } from '@eidolon/core';
+import type { CriticResult, WorldState } from '@eidolon/core';
 import { extractFirstJsonPayload } from '../utils/jsonExtraction';
 
 const BoundedNumber = z.number().finite().min(-50).max(50);

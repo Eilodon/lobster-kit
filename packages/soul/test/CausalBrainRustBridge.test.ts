@@ -74,8 +74,8 @@ const mockGraph = {
     })
 };
 
-import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
-import { CausalBrain } from '@clawkit/core';
+import { WasmAdapter as CoreWasmAdapter } from '@eidolon/core';
+import { CausalBrain } from '@eidolon/core';
 
 describe('CausalBrain Rust Bridge', () => {
     const originalCausalRust = process.env.EIDOLON_CAUSAL_RUST;

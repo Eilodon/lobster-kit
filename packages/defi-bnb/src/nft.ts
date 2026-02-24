@@ -1,11 +1,11 @@
 import { WalletClient, PublicClient, encodeFunctionData, parseAbi } from 'viem';
-import { ClawKitConfig, NFTMintParams, CLAWKIT_CONTRACTS, assertDeployed, ClawKitWalletClient, toAddress } from './types';
+import { EidolonConfig, NFTMintParams, EIDOLON_CONTRACTS, assertDeployed, EidolonWalletClient, toAddress } from './types';
 
 export class NFTModule {
   constructor(
-    private walletClient: ClawKitWalletClient,
+    private walletClient: EidolonWalletClient,
     private publicClient: PublicClient,
-    private config: ClawKitConfig
+    private config: EidolonConfig
   ) { }
 
   /**
@@ -35,7 +35,7 @@ export class NFTModule {
 
     // Send transaction
     const hash = await this.walletClient.sendTransaction({
-      to: toAddress(CLAWKIT_CONTRACTS.DynamicBadge),
+      to: toAddress(EIDOLON_CONTRACTS.DynamicBadge),
       data
     });
 
@@ -108,7 +108,7 @@ export class NFTModule {
     });
 
     const hash = await this.walletClient.sendTransaction({
-      to: toAddress(CLAWKIT_CONTRACTS.DynamicBadge),
+      to: toAddress(EIDOLON_CONTRACTS.DynamicBadge),
       data
     });
 
@@ -149,7 +149,7 @@ export class NFTModule {
    */
   async getMetadata(tokenId: string): Promise<any> {
     const metadata = await this.publicClient.readContract({
-      address: toAddress(CLAWKIT_CONTRACTS.DynamicBadge),
+      address: toAddress(EIDOLON_CONTRACTS.DynamicBadge),
       abi: DYNAMIC_BADGE_ABI,
       functionName: 'tokenURI',
       args: [BigInt(tokenId)]
@@ -196,7 +196,7 @@ export class NFTModule {
       description,
       attributes: [
         { trait_type: 'Tier', value: tier },
-        { trait_type: 'Minted By', value: 'ClawKit' },
+        { trait_type: 'Minted By', value: 'Eidolon' },
         { trait_type: 'Chain', value: 'opBNB' },
         ...Object.entries(customMetadata).map(([key, value]) => ({
           trait_type: key,
@@ -229,7 +229,7 @@ export class NFTModule {
           ${tier}
         </text>
         <text x="100" y="135" font-size="14" text-anchor="middle" fill="white">
-          ClawKit Badge
+          Eidolon Badge
         </text>
       </svg>
     `;
@@ -240,7 +240,7 @@ export class NFTModule {
   private async getNextTokenId(): Promise<bigint> {
     try {
       const totalSupply = await this.publicClient.readContract({
-        address: toAddress(CLAWKIT_CONTRACTS.DynamicBadge),
+        address: toAddress(EIDOLON_CONTRACTS.DynamicBadge),
         abi: DYNAMIC_BADGE_ABI,
         functionName: 'totalSupply',
         args: []

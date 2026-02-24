@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
-import { EidolonBus, EidolonEventType } from '@clawkit/core';
+import { EidolonBus, EidolonEventType } from '@eidolon/core';
 
 describe('EmotionalCore: Dispose', () => {
     let core: EmotionalCore;

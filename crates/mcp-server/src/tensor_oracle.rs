@@ -47,8 +47,8 @@ impl TensorOracle {
             Ok::<_, Box<dyn std::error::Error + Send + Sync>>((model_path, tokenizer_path))
         }).await??;
 
-        eprintln!("[ClawKit TensorOracle] Loaded GGUF weights: {:?}", model_path);
-        eprintln!("[ClawKit TensorOracle] Loaded Tokenizer: {:?}", tokenizer_path);
+        eprintln!("[Eidolon TensorOracle] Loaded GGUF weights: {:?}", model_path);
+        eprintln!("[Eidolon TensorOracle] Loaded Tokenizer: {:?}", tokenizer_path);
 
         let mut file = std::fs::File::open(&model_path)?;
         let ggml = ggml_file::Content::read(&mut file, &self.device)?;
@@ -58,7 +58,7 @@ impl TensorOracle {
             total_params += elem_count;
         }
         
-        eprintln!("[ClawKit TensorOracle] Model total parameters approx: {} M", total_params / 1_000_000);
+        eprintln!("[Eidolon TensorOracle] Model total parameters approx: {} M", total_params / 1_000_000);
 
         let model = ModelWeights::from_ggml(ggml, 1)?;
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
@@ -67,7 +67,7 @@ impl TensorOracle {
         *self.model.lock().await = Some(model);
         *self.tokenizer.lock().await = Some(tokenizer);
 
-        eprintln!("[ClawKit TensorOracle] Engine Boot Sequence Complete. Synthesizing cognitive paths.");
+        eprintln!("[Eidolon TensorOracle] Engine Boot Sequence Complete. Synthesizing cognitive paths.");
 
         Ok(())
     }
@@ -103,7 +103,7 @@ impl TensorOracle {
         let mut kv_cache = self.kv_cache_snapshot.lock().await;
         *kv_cache = Some(vec![prefix_tensor]);
         
-        eprintln!("[ClawKit Epistemic Core] User Profile KV Cache Pre-computed. Tokens: {}", token_ids.len());
+        eprintln!("[Eidolon Epistemic Core] User Profile KV Cache Pre-computed. Tokens: {}", token_ids.len());
 
         Ok(())
     }
@@ -163,7 +163,7 @@ impl TensorOracle {
         // 3. Sample from modified logits.
 
         eprintln!(
-            "[ClawKit TensorOracle] Simulating Generation | Entropy: {:.2} ({}) | Trauma: {:.2} | is_action: {} | Tokens: {}",
+            "[Eidolon TensorOracle] Simulating Generation | Entropy: {:.2} ({}) | Trauma: {:.2} | is_action: {} | Tokens: {}",
             final_entropy,
             if final_entropy >= 0.5 { "THINKING" } else { "REFLEX" },
             trauma_severity,

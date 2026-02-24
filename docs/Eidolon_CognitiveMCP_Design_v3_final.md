@@ -1,4 +1,4 @@
-# ClawKit Cognitive MCP Layer — Design Document v3 (Final)
+# Eidolon Cognitive MCP Layer — Design Document v3 (Final)
 **Authored by:** Claude Sonnet 4.6  
 **Date:** February 20, 2026  
 **Version:** 3.0-final — Full inventory sau khi đọc toàn bộ codebase
@@ -564,7 +564,7 @@ fn spawn_cognitive_agent(commands: &mut Commands, role: AgentRole) -> Entity {
 ## 12. DAGMA Auto-Discovery — Ceiling Pusher P3
 
 ```typescript
-// Trong clawkit_dream_conversation()
+// Trong eidolon_dream_conversation()
 async dreamConversation(episodes: ConversationEpisode[]): Promise<void> {
     // P2: ExperienceReplay (standard)
     const batch = this.replayBuffer.sample(20);
@@ -623,27 +623,27 @@ class CognitiveSynesthesia {
 ### Core Loop — P1
 
 ```
-clawkit_recall_user(user_id)
+eidolon_recall_user(user_id)
   → HyperMemory.search(embed(user_id)) + SQLite
   → UserSensory + personal ConversationDomainConfig preset
 
-clawkit_sense_intent(messages, current_mode, user_id?)
+eidolon_sense_intent(messages, current_mode, user_id?)
   → IOracle.interpretConversation() → ConversationSensory  
   → ThermodynamicEngine.step() → thermo_state evolves
   → CausalGraph.predict(OutcomeQuality, context_observations)
   → ConversationMode recommendation + CausalBrain.confidence()
 
-clawkit_check_pattern(patterns[], user_id?)
+eidolon_check_pattern(patterns[], user_id?)
   → TraumaRegistry.is_inhibited(mode=ConversationMode, pattern+user_id, now)
   → { inhibited, safe, remaining_ms }
 
-clawkit_simulate_response(action: ConversationAction, context)
+eidolon_simulate_response(action: ConversationAction, context)
   → Chỉ chạy nếu action.requires_simulation() = true
   → ConversationSimulator.simulate()
   → Intervenable.counterfactual() nếu alternatives available
   → { predicted_outcome, confidence, should_revise }
 
-clawkit_commit_pattern(mode, pattern, reasoning)
+eidolon_commit_pattern(mode, pattern, reasoning)
   → RollingHistoryBuffer.push(conversation_vector)
   → ThermodynamicEngine.step()
   → EidolonBus.emitEvent(GOOD_CALIBRATION | PATTERN_DRIFT_DETECTED)
@@ -652,7 +652,7 @@ clawkit_commit_pattern(mode, pattern, reasoning)
 ### Reasoning — P1/P2
 
 ```
-clawkit_reason_chain(draft, context, mode='fast'|'deep')
+eidolon_reason_chain(draft, context, mode='fast'|'deep')
   → mode='fast': single CriticModule pass (intrusiveness 0.5-0.7)
   → mode='deep': full TreeOfThoughts + VerifierLoop (intrusiveness > 0.7)
   → CausalGraph-grounded, không pure LLM scoring
@@ -662,15 +662,15 @@ clawkit_reason_chain(draft, context, mode='fast'|'deep')
 ### Memory — P2
 
 ```
-clawkit_recall_similar(context, k=5)
+eidolon_recall_similar(context, k=5)
   → IOracle.embed(ConversationWorldState) → query vector
   → HyperMemory.search(query, k) → episodes + outcomes + patterns
 
-clawkit_memory_query(query, route='auto')
+eidolon_memory_query(query, route='auto')
   → Smart routing: thermo_state? LiquidBrain. Long-term? SQLite. Similar? HyperMemory.
   → Không search tất cả mọi lúc → low latency
 
-clawkit_compress_context(target_tokens, preserve_recent=10)
+eidolon_compress_context(target_tokens, preserve_recent=10)
   → ContextCompressor.compress()
   → importance scored by: corrections, frustration events, profile signals
 ```
@@ -678,7 +678,7 @@ clawkit_compress_context(target_tokens, preserve_recent=10)
 ### Learning — P2
 
 ```
-clawkit_record_outcome(mode, pattern, user_id, outcome, severity, causal_pairs[])
+eidolon_record_outcome(mode, pattern, user_id, outcome, severity, causal_pairs[])
   → severity > 0: TraumaRegistry.record_trauma(ConversationMode, pattern+user_id, severity, now)
   → severity = 0: TraumaRegistry.heal()
   → CausalGraph.learn(cause, effect, positive) for each causal_pair
@@ -686,12 +686,12 @@ clawkit_record_outcome(mode, pattern, user_id, outcome, severity, causal_pairs[]
   → ExperienceReplay.add(episode)
   → IOracle.counterfactual() → bonus learning signal từ do-calculus
 
-clawkit_update_user(user_id, updates)
+eidolon_update_user(user_id, updates)
   → Merge UserSensory + update ConversationDomainConfig preference
   → Re-embed → HyperMemory.insert()
   → SQLite persist
 
-clawkit_dream_conversation(episodes=20)
+eidolon_dream_conversation(episodes=20)
   → ExperienceReplay.sample(20) → replay + learn
   → DAGMA.fit() nếu N ≥ dagma_trigger_episodes
   → LiquidBrain.optimize(aggregate_reward)
@@ -701,12 +701,12 @@ clawkit_dream_conversation(episodes=20)
 ### Orchestration — P3
 
 ```
-clawkit_orchestrate(task, strategy, agent_count?)
+eidolon_orchestrate(task, strategy, agent_count?)
   → Bevy ECS: spawn_cognitive_agent() × N
   → Assign roles: Planner, Critic, Memory, UserModel
   → Collect + consensus
 
-clawkit_tool_recommend(task, available_tools[])
+eidolon_tool_recommend(task, available_tools[])
   → CausalGraph.predict(ToolSuccess | task_type, tool_name)
   → ToolPerformanceTracker scoring
 ```
@@ -720,11 +720,11 @@ clawkit_tool_recommend(task, available_tools[])
 CONVERSATION START
 ═══════════════════════════════════════════════════════════
 WasmAdapter.init()                          // Load WASM hoặc fall to Mock
-clawkit_recall_user(user_id)
+eidolon_recall_user(user_id)
   → UserSensory + preferred ConversationMode + negative_patterns
 
 [if long context:]
-clawkit_compress_context(target=50000)
+eidolon_compress_context(target=50000)
 
 ConversationThermo.init([0.5, 0.5, 0.3, 0.5, 0.3])
   // [engagement, trust, cognitive_load, rapport, momentum]
@@ -734,26 +734,26 @@ TRƯỚC KHI RESPOND (mỗi message)
 ═══════════════════════════════════════════════════════════
 
 [SENSE]
-clawkit_sense_intent(messages, current_mode, user_id)
+eidolon_sense_intent(messages, current_mode, user_id)
   → ConversationSensory + thermo_state update
   → CausalGraph.predict() + CausalBrain.confidence()
 
-clawkit_check_pattern(candidates[], user_id)
+eidolon_check_pattern(candidates[], user_id)
   → TraumaRegistry → inhibited patterns removed
 
-clawkit_recall_similar(context, k=3)
+eidolon_recall_similar(context, k=3)
   → "Lần trước: expert + hype_language → peer_listener worked"
 
 [GATE: intrusiveness check]
 action = ConversationAction(recommended_mode, chosen_pattern)
 
 if (action.requires_simulation()):          // intrusiveness > 0.5
-    clawkit_simulate_response(action, context)
+    eidolon_simulate_response(action, context)
     → ConversationSimulator
     → Intervenable.counterfactual() nếu có alternatives
 
     if (should_revise):
-        clawkit_reason_chain(draft, context, mode='deep')
+        eidolon_reason_chain(draft, context, mode='deep')
         → TreeOfThoughts (CausalGraph-grounded)
         → CriticModule
         → VerifierLoop (max 3 iter)
@@ -762,21 +762,21 @@ else:
     // Skip simulation and ToT
 
 [COMMIT]
-clawkit_commit_pattern(mode, pattern, reasoning)
+eidolon_commit_pattern(mode, pattern, reasoning)
   → RollingHistoryBuffer update
   → ThermodynamicEngine.step()
 
 → RESPOND
 
 [LEARN]
-clawkit_record_outcome(...)
+eidolon_record_outcome(...)
   → TraumaRegistry + CausalGraph + HyperMemory + counterfactual
-clawkit_update_user(user_id, session_learnings)
+eidolon_update_user(user_id, session_learnings)
 
 ═══════════════════════════════════════════════════════════
 CUỐI SESSION
 ═══════════════════════════════════════════════════════════
-clawkit_dream_conversation(episodes=20)
+eidolon_dream_conversation(episodes=20)
   → ExperienceReplay.sample() → replay
   → DAGMA.fit() nếu N ≥ trigger
   → LiquidBrain.optimize()
@@ -818,22 +818,22 @@ enum ConversationEventType {
 - ConversationVariable + ConversationMode + ConversationSensory types
 - ConversationThermo (configure L/M cho conversation dims)
 - `Intervenable.do_intervention()` — implement do-calculus
-- `clawkit_sense_intent` + `clawkit_check_pattern` + `clawkit_commit_pattern`
-- `clawkit_simulate_response` (intrusiveness gating)
-- `clawkit_reason_chain` (gated ToT + Critic-Verifier)
+- `eidolon_sense_intent` + `eidolon_check_pattern` + `eidolon_commit_pattern`
+- `eidolon_simulate_response` (intrusiveness gating)
+- `eidolon_reason_chain` (gated ToT + Critic-Verifier)
 
 **P2 (Memory + learning completeness):**
-- `clawkit_recall_user` + `clawkit_update_user` + `clawkit_record_outcome`
-- `clawkit_recall_similar` + `clawkit_memory_query`
-- `clawkit_dream_conversation` (ExperienceReplay, no DAGMA yet)
+- `eidolon_recall_user` + `eidolon_update_user` + `eidolon_record_outcome`
+- `eidolon_recall_similar` + `eidolon_memory_query`
+- `eidolon_dream_conversation` (ExperienceReplay, no DAGMA yet)
 - MemoryDecayManager + MemoryGraph
-- `clawkit_compress_context`
+- `eidolon_compress_context`
 
 **P3 (Ceiling-pushers — khi đủ data + time):**
-- Bevy ECS multi-agent activation (`clawkit_orchestrate`)
+- Bevy ECS multi-agent activation (`eidolon_orchestrate`)
 - DAGMA auto-discovery trong dream cycle
 - `IOracle.counterfactual()` wrapping Intervenable
-- `clawkit_tool_recommend` + ToolPerformanceTracker
+- `eidolon_tool_recommend` + ToolPerformanceTracker
 
 **P4 (Observability):**
 - CognitiveSynesthesia (conversation thermo → sound)

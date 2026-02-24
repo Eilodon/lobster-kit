@@ -13,32 +13,32 @@ impl EidolonMcpServer {
     ) -> serde_json::Value {
         let (resolved_method, params) = Self::normalize_legacy_tool_call(method, params);
         match resolved_method.as_str() {
-            "clawkit_recall_user" => self.handle_recall_user(params).await,
-            "clawkit_route_action" => self.handle_route_action(params).await,
-            "clawkit_sense_intent" => self.handle_sense_intent(params).await,
-            "clawkit_check_pattern" => self.handle_check_pattern(params).await,
-            "clawkit_simulate_response" => self.handle_simulate_response(params).await,
-            "clawkit_commit_pattern" => self.handle_commit_pattern(params).await,
-            "clawkit_reason_chain" => self.handle_reason_chain(params).await,
-            "clawkit_recall_similar" => self.handle_recall_similar(params).await,
-            "clawkit_memory_query" => self.handle_memory_query(params).await,
-            "clawkit_compress_context" => self.handle_compress_context(params).await,
-            "clawkit_record_outcome" => self.handle_record_outcome(params).await,
-            "clawkit_update_user" => self.handle_update_user(params).await,
-            "clawkit_dream_conversation" => self.handle_dream_conversation(params).await,
-            "clawkit_orchestrate" => self.handle_orchestrate(params).await,
-            "clawkit_tool_recommend" => self.handle_tool_recommend(params).await,
-            "clawkit_subbrain_auto" => self.handle_subbrain_auto(params).await,
-            "clawkit_generated_tool_decision" => self.handle_generated_tool_decision(params).await,
+            "eidolon_recall_user" => self.handle_recall_user(params).await,
+            "eidolon_route_action" => self.handle_route_action(params).await,
+            "eidolon_sense_intent" => self.handle_sense_intent(params).await,
+            "eidolon_check_pattern" => self.handle_check_pattern(params).await,
+            "eidolon_simulate_response" => self.handle_simulate_response(params).await,
+            "eidolon_commit_pattern" => self.handle_commit_pattern(params).await,
+            "eidolon_reason_chain" => self.handle_reason_chain(params).await,
+            "eidolon_recall_similar" => self.handle_recall_similar(params).await,
+            "eidolon_memory_query" => self.handle_memory_query(params).await,
+            "eidolon_compress_context" => self.handle_compress_context(params).await,
+            "eidolon_record_outcome" => self.handle_record_outcome(params).await,
+            "eidolon_update_user" => self.handle_update_user(params).await,
+            "eidolon_dream_conversation" => self.handle_dream_conversation(params).await,
+            "eidolon_orchestrate" => self.handle_orchestrate(params).await,
+            "eidolon_tool_recommend" => self.handle_tool_recommend(params).await,
+            "eidolon_subbrain_auto" => self.handle_subbrain_auto(params).await,
+            "eidolon_generated_tool_decision" => self.handle_generated_tool_decision(params).await,
             "eidolon_oracle_sense" => self.handle_oracle_sense(params).await,
             "eidolon_defi_quote" => self.handle_defi_quote(params).await,
             "eidolon_security_scan" => self.handle_security_scan(params).await,
             "eidolon_get_portfolio" => self.handle_get_portfolio(params).await,
             "eidolon_execute_swap" => self.handle_execute_swap(params).await,
             "eidolon_panic_button" => self.handle_panic_button(params).await,
-            "clawkit_forge_tool" => self.handle_forge_tool(params).await,
-            "clawkit_set_entropy" => self.handle_set_entropy(params).await,
-            "clawkit_oracle_query" => self.handle_oracle_query(params).await,
+            "eidolon_forge_tool" => self.handle_forge_tool(params).await,
+            "eidolon_set_entropy" => self.handle_set_entropy(params).await,
+            "eidolon_oracle_query" => self.handle_oracle_query(params).await,
             _ => {
                 let is_dynamic = { self.dynamic_tools.lock().await.contains_key(resolved_method.as_str()) };
                 if is_dynamic {
@@ -85,7 +85,7 @@ impl EidolonMcpServer {
                                     serde_json::json!({
                                         "protocolVersion": "2024-11-05",
                                         "capabilities": { "tools": {}, "resources": {} },
-                                        "serverInfo": { "name": "clawkit-v4", "version": "4.0.0" }
+                                        "serverInfo": { "name": "eidolon-v4", "version": "4.0.0" }
                                     })
                                 }
                                 "notifications/initialized" => return,
@@ -209,7 +209,7 @@ impl EidolonMcpServer {
                                                         Self::evaluate_tool_promotion(&row, &thresholds);
                                                     if eligible {
                                                         eprintln!(
-                                                            "[ClawKit] 🏆 Tool '{}' promotion-eligible (calls:{}, err:{:.3}%, p95:{:.1}ms)",
+                                                            "[Eidolon] 🏆 Tool '{}' promotion-eligible (calls:{}, err:{:.3}%, p95:{:.1}ms)",
                                                             tool_name, row.call_count,
                                                             (1.0 - row.success_rate) * 100.0,
                                                             row.latency_p95_ms
@@ -217,7 +217,7 @@ impl EidolonMcpServer {
                                                     } else if row.call_count >= thresholds.min_calls {
                                                         // Only log failures after min_calls met (avoid noise)
                                                         eprintln!(
-                                                            "[ClawKit] ⚠️  Tool '{}' promotion blocked: {:?}",
+                                                            "[Eidolon] ⚠️  Tool '{}' promotion blocked: {:?}",
                                                             tool_name, failures
                                                         );
                                                     }

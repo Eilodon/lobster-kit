@@ -1,9 +1,9 @@
-import { IClawKit } from '@clawkit/core';
-import type { IReadClient, IWriteClient } from '@clawkit/core';
+import { IEidolon } from '@eidolon/core';
+import type { IReadClient, IWriteClient } from '@eidolon/core';
 import { PublicClient, createPublicClient, http, isAddress } from 'viem';
 import { opBNB } from 'viem/chains';
 
-import { ClawKitConfig, ClawKitWalletClient, toAddress } from './types';
+import { EidolonConfig, EidolonWalletClient, toAddress } from './types';
 import { OPBNB_CONFIG } from './chains/opbnb';
 import { verifyConfigIntegrity } from './utils/ConfigIntegrity';
 import {
@@ -35,7 +35,7 @@ type PublicClientProbe = {
     transport?: unknown;
 };
 
-function createWriteClientAdapter(walletClient: ClawKitWalletClient): IWriteClient {
+function createWriteClientAdapter(walletClient: EidolonWalletClient): IWriteClient {
     const source = walletClient as unknown as WriteClientAdapterShape;
     const adapter: IWriteClient = {
         getAddresses: () => walletClient.getAddresses(),
@@ -81,27 +81,27 @@ function isPublicClient(readClient: IReadClient): readClient is PublicClient {
         && probe.transport !== undefined;
 }
 
-export class ClawKit implements IClawKit {
+export class Eidolon implements IEidolon {
     public readonly adapters: DomainAdapterRegistry;
 
-    public readonly walletClient: ClawKitWalletClient;
+    public readonly walletClient: EidolonWalletClient;
     /** @deprecated Use `readClient` instead */
     public readonly publicClient: PublicClient;
     /** Generic read client (domain-agnostic) */
     public readonly readClient: IReadClient;
     /** Generic write client (domain-agnostic) */
     public readonly writeClient: IWriteClient;
-    public readonly config: ClawKitConfig;
+    public readonly config: EidolonConfig;
 
     /**
-     * Create a ClawKit instance.
+     * Create a Eidolon instance.
      * @param walletClient - viem WalletClient for signing transactions
-     * @param config - ClawKit configuration
+     * @param config - Eidolon configuration
      * @param readClient - Optional: inject a custom read client. Defaults to opBNB PublicClient.
      */
     constructor(
-        walletClient: ClawKitWalletClient,
-        config: ClawKitConfig,
+        walletClient: EidolonWalletClient,
+        config: EidolonConfig,
         readClient?: IReadClient
     ) {
         this.validateConfig(config); // 🛡️ Zero-Trust Boot
@@ -143,8 +143,8 @@ export class ClawKit implements IClawKit {
      * 🛡️ ATOMIC CONFIG VALIDATION
      * Prevents runtime failures by ensuring rigorous config integrity at boot.
      */
-    private validateConfig(config: ClawKitConfig) {
-        verifyConfigIntegrity(config, 'ClawKit');
+    private validateConfig(config: EidolonConfig) {
+        verifyConfigIntegrity(config, 'Eidolon');
 
         if (!config.chainConfig) {
             console.warn("⚠️ ChainConfig missing - Defaulting to opBNB (Standard Mode)");
@@ -213,4 +213,4 @@ export * from './utils/Logger';
 export * from './chains/opbnb';
 
 // Default export
-export default ClawKit;
+export default Eidolon;

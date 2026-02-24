@@ -1,1 +1,1 @@
-export { KpiTracker, type KpiSnapshot } from '@clawkit/core';
+export { KpiTracker, type KpiSnapshot } from '@eidolon/core';

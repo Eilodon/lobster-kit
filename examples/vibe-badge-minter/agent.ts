@@ -1,16 +1,16 @@
 /**
- * VibeBadge Minter - Example OpenClaw Agent using ClawKit
+ * VibeBadge Minter - Example OpenClaw Agent using Eidolon
  * 
  * This agent analyzes user mood from chat messages and mints
  * NFT badges when positive vibes are detected.
  */
 
-import { ClawKit } from '@clawkit/bnb';
+import { Eidolon } from '@eidolon/bnb';
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { opBNB } from 'viem/chains';
 
-// Initialize ClawKit
+// Initialize Eidolon
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 const walletClient = createWalletClient({
   account,
@@ -18,7 +18,7 @@ const walletClient = createWalletClient({
   transport: http()
 });
 
-const kit = new ClawKit(walletClient, {
+const kit = new Eidolon(walletClient, {
   privateKey: process.env.PRIVATE_KEY!
 });
 
@@ -96,7 +96,7 @@ export const vibeBadgeSkill = {
       const tier = getBadgeTier(sentiment);
       console.log(`🎖️ Badge tier: ${tier}`);
 
-      // Mint the badge using ClawKit
+      // Mint the badge using Eidolon
       const { hash, tokenId } = await kit.nft.mintBadge({
         name: 'Good Vibes Champion',
         description: `Awarded for spreading positive energy! Sentiment: ${(sentiment * 100).toFixed(0)}%`,

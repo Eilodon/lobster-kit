@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 async function main() {
-  console.log('🚀 Starting ClawKit deployment to opBNB mainnet...\n');
+  console.log('🚀 Starting Eidolon deployment to opBNB mainnet...\n');
 
   const [deployer] = await ethers.getSigners();
   console.log('📝 Deploying with account:', deployer.address);
@@ -64,9 +64,9 @@ async function main() {
   const typesPath = path.join(__dirname, '../src/types.ts');
   let typesContent = fs.readFileSync(typesPath, 'utf-8');
   
-  // Update CLAWKIT_CONTRACTS
-  const contractsRegex = /export const CLAWKIT_CONTRACTS = \{[\s\S]*?\};/;
-  const newContracts = `export const CLAWKIT_CONTRACTS = {
+  // Update EIDOLON_CONTRACTS
+  const contractsRegex = /export const EIDOLON_CONTRACTS = \{[\s\S]*?\};/;
+  const newContracts = `export const EIDOLON_CONTRACTS = {
   DynamicBadge: '${dynamicBadgeAddress}' as const,
   BatchExecutor: '${batchExecutorAddress}' as const,
   ApprovalRevoker: '${approvalRevokerAddress}' as const,

@@ -1,6 +1,6 @@
 
-import { IClawKit } from '@clawkit/core';
-import { withRetry, withTimeout } from '@clawkit/core';
+import { IEidolon } from '@eidolon/core';
+import { withRetry, withTimeout } from '@eidolon/core';
 
 export interface SimulationResult {
     success: boolean;
@@ -65,9 +65,9 @@ export class EidolonSimulator {
     private static readonly MAX_TOUCHED_ADDRESSES = 50;
 
     private client: any; // IReadClient — uses viem PublicClient APIs at runtime
-    private kit: IClawKit;
+    private kit: IEidolon;
 
-    constructor(kit: IClawKit) {
+    constructor(kit: IEidolon) {
         this.kit = kit;
         this.client = (kit as any).publicClient ?? kit.readClient;
     }

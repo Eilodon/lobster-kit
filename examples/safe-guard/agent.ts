@@ -1,11 +1,11 @@
 /**
  * 🛡️ EXAMPLE: SafeGuard Agent
  * 
- * This agent demonstrates ClawKit's security modules.
+ * This agent demonstrates Eidolon's security modules.
  * It monitors your wallet for dangerous approvals and auto-revokes them.
  */
 
-import { ClawKit } from '../../src';
+import { Eidolon } from '../../src';
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { opBNB } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -25,7 +25,7 @@ const walletClient = createWalletClient({
     transport: http()
 });
 
-const kit = new ClawKit(walletClient, {
+const kit = new Eidolon(walletClient, {
     privateKey: process.env.PRIVATE_KEY!
 });
 

@@ -2,9 +2,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ActiveLearning, LEARNING_CONFIG } from '../src/eidolon/ActiveLearning';
 import { DecisionLog, MarketState } from '../src/eidolon/EidolonTypes';
-import { IStorageProvider } from '@clawkit/core';
-import { AppendOnlyAdapter } from '@clawkit/core';
-import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
+import { IStorageProvider } from '@eidolon/core';
+import { AppendOnlyAdapter } from '@eidolon/core';
+import { WasmAdapter as CoreWasmAdapter } from '@eidolon/core';
 import { WasmAdapter as SoulWasmAdapter } from '../src/WasmAdapter';
 
 // Mock Storage

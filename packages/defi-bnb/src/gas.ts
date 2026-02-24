@@ -1,5 +1,5 @@
 import { WalletClient, PublicClient, encodeFunctionData, parseAbi, formatEther, parseEther, formatUnits } from 'viem';
-import { ClawKitConfig, BATCH_EXECUTOR, ClawKitWalletClient, toAddress, assertDeployed } from './types';
+import { EidolonConfig, BATCH_EXECUTOR, EidolonWalletClient, toAddress, assertDeployed } from './types';
 import axios from 'axios';
 
 interface GasEstimate {
@@ -27,9 +27,9 @@ export class GasModule {
   private readonly CACHE_DURATION = 5000;
 
   constructor(
-    private walletClient: ClawKitWalletClient,
+    private walletClient: EidolonWalletClient,
     private publicClient: PublicClient,
-    private config: ClawKitConfig,
+    private config: EidolonConfig,
     private oracle?: any // Loosely typed to avoid circular import hell, or use Interface
   ) { }
 

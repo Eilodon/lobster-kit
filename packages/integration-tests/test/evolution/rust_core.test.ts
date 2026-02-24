@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { WasmAdapter } from '@clawkit/soul';
+import { WasmAdapter } from '@eidolon/soul';
 
 describe('🧬 RUST EVOLUTION: The Singularity Verification', () => {
     let adapter: WasmAdapter;

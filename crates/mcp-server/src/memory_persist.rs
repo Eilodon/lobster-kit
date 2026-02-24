@@ -14,7 +14,7 @@ impl EidolonMcpServer {
             Ok(data) => match serde_json::from_str::<Vec<MemoryEntry>>(&data) {
                 Ok(memories) => {
                     eprintln!(
-                        "[ClawKit] Loaded {} memories from {:?}",
+                        "[Eidolon] Loaded {} memories from {:?}",
                         memories.len(),
                         path
                     );
@@ -22,7 +22,7 @@ impl EidolonMcpServer {
                 }
                 Err(e) => {
                     eprintln!(
-                        "[ClawKit] Failed to parse memories from {:?}: {}. Starting fresh.",
+                        "[Eidolon] Failed to parse memories from {:?}: {}. Starting fresh.",
                         path, e
                     );
                     Vec::new()
@@ -30,7 +30,7 @@ impl EidolonMcpServer {
             },
             Err(_) => {
                 eprintln!(
-                    "[ClawKit] No memory file at {:?}. Starting with empty memory.",
+                    "[Eidolon] No memory file at {:?}. Starting with empty memory.",
                     path
                 );
                 Vec::new()
@@ -51,7 +51,7 @@ impl EidolonMcpServer {
         if let Some(data) = serialized {
             let path = self.memories_file_path.as_ref();
             if let Err(e) = tokio::fs::write(path, data).await {
-                eprintln!("[ClawKit] Failed to save memories to {:?}: {}", path, e);
+                eprintln!("[Eidolon] Failed to save memories to {:?}: {}", path, e);
             }
         }
     }

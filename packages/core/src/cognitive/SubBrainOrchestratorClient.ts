@@ -1,7 +1,7 @@
 /**
  * SubBrainOrchestratorClient
  * 
- * TypeScript client/wrapper để tích hợp clawkit_subbrain_auto vào Cascade/Windsurf.
+ * TypeScript client/wrapper để tích hợp eidolon_subbrain_auto vào Cascade/Windsurf.
  * Đây là layer kết nối giữa IDE và MCP Sub-Brain.
  * 
  * Usage trong Cascade Agent:
@@ -21,6 +21,7 @@ export interface SubBrainInput {
   autoExecute?: boolean;
   maxTools?: number;
   context?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface SubBrainResult {
@@ -113,7 +114,7 @@ export class SubBrainOrchestratorClient {
     };
 
     try {
-      const result = await this.callMcpTool('clawkit_subbrain_auto', params);
+      const result = await this.callMcpTool('eidolon_subbrain_auto', params);
       return result as SubBrainResult;
     } catch (error) {
       return {
@@ -132,7 +133,7 @@ export class SubBrainOrchestratorClient {
     suggestedTools: string[];
   } | { error: string }> {
     const result = await this.analyzeInput(input, { autoExecute: false, maxTools: 0 });
-    
+
     if ('error' in result) {
       return result;
     }
@@ -162,7 +163,7 @@ export class SubBrainOrchestratorClient {
 
       let output = '';
       let errorOutput = '';
-      
+
       const timeout = setTimeout(() => {
         child.kill();
         reject(new Error('Sub-Brain MCP timeout'));

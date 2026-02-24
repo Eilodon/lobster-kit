@@ -1,11 +1,11 @@
 /**
- * @clawkit/core — Shared foundation for all ClawKit packages
+ * @eidolon/core — Shared foundation for all Eidolon packages
  *
  * Events, memory, types, utilities, and interfaces.
  */
 
 // Interfaces
-export { IClawKit } from './interfaces/IClawKit';
+export { IEidolon } from './interfaces/IEidolon';
 export type { ISensorHub, IReadClient, ReadClientArgs } from './interfaces/ISensorHub';
 export type { IActuatorHub, IWriteClient, WriteClientArgs } from './interfaces/IActuatorHub';
 export type { IMemoryHub } from './interfaces/IMemoryHub';
@@ -45,11 +45,10 @@ export * from './cognitive';
 export type { IOracle, MarketContext, OracleGenerationOptions, OracleInsight } from './ai/IOracle';
 
 // Consciousness Modules
-// Moved to @clawkit/soul
+// Moved to @eidolon/soul
 
 
 // Utilities
-export { WasmAdapter } from './WasmAdapter';
 export { AsyncLock } from './utils/AsyncLock';
 export { Logger } from './utils/Logger';
 export { withRetry, withTimeout, CircuitBreaker, type RetryConfig, type CircuitBreakerOptions } from './utils/Resilience';

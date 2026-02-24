@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { IStorageProvider } from '@clawkit/core';
-import { AsyncLock } from '@clawkit/core';
+import type { IStorageProvider } from '@eidolon/core';
+import { AsyncLock } from '@eidolon/core';
 
 /**
  * 💾 APPEND-ONLY ADAPTER (LOCAL)

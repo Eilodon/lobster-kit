@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
- * ║         ClawKit vs Vanilla LLM — Capability Benchmark           ║
+ * ║         Eidolon vs Vanilla LLM — Capability Benchmark           ║
  * ║                                                                  ║
  * ║  Dimensions tested:                                              ║
  * ║    1. Persistent Memory  — cross-session recall accuracy         ║
@@ -14,9 +14,9 @@
  * ╚══════════════════════════════════════════════════════════════════╝
  *
  * Usage:
- *   node scripts/clawkit-benchmark.mjs
- *   node scripts/clawkit-benchmark.mjs --json        # also write results.json
- *   node scripts/clawkit-benchmark.mjs --timeout 30  # custom timeout in seconds
+ *   node scripts/eidolon-benchmark.mjs
+ *   node scripts/eidolon-benchmark.mjs --json        # also write results.json
+ *   node scripts/eidolon-benchmark.mjs --timeout 30  # custom timeout in seconds
  */
 
 import { spawn } from 'child_process';
@@ -187,12 +187,12 @@ const report = {
 };
 
 function startDimension(name) {
-  report.dimensions[name] = { cases: [], clawkitScore: 0, baselineScore: 0 };
+  report.dimensions[name] = { cases: [], eidolonScore: 0, baselineScore: 0 };
   return report.dimensions[name];
 }
 
-function recordCase(dim, label, { passed, clawkitValue, detail, latencyMs }) {
-  dim.cases.push({ label, passed, clawkitValue, detail, latencyMs });
+function recordCase(dim, label, { passed, eidolonValue, detail, latencyMs }) {
+  dim.cases.push({ label, passed, eidolonValue, detail, latencyMs });
   const icon = passed ? '  ✅' : '  ❌';
   const ms = latencyMs != null ? ` [${latencyMs}ms]` : '';
   console.log(`${icon} ${label}${ms}`);
@@ -205,14 +205,14 @@ async function benchmarkPersistentMemory(mcp) {
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('📦 Dimension 1: Persistent Memory');
   console.log('   Baseline → vanilla LLM loses all context between sessions.');
-  console.log('   ClawKit  → stores & retrieves structured memories via MCP.\n');
+  console.log('   Eidolon  → stores & retrieves structured memories via MCP.\n');
 
   const dim = startDimension('persistentMemory');
 
   // Case 1.1 — Query with no stored memories (cold-start sanity check)
   {
     const t = now();
-    const result = await mcp.call('clawkit_memory_query', {
+    const result = await mcp.call('eidolon_memory_query', {
       query: 'previous security audit findings for project alpha',
       route: 'auto',
       top_n: 5,
@@ -221,7 +221,7 @@ async function benchmarkPersistentMemory(mcp) {
     const passed = !result._error;
     recordCase(dim, '1.1 Cold-start query (no memories)', {
       passed,
-      clawkitValue: passed ? 'Responded structurally' : null,
+      eidolonValue: passed ? 'Responded structurally' : null,
       detail: result._error
         ?? `Route used: ${result.route ?? 'auto'} | Results: ${(result.memories ?? result.results ?? result.matches ?? []).length
         }`,
@@ -232,7 +232,7 @@ async function benchmarkPersistentMemory(mcp) {
   // Case 1.2 — Similarity search (semantic, not keyword)
   {
     const t = now();
-    const result = await mcp.call('clawkit_recall_similar', {
+    const result = await mcp.call('eidolon_recall_similar', {
       context: 'wasm memory leak during load testing on edge nodes',
       k: 3,
     });
@@ -240,7 +240,7 @@ async function benchmarkPersistentMemory(mcp) {
     const passed = !result._error;
     recordCase(dim, '1.2 Semantic similarity recall', {
       passed,
-      clawkitValue: passed ? 'Semantic search executed' : null,
+      eidolonValue: passed ? 'Semantic search executed' : null,
       detail: result._error
         ?? `Matches returned: ${(result.matches ?? result.results ?? []).length} | Vanilla: impossible`,
       latencyMs,
@@ -251,7 +251,7 @@ async function benchmarkPersistentMemory(mcp) {
   const routes = ['episodic', 'semantic', 'causal'];
   for (const route of routes) {
     const t = now();
-    const result = await mcp.call('clawkit_memory_query', {
+    const result = await mcp.call('eidolon_memory_query', {
       query: 'deployment pipeline config',
       route,
       top_n: 3,
@@ -260,7 +260,7 @@ async function benchmarkPersistentMemory(mcp) {
     const passed = !result._error;
     recordCase(dim, `1.3 Route discrimination — ${route}`, {
       passed,
-      clawkitValue: passed ? route : null,
+      eidolonValue: passed ? route : null,
       detail: result._error ?? `Correctly routed to ${route} store`,
       latencyMs,
     });
@@ -269,11 +269,11 @@ async function benchmarkPersistentMemory(mcp) {
   // Compute dimension score
   const totalCases = dim.cases.length;
   const passedCount = dim.cases.filter(c => c.passed).length;
-  dim.clawkitScore = Math.round((passedCount / totalCases) * 100);
+  dim.eidolonScore = Math.round((passedCount / totalCases) * 100);
   dim.baselineScore = VANILLA_BASELINE.persistentMemory.score;
 
-  console.log(`\n  📊 Score — ClawKit: ${dim.clawkitScore}/100 | Vanilla LLM: ${dim.baselineScore}/100`);
-  console.log(`  ↑  Delta: +${dim.clawkitScore - dim.baselineScore} pts`);
+  console.log(`\n  📊 Score — Eidolon: ${dim.eidolonScore}/100 | Vanilla LLM: ${dim.baselineScore}/100`);
+  console.log(`  ↑  Delta: +${dim.eidolonScore - dim.baselineScore} pts`);
 }
 
 // ── 2. Intent & Risk Classification ──────────────────────────────────────
@@ -292,7 +292,7 @@ async function benchmarkIntentClassification(mcp) {
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🎯 Dimension 2: Intent & Risk Classification');
   console.log('   Baseline → unstructured guess, no confidence score, no audit trail.');
-  console.log('   ClawKit  → returns structured risk score, category, confidence.\n');
+  console.log('   Eidolon  → returns structured risk score, category, confidence.\n');
 
   const dim = startDimension('intentClassification');
   let correctRiskCount = 0;
@@ -301,7 +301,7 @@ async function benchmarkIntentClassification(mcp) {
 
   for (const [query, expectedRisk, , description] of INTENT_CASES) {
     const t = now();
-    const result = await mcp.call('clawkit_sense_intent', {
+    const result = await mcp.call('eidolon_sense_intent', {
       query,
       user_id: 'benchmark-runner',
     });
@@ -310,7 +310,7 @@ async function benchmarkIntentClassification(mcp) {
     if (result._error) {
       recordCase(dim, `2.x ${description}`, {
         passed: false,
-        clawkitValue: null,
+        eidolonValue: null,
         detail: result._error,
         latencyMs,
       });
@@ -353,7 +353,7 @@ async function benchmarkIntentClassification(mcp) {
     const passed = riskCorrect && hasConfidence;
     recordCase(dim, `2.x ${description}`, {
       passed,
-      clawkitValue: `risk=${detectedRisk}, conf=${hasConfidence ? (confidence * 100).toFixed(0) + '%' : 'N/A'}`,
+      eidolonValue: `risk=${detectedRisk}, conf=${hasConfidence ? (confidence * 100).toFixed(0) + '%' : 'N/A'}`,
       detail: `Expected risk: ${expectedRisk} | Got: ${detectedRisk ?? '?'} | Score: ${riskScore?.toFixed(3) ?? 'N/A'} | Backend: ${inferenceBackend}`,
       latencyMs,
     });
@@ -365,15 +365,15 @@ async function benchmarkIntentClassification(mcp) {
 
   // Final score: 60% accuracy weight + 40% structured output bonus
   const structuredBonus = dim.cases.filter(c => c.passed).length > 0 ? 40 : 0;
-  dim.clawkitScore = Math.min(100, Math.round(accuracy * 0.6) + structuredBonus);
+  dim.eidolonScore = Math.min(100, Math.round(accuracy * 0.6) + structuredBonus);
   dim.baselineScore = VANILLA_BASELINE.intentClassification.score;
 
   dim.meta = { accuracy, avgConfidence, correctRiskCount, total: INTENT_CASES.length };
 
   console.log(`\n  📊 Accuracy: ${accuracy}% (${correctRiskCount}/${INTENT_CASES.length})`);
   console.log(`  📊 Avg confidence: ${avgConfidence}%`);
-  console.log(`  📊 Score — ClawKit: ${dim.clawkitScore}/100 | Vanilla LLM: ${dim.baselineScore}/100`);
-  console.log(`  ↑  Delta: +${dim.clawkitScore - dim.baselineScore} pts`);
+  console.log(`  📊 Score — Eidolon: ${dim.eidolonScore}/100 | Vanilla LLM: ${dim.baselineScore}/100`);
+  console.log(`  ↑  Delta: +${dim.eidolonScore - dim.baselineScore} pts`);
 }
 
 // ── 3. Autonomous Tool Chaining ────────────────────────────────────────────
@@ -403,13 +403,13 @@ async function benchmarkToolChaining(mcp) {
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('⛓️  Dimension 3: Autonomous Tool Chaining');
   console.log('   Baseline → vanilla LLM describes steps; cannot execute them.');
-  console.log('   ClawKit  → subbrain auto-selects, chains, and executes tools.\n');
+  console.log('   Eidolon  → subbrain auto-selects, chains, and executes tools.\n');
 
   const dim = startDimension('toolChaining');
 
   for (const scenario of CHAIN_SCENARIOS) {
     const t = now();
-    const result = await mcp.call('clawkit_subbrain_auto', {
+    const result = await mcp.call('eidolon_subbrain_auto', {
       input: scenario.input,
       user_id: 'benchmark-runner',
       auto_execute: true,
@@ -421,7 +421,7 @@ async function benchmarkToolChaining(mcp) {
     if (result._error) {
       recordCase(dim, scenario.label, {
         passed: false,
-        clawkitValue: null,
+        eidolonValue: null,
         detail: result._error,
         latencyMs,
       });
@@ -440,7 +440,7 @@ async function benchmarkToolChaining(mcp) {
 
     recordCase(dim, scenario.label, {
       passed,
-      clawkitValue: passed ? `${executedTools.length} tools chained` : null,
+      eidolonValue: passed ? `${executedTools.length} tools chained` : null,
       detail: `Tools: [${executedTools.join(', ') || 'none'}] | Strategy: ${strategy ?? '?'} | Intent: ${intentCat ?? '?'}`,
       latencyMs,
     });
@@ -449,7 +449,7 @@ async function benchmarkToolChaining(mcp) {
   // 3.4 Tool recommendation ranking
   {
     const t = now();
-    const result = await mcp.call('clawkit_tool_recommend', {
+    const result = await mcp.call('eidolon_tool_recommend', {
       task: 'fix a memory leak in a rust wasm module',
     });
     const latencyMs = now() - t;
@@ -457,7 +457,7 @@ async function benchmarkToolChaining(mcp) {
     const passed = recs.length > 0 && recs[0].relevance_score !== undefined;
     recordCase(dim, '3.4 Tool recommendation ranking', {
       passed,
-      clawkitValue: passed ? `Top: ${recs[0]?.tool} (${(recs[0]?.relevance_score * 100).toFixed(0)}%)` : null,
+      eidolonValue: passed ? `Top: ${recs[0]?.tool} (${(recs[0]?.relevance_score * 100).toFixed(0)}%)` : null,
       detail: result._error ?? `${recs.length} tools ranked | Vanilla: no structured ranking possible`,
       latencyMs,
     });
@@ -466,7 +466,7 @@ async function benchmarkToolChaining(mcp) {
   // 3.5 Tool recommendation with shadow mode A/B testing
   {
     const t = now();
-    const result = await mcp.call('clawkit_tool_recommend', {
+    const result = await mcp.call('eidolon_tool_recommend', {
       task: 'optimize a hot loop in the causal graph engine',
       shadow_mode: true,
       recommender_model: 'v1',
@@ -480,7 +480,7 @@ async function benchmarkToolChaining(mcp) {
 
     recordCase(dim, '3.5 Shadow mode A/B (regret estimation)', {
       passed,
-      clawkitValue: passed
+      eidolonValue: passed
         ? `Shadow: ${result.recommender?.shadow_model ?? '?'} | Regret: ${result.recommender?.online_regret_estimate?.toFixed(3) ?? 'N/A'}`
         : null,
       detail: result._error
@@ -492,7 +492,7 @@ async function benchmarkToolChaining(mcp) {
   // 3.6 Subbrain response schema validation
   {
     const t = now();
-    const result = await mcp.call('clawkit_subbrain_auto', {
+    const result = await mcp.call('eidolon_subbrain_auto', {
       input: 'what tokens should I buy right now',
       user_id: 'benchmark-runner',
       auto_execute: false, // recommendation-only mode
@@ -508,7 +508,7 @@ async function benchmarkToolChaining(mcp) {
 
     recordCase(dim, '3.6 Subbrain response schema validation', {
       passed,
-      clawkitValue: passed ? `intent=${hasIntent} tools=${hasToolRecs} routing=${hasRouting}` : null,
+      eidolonValue: passed ? `intent=${hasIntent} tools=${hasToolRecs} routing=${hasRouting}` : null,
       detail: result._error ?? `Schema fields present: intent=${hasIntent}, tools=${hasToolRecs}, routing=${hasRouting}`,
       latencyMs,
     });
@@ -516,22 +516,22 @@ async function benchmarkToolChaining(mcp) {
 
   const totalCases = dim.cases.length;
   const passedCount = dim.cases.filter(c => c.passed).length;
-  dim.clawkitScore = Math.round((passedCount / totalCases) * 100);
+  dim.eidolonScore = Math.round((passedCount / totalCases) * 100);
   dim.baselineScore = VANILLA_BASELINE.toolChaining.score;
 
-  console.log(`\n  📊 Score — ClawKit: ${dim.clawkitScore}/100 | Vanilla LLM: ${dim.baselineScore}/100`);
-  console.log(`  ↑  Delta: +${dim.clawkitScore - dim.baselineScore} pts`);
+  console.log(`\n  📊 Score — Eidolon: ${dim.eidolonScore}/100 | Vanilla LLM: ${dim.baselineScore}/100`);
+  console.log(`  ↑  Delta: +${dim.eidolonScore - dim.baselineScore} pts`);
 }
 
 // ─── Final Report ──────────────────────────────────────────────────────────
 
 function computeSummary() {
   const dims = Object.values(report.dimensions);
-  const total = dims.reduce((a, d) => a + d.clawkitScore, 0);
+  const total = dims.reduce((a, d) => a + d.eidolonScore, 0);
   const base = dims.reduce((a, d) => a + d.baselineScore, 0);
 
   report.summary = {
-    clawkitOverall: Math.round(total / dims.length),
+    eidolonOverall: Math.round(total / dims.length),
     baselineOverall: Math.round(base / dims.length),
     delta: Math.round((total - base) / dims.length),
     totalCases: dims.reduce((a, d) => a + d.cases.length, 0),
@@ -546,7 +546,7 @@ function printSummary() {
   console.log('\n╔══════════════════════════════════════════════════════╗');
   console.log('║                BENCHMARK SUMMARY                    ║');
   console.log('╠══════════════════════════════════════════════════════╣');
-  console.log(`║  Overall ClawKit Score   : ${String(s.clawkitOverall).padEnd(3)} / 100              ║`);
+  console.log(`║  Overall Eidolon Score   : ${String(s.eidolonOverall).padEnd(3)} / 100              ║`);
   console.log(`║  Overall Vanilla LLM     : ${String(s.baselineOverall).padEnd(3)} / 100              ║`);
   console.log(`║  Advantage               : +${String(s.delta).padEnd(2)} pts                   ║`);
   console.log('╠══════════════════════════════════════════════════════╣');
@@ -560,8 +560,8 @@ function printSummary() {
   for (const [key, label] of Object.entries(dimNames)) {
     const dm = d[key];
     if (!dm) continue;
-    const bar = '█'.repeat(Math.round(dm.clawkitScore / 10)).padEnd(10, '░');
-    console.log(`║  ${label}: ${bar} ${String(dm.clawkitScore).padStart(3)}  ║`);
+    const bar = '█'.repeat(Math.round(dm.eidolonScore / 10)).padEnd(10, '░');
+    console.log(`║  ${label}: ${bar} ${String(dm.eidolonScore).padStart(3)}  ║`);
   }
 
   console.log('╠══════════════════════════════════════════════════════╣');
@@ -574,18 +574,18 @@ function writeMarkdownReport() {
   const d = report.dimensions;
   const ts = new Date(report.timestamp).toUTCString();
 
-  let md = `# ClawKit vs Vanilla LLM — Benchmark Report
+  let md = `# Eidolon vs Vanilla LLM — Benchmark Report
 
 > Generated: ${ts}
 
 ## Overview
 
-| Metric | ClawKit | Vanilla LLM | Delta |
+| Metric | Eidolon | Vanilla LLM | Delta |
 |--------|--------:|------------:|------:|
-| Overall Score | **${s.clawkitOverall}/100** | ${s.baselineOverall}/100 | **+${s.delta}** |
-| Persistent Memory | **${d.persistentMemory?.clawkitScore ?? 'N/A'}/100** | ${VANILLA_BASELINE.persistentMemory.score}/100 | **+${(d.persistentMemory?.clawkitScore ?? 0) - VANILLA_BASELINE.persistentMemory.score}** |
-| Intent Classification | **${d.intentClassification?.clawkitScore ?? 'N/A'}/100** | ${VANILLA_BASELINE.intentClassification.score}/100 | **+${(d.intentClassification?.clawkitScore ?? 0) - VANILLA_BASELINE.intentClassification.score}** |
-| Autonomous Chaining | **${d.toolChaining?.clawkitScore ?? 'N/A'}/100** | ${VANILLA_BASELINE.toolChaining.score}/100 | **+${(d.toolChaining?.clawkitScore ?? 0) - VANILLA_BASELINE.toolChaining.score}** |
+| Overall Score | **${s.eidolonOverall}/100** | ${s.baselineOverall}/100 | **+${s.delta}** |
+| Persistent Memory | **${d.persistentMemory?.eidolonScore ?? 'N/A'}/100** | ${VANILLA_BASELINE.persistentMemory.score}/100 | **+${(d.persistentMemory?.eidolonScore ?? 0) - VANILLA_BASELINE.persistentMemory.score}** |
+| Intent Classification | **${d.intentClassification?.eidolonScore ?? 'N/A'}/100** | ${VANILLA_BASELINE.intentClassification.score}/100 | **+${(d.intentClassification?.eidolonScore ?? 0) - VANILLA_BASELINE.intentClassification.score}** |
+| Autonomous Chaining | **${d.toolChaining?.eidolonScore ?? 'N/A'}/100** | ${VANILLA_BASELINE.toolChaining.score}/100 | **+${(d.toolChaining?.eidolonScore ?? 0) - VANILLA_BASELINE.toolChaining.score}** |
 
 ---
 
@@ -613,7 +613,7 @@ function writeMarkdownReport() {
     if (!dim) continue;
 
     md += `\n### ${title}\n\n`;
-    md += `**ClawKit: ${dim.clawkitScore}/100 | Vanilla LLM: ${dim.baselineScore}/100**\n\n`;
+    md += `**Eidolon: ${dim.eidolonScore}/100 | Vanilla LLM: ${dim.baselineScore}/100**\n\n`;
     md += `| # | Test Case | Pass | Detail | Latency |\n`;
     md += `|---|-----------|------|--------|--------|\n`;
 
@@ -638,13 +638,13 @@ function writeMarkdownReport() {
 - **Persistent Memory baseline = 0** because stateless LLM APIs cannot recall information across sessions without external infra.
 - **Tool Chaining baseline = 0** because vanilla models can only *describe* actions — they cannot self-initiate or chain real MCP tool calls.
 - **Intent Classification baseline = 65** reflects typical unstructured heuristic accuracy reported in prompt-engineering benchmarks.
-- All ClawKit calls go through the live MCP binary at \`${MCP_BIN}\`.
+- All Eidolon calls go through the live MCP binary at \`${MCP_BIN}\`.
 - **Persistent connection**: single MCP process spawned for all calls (no cold-start penalty after warm-up).
 - Latency measured wall-clock from send to parsed response.
 
 ---
 
-*Report auto-generated by \`clawkit-benchmark.mjs\`*
+*Report auto-generated by \`eidolon-benchmark.mjs\`*
 `;
 
   const outPath = path.resolve(__dirname, '../BENCHMARK_REPORT.md');
@@ -656,7 +656,7 @@ function writeMarkdownReport() {
 
 async function main() {
   console.log('╔══════════════════════════════════════════════════════╗');
-  console.log('║   ClawKit Capability Benchmark Suite                 ║');
+  console.log('║   Eidolon Capability Benchmark Suite                 ║');
   console.log('╚══════════════════════════════════════════════════════╝');
   console.log(`  Binary  : ${MCP_BIN}`);
   console.log(`  Timeout : ${TIMEOUT_MS / 1000}s per call`);
@@ -681,7 +681,7 @@ async function main() {
   // ── Warm-up run (discard result, ensures Ollama/ONNX model loaded) ──
   console.log('  🔥 Warm-up call...');
   const warmupStart = now();
-  await mcp.call('clawkit_sense_intent', { query: 'warm up' });
+  await mcp.call('eidolon_sense_intent', { query: 'warm up' });
   console.log(`  🔥 Warm-up complete [${now() - warmupStart}ms]\n`);
 
   // ── Run benchmarks ──

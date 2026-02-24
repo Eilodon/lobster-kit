@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GasModule, BATCH_EXECUTOR } from '@clawkit/defi-bnb';
+import { GasModule, BATCH_EXECUTOR } from '@eidolon/defi-bnb';
 
 // Mock dependencies
 const mockWalletClient: any = {

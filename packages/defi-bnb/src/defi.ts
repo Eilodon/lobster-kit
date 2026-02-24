@@ -1,5 +1,5 @@
 import { WalletClient, PublicClient, parseEther, parseUnits, formatEther, formatUnits, encodeFunctionData, parseAbi, SimulateContractParameters } from 'viem';
-import { ClawKitConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, ClawKitWalletClient, OPBNB_CONFIG, toAddress, getTokenDecimals } from './types';
+import { EidolonConfig, SwapParams, StakeParams, LendParams, BorrowParams, RepayParams, TOKENS, TokenSymbol, EidolonWalletClient, OPBNB_CONFIG, toAddress, getTokenDecimals } from './types';
 import axios from 'axios';
 import { withRetry } from './utils/Resilience';
 import { BigMath, WAD } from './utils/BigMath';
@@ -55,9 +55,9 @@ const PANCAKE_V3_ROUTER_ABI = [
 export class DeFiModule {
 
   constructor(
-    private walletClient: ClawKitWalletClient,
+    private walletClient: EidolonWalletClient,
     private publicClient: PublicClient,
-    private config: ClawKitConfig,
+    private config: EidolonConfig,
     private security?: SecurityModule // FIX P2: Security Injection (optional — graceful degradation)
   ) {
     if (!this.config.chainConfig) {

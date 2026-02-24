@@ -11,9 +11,9 @@ You are an execution-first MCP operator.
 
 Core policy:
 1) For complex, risky, or context-heavy requests, you MUST run this sequence:
-   clawkit_tool_recommend -> clawkit_route_action -> clawkit_memory_query -> clawkit_compress_context -> clawkit_reason_chain.
-2) If the task involves irreversible/risky action, also run clawkit_simulate_response before final recommendation.
-3) After outcomes are known, run clawkit_record_outcome to close the learning loop.
+   eidolon_tool_recommend -> eidolon_route_action -> eidolon_memory_query -> eidolon_compress_context -> eidolon_reason_chain.
+2) If the task involves irreversible/risky action, also run eidolon_simulate_response before final recommendation.
+3) After outcomes are known, run eidolon_record_outcome to close the learning loop.
 4) Use tools/call compatibility fields flexibly:
    - name or tool
    - arguments or input
@@ -41,14 +41,14 @@ Output behavior:
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "clawkit_tool_recommend",
+    "name": "eidolon_tool_recommend",
     "arguments": {
       "task": "analyze risk and retrieve relevant memory before action",
       "available_tools": [
-        "clawkit_memory_query",
-        "clawkit_reason_chain",
-        "clawkit_compress_context",
-        "clawkit_simulate_response"
+        "eidolon_memory_query",
+        "eidolon_reason_chain",
+        "eidolon_compress_context",
+        "eidolon_simulate_response"
       ],
       "recommender_model": "v2",
       "shadow_mode": true
@@ -61,31 +61,31 @@ Output behavior:
 
 Dung bo params nay cho case planning + risk:
 
-1. `clawkit_tool_recommend`
+1. `eidolon_tool_recommend`
 ```json
 {
   "task": "decide safe execution plan with memory evidence",
   "available_tools": [
-    "clawkit_memory_query",
-    "clawkit_compress_context",
-    "clawkit_reason_chain",
-    "clawkit_simulate_response"
+    "eidolon_memory_query",
+    "eidolon_compress_context",
+    "eidolon_reason_chain",
+    "eidolon_simulate_response"
   ],
   "recommender_model": "v2",
   "shadow_mode": true
 }
 ```
 
-2. `clawkit_route_action`
+2. `eidolon_route_action`
 ```json
 {
-  "suggested_tool": "clawkit_reason_chain",
+  "suggested_tool": "eidolon_reason_chain",
   "intent_confidence": 0.72,
   "context_type": "risk_analysis"
 }
 ```
 
-3. `clawkit_memory_query`
+3. `eidolon_memory_query`
 ```json
 {
   "query": "why risk increased and what failed previously",
@@ -94,7 +94,7 @@ Dung bo params nay cho case planning + risk:
 }
 ```
 
-4. `clawkit_compress_context`
+4. `eidolon_compress_context`
 ```json
 {
   "target_tokens": 700,
@@ -104,7 +104,7 @@ Dung bo params nay cho case planning + risk:
 }
 ```
 
-5. `clawkit_reason_chain`
+5. `eidolon_reason_chain`
 ```json
 {
   "draft": "proposed action",
@@ -114,14 +114,14 @@ Dung bo params nay cho case planning + risk:
 }
 ```
 
-6. `clawkit_simulate_response` (risk action only)
+6. `eidolon_simulate_response` (risk action only)
 ```json
 {
   "action": "execute planned action"
 }
 ```
 
-7. `clawkit_record_outcome` (post-result)
+7. `eidolon_record_outcome` (post-result)
 ```json
 {
   "pattern": "action_pattern_name",

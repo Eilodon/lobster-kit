@@ -1,2 +1,2 @@
-export { withRetry, withTimeout, type RetryConfig } from '@clawkit/core';
-export { CircuitBreaker, type CircuitBreakerOptions } from '@clawkit/toolkit';
+export { withRetry, withTimeout, type RetryConfig } from '@eidolon/core';
+export { CircuitBreaker, type CircuitBreakerOptions } from '@eidolon/toolkit';

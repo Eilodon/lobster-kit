@@ -1,8 +1,8 @@
-# 🔬 RESEARCH ANALYSIS: packages.zip → ClawKit-BNB Upgrades
+# 🔬 RESEARCH ANALYSIS: packages.zip → Eidolon-BNB Upgrades
 
 **Date:** Feb 17, 2026  
 **Scope:** wasm-core + engine packages  
-**Goal:** Identify what to steal/adapt/integrate into ClawKit-BNB
+**Goal:** Identify what to steal/adapt/integrate into Eidolon-BNB
 
 ---
 
@@ -12,7 +12,7 @@
 - `wasm-core/` → Rust: core logic (causal AI, order book, risk, thermo)
 - `engine/` → TypeScript: systems, networking, math, adapters
 
-**Nhận định:** Đây là codebase "anh em" với ClawKit-BNB, cùng DNA (ThermodynamicEngine, WASM), nhưng đi sâu hơn vào nhiều phần mà ClawKit chưa có.
+**Nhận định:** Đây là codebase "anh em" với Eidolon-BNB, cùng DNA (ThermodynamicEngine, WASM), nhưng đi sâu hơn vào nhiều phần mà Eidolon chưa có.
 
 ---
 
@@ -102,7 +102,7 @@ Optimization bằng **Adam** với:
 - Augmented Lagrangian (enforce DAG)
 - Thresholding final W
 
-**Ứng dụng cho ClawKit:**
+**Ứng dụng cho Eidolon:**
 - Cho agent **observe thị trường 30 ngày** → feed vào DAGMA
 - Output: "Mempool CAUSES Gas (0.87), Whale CAUSES Price (0.72)..."
 - Tự động phát hiện **causal relationships mới** mà human không hardcode
@@ -156,7 +156,7 @@ class CausalBrain {
 
 **File:** `sentinel/trauma.rs`
 
-Đây là feature **ClawKit hoàn toàn thiếu** - và cực kỳ quan trọng:
+Đây là feature **Eidolon hoàn toàn thiếu** - và cực kỳ quan trọng:
 
 ```rust
 pub struct TraumaHit {
@@ -212,7 +212,7 @@ Agent KHÔNG THỂ dùng "Whale Snipe + Berserk" trong 4 giờ tiếp theo!
 Severity EMA nhớ cái đau cũ!
 ```
 
-**ClawKit hiện tại:** Chỉ có cortisol spike đơn giản, không có memory về **specific action** bị burn.
+**Eidolon hiện tại:** Chỉ có cortisol spike đơn giản, không có memory về **specific action** bị burn.
 
 **Upgrade cần làm:**
 ```typescript
@@ -241,7 +241,7 @@ class TraumaRegistry {
 
 **File:** `sentinel/modes.rs`
 
-ClawKit hiện chỉ có emotional states (FLOW, PANIC, ANXIOUS). Codebase này có **7 operational modes** với risk levels và max leverage:
+Eidolon hiện chỉ có emotional states (FLOW, PANIC, ANXIOUS). Codebase này có **7 operational modes** với risk levels và max leverage:
 
 ```rust
 pub enum SentinelMode {
@@ -255,9 +255,9 @@ pub enum SentinelMode {
 }
 ```
 
-**Mapping sang ClawKit:**
+**Mapping sang Eidolon:**
 
-| SentinelMode | ClawKit Equivalent | Missing? |
+| SentinelMode | Eidolon Equivalent | Missing? |
 |--------------|-------------------|----------|
 | Zen | NEUTRAL | ✅ |
 | Stalking | No equivalent | ❌ MISSING |
@@ -267,7 +267,7 @@ pub enum SentinelMode {
 | Snipe | No equivalent | ❌ MISSING |
 | Emergency | PANIC | ✅ |
 
-**Especially valuable:** `Arbitrage` mode (risk 0.05, leverage 10x) - low risk nhưng high leverage vì atomic execution. ClawKit hoàn toàn thiếu cái này!
+**Especially valuable:** `Arbitrage` mode (risk 0.05, leverage 10x) - low risk nhưng high leverage vì atomic execution. Eidolon hoàn toàn thiếu cái này!
 
 **Integration:**
 ```typescript
@@ -311,7 +311,7 @@ impl Q64_96 {
 }
 ```
 
-**Tại sao quan trọng?** PancakeSwap V3 dùng Q64.96 internally. Khi ClawKit tính slippage từ sqrtPriceX96, cần convert đúng:
+**Tại sao quan trọng?** PancakeSwap V3 dùng Q64.96 internally. Khi Eidolon tính slippage từ sqrtPriceX96, cần convert đúng:
 
 ```rust
 // PancakeSwap sqrtPriceX96 → actual price
@@ -343,7 +343,7 @@ class BigMath {
 }
 ```
 
-**ClawKit hiện tại:** Dùng `Number()` và `parseFloat()` cho calculations. Bị precision loss với amounts > 2^53!
+**Eidolon hiện tại:** Dùng `Number()` và `parseFloat()` cho calculations. Bị precision loss với amounts > 2^53!
 
 **Cần upgrade ngay:**
 ```typescript
@@ -401,7 +401,7 @@ class SentinelBridge {
 }
 ```
 
-**ClawKit's WasmAdapter hiện tại** không có mock fallback. Nếu WASM fail → crash!
+**Eidolon's WasmAdapter hiện tại** không có mock fallback. Nếu WASM fail → crash!
 
 **Pattern cải tiến cần port:**
 1. Auto-detect WASM availability
@@ -442,7 +442,7 @@ class EventRingBuffer {
 }
 ```
 
-**ClawKit's EidolonBus hiện tại** dùng Node.js EventEmitter - allocates callbacks/objects on every emit!
+**Eidolon's EidolonBus hiện tại** dùng Node.js EventEmitter - allocates callbacks/objects on every emit!
 
 **Áp dụng cho:** Market events, block events, trade notifications → zero GC pressure.
 
@@ -513,7 +513,7 @@ class EntityManager {
 
 **Free list recycling với O(1) alloc/free** - không cần scan array!
 
-**Áp dụng cho ClawKit Swarm:**
+**Áp dụng cho Eidolon Swarm:**
 ```typescript
 // Thay vì:
 const peer = swarm.peers.get(agentId); // agentId có thể đã bị reuse!
@@ -591,7 +591,7 @@ abstract class BaseSimulation {
 }
 ```
 
-**Tại sao hay:** ClawKit SentinelHeart hiện tại dùng dynamic interval (adrenaline mode). Fixed timestep đảm bảo **deterministic simulation** - cần cho reproducible backtesting!
+**Tại sao hay:** Eidolon SentinelHeart hiện tại dùng dynamic interval (adrenaline mode). Fixed timestep đảm bảo **deterministic simulation** - cần cho reproducible backtesting!
 
 ---
 
@@ -617,7 +617,7 @@ abstract class BaseSimulation {
 ## 🏗️ KIẾN TRÚC SAU KHI UPGRADE
 
 ```
-CLAWKIT-BNB (NEXT VERSION)
+EIDOLON-BNB (NEXT VERSION)
 │
 ├── 🧠 RUST/WASM CORE (Expanded)
 │   ├── ValueInvariant (current)
@@ -878,7 +878,7 @@ export const MODE_CONFIG = {
 // learn() = "Nurture" - learned from experience
 ```
 
-Đây là elegant design: AI không bắt đầu blank slate mà có **domain knowledge được encode sẵn**, rồi mới học từ experience. ClawKit hiện tại bắt đầu từ zero.
+Đây là elegant design: AI không bắt đầu blank slate mà có **domain knowledge được encode sẵn**, rồi mới học từ experience. Eidolon hiện tại bắt đầu từ zero.
 
 ### 2. Entropy-driven Exploration
 
@@ -890,7 +890,7 @@ let action_threshold = 0.8 - (entropy * 0.1).clamp(0.0, 0.3);
 
 Agent tự động explore nhiều hơn khi "uncertain" (high entropy), exploit khi confident (low entropy). **Đây là Boltzmann exploration!**
 
-ClawKit hiện chưa có cái này.
+Eidolon hiện chưa có cái này.
 
 ### 3. Hash-based Context Keys cho Trauma
 
@@ -907,7 +907,7 @@ BundleAttack {
 // requires_simulation = true (ALWAYS simulate before)
 ```
 
-Đây là MEV bundle concept. ClawKit chưa có nhưng đây là next-level feature.
+Đây là MEV bundle concept. Eidolon chưa có nhưng đây là next-level feature.
 
 ### 5. Action Intrusiveness Score
 
@@ -926,7 +926,7 @@ fn requires_simulation(&self) -> bool {
 }
 ```
 
-**Elegant rule:** High intrusiveness → mandatory simulation before execution. ClawKit hiện cho simulation optional.
+**Elegant rule:** High intrusiveness → mandatory simulation before execution. Eidolon hiện cho simulation optional.
 
 ---
 
@@ -982,7 +982,7 @@ pub fn learn(&mut self, cause, effect, outcome_positive) {
 
 **Comment trong code:** "The 'Nature' part of Nature vs Nurture"
 
-Đây là cùng tư duy với **EmotionalCore** của ClawKit (biological model), **ThermodynamicEngine** (physics-based), và **ActiveLearning** (gradient learning).
+Đây là cùng tư duy với **EmotionalCore** của Eidolon (biological model), **ThermodynamicEngine** (physics-based), và **ActiveLearning** (gradient learning).
 
 Cả hai codebase đều đang **converge về cùng một vision:**
 
@@ -991,7 +991,7 @@ Cả hai codebase đều đang **converge về cùng một vision:**
 > Organism có: Fear (trauma) + Courage (flow)
 > Organism có: Memory (greenfield) + Reflex (rust)
 
-**Cái gì ở packages.zip mà ClawKit chưa có:**
+**Cái gì ở packages.zip mà Eidolon chưa có:**
 
 1. **Bayesian causality** (not just gradient descent)
 2. **Trauma with exponential backoff** (not just cortisol)

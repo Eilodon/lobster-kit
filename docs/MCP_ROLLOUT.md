@@ -27,7 +27,7 @@ pnpm mcp:preflight -- --env-file path/to/your.env
 
 ## 3. Key Gates
 
-- `COGNITIVE_CANARY_PERCENT`: rollout percentage for `clawkit_*`.
+- `COGNITIVE_CANARY_PERCENT`: rollout percentage for `eidolon_*`.
 - `COGNITIVE_AUTO_ROLLBACK_ERROR_RATE`: automatic disable threshold.
 - `COGNITIVE_AUTO_ROLLBACK_P95_MS`: latency rollback threshold.
 - `COGNITIVE_AUTO_ROLLBACK_MIN_CALLS`: minimum calls before rollback decisions.

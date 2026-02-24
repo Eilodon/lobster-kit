@@ -1,5 +1,5 @@
 import * as path from 'path';
-import type { IStorageProvider } from '@clawkit/core';
+import type { IStorageProvider } from '@eidolon/core';
 import { AppendOnlyAdapter } from './AppendOnlyAdapter';
 import type {
     GeneratedToolAuditRecord,

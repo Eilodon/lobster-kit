@@ -3,7 +3,7 @@ import { IActuatorHub } from './IActuatorHub';
 import { IMemoryHub } from './IMemoryHub';
 
 /**
- * IClawKit — The Combined Agent Runtime Interface.
+ * IEidolon — The Combined Agent Runtime Interface.
  *
  * Extends the three focused Hub interfaces:
  *   - ISensorHub  → reads from the world  (readClient, config, sense?)
@@ -13,7 +13,7 @@ import { IMemoryHub } from './IMemoryHub';
  * Domain-specific capabilities (defi, gas, analytics) are now injected
  * via DomainAdapterRegistry, not hardcoded on this interface.
  */
-export interface IClawKit extends ISensorHub, IActuatorHub, IMemoryHub {
+export interface IEidolon extends ISensorHub, IActuatorHub, IMemoryHub {
     // ISensorHub provides: readClient, config, sense?
     // IActuatorHub provides: writeClient, act?, getAddress()
     // IMemoryHub provides: remember?, recall?, forget?
