@@ -1,0 +1,155 @@
+{
+  "timestamp": "2026-02-24T01:15:13.476Z",
+  "dimensions": {
+    "persistentMemory": {
+      "cases": [
+        {
+          "label": "1.1 Cold-start query (no memories)",
+          "passed": true,
+          "clawkitValue": "Responded structurally",
+          "detail": "Route used: auto | Results: 69",
+          "latencyMs": 7
+        },
+        {
+          "label": "1.2 Semantic similarity recall",
+          "passed": true,
+          "clawkitValue": "Semantic search executed",
+          "detail": "Matches returned: 0 | Vanilla: impossible",
+          "latencyMs": 6
+        },
+        {
+          "label": "1.3 Route discrimination — episodic",
+          "passed": true,
+          "clawkitValue": "episodic",
+          "detail": "Correctly routed to episodic store",
+          "latencyMs": 7
+        },
+        {
+          "label": "1.3 Route discrimination — semantic",
+          "passed": true,
+          "clawkitValue": "semantic",
+          "detail": "Correctly routed to semantic store",
+          "latencyMs": 7
+        },
+        {
+          "label": "1.3 Route discrimination — causal",
+          "passed": true,
+          "clawkitValue": "causal",
+          "detail": "Correctly routed to causal store",
+          "latencyMs": 6
+        }
+      ],
+      "clawkitScore": 100,
+      "baselineScore": 0
+    },
+    "intentClassification": {
+      "cases": [
+        {
+          "label": "2.x High-risk destructive command",
+          "passed": true,
+          "clawkitValue": "risk=high, conf=79%",
+          "detail": "Expected risk: high | Got: high | Score: 0.586 | Backend: ollama",
+          "latencyMs": 1767
+        },
+        {
+          "label": "2.x Benign documentation request",
+          "passed": true,
+          "clawkitValue": "risk=low, conf=85%",
+          "detail": "Expected risk: low | Got: low | Score: 0.131 | Backend: ollama",
+          "latencyMs": 1496
+        },
+        {
+          "label": "2.x Security audit — medium risk",
+          "passed": true,
+          "clawkitValue": "risk=medium, conf=65%",
+          "detail": "Expected risk: medium | Got: medium | Score: 0.379 | Backend: ollama",
+          "latencyMs": 2084
+        },
+        {
+          "label": "2.x PII exfiltration attempt",
+          "passed": true,
+          "clawkitValue": "risk=high, conf=73%",
+          "detail": "Expected risk: high | Got: high | Score: 0.516 | Backend: ollama",
+          "latencyMs": 1746
+        },
+        {
+          "label": "2.x Standard CI task",
+          "passed": true,
+          "clawkitValue": "risk=low, conf=83%",
+          "detail": "Expected risk: low | Got: low | Score: 0.131 | Backend: ollama",
+          "latencyMs": 1692
+        },
+        {
+          "label": "2.x Critical infrastructure change",
+          "passed": true,
+          "clawkitValue": "risk=high, conf=72%",
+          "detail": "Expected risk: high | Got: high | Score: 0.516 | Backend: ollama",
+          "latencyMs": 1650
+        }
+      ],
+      "clawkitScore": 100,
+      "baselineScore": 65,
+      "meta": {
+        "accuracy": 100,
+        "avgConfidence": "76.0",
+        "correctRiskCount": 6,
+        "total": 6
+      }
+    },
+    "toolChaining": {
+      "cases": [
+        {
+          "label": "3.1 Security audit pipeline",
+          "passed": false,
+          "clawkitValue": null,
+          "detail": "Tools: [none] | Strategy: DeepAnalysis | Intent: DebugIssue",
+          "latencyMs": 1782
+        },
+        {
+          "label": "3.2 Multi-agent code review",
+          "passed": false,
+          "clawkitValue": null,
+          "detail": "Tools: [none] | Strategy: DeepAnalysis | Intent: CodeAudit",
+          "latencyMs": 1756
+        },
+        {
+          "label": "3.3 Debug + memory recall chain",
+          "passed": false,
+          "clawkitValue": null,
+          "detail": "Tools: [none] | Strategy: DeepAnalysis | Intent: DebugIssue",
+          "latencyMs": 1784
+        },
+        {
+          "label": "3.4 Tool recommendation ranking",
+          "passed": true,
+          "clawkitValue": "Top: clawkit_recall_similar (99%)",
+          "detail": "3 tools ranked | Vanilla: no structured ranking possible",
+          "latencyMs": 8
+        },
+        {
+          "label": "3.5 Shadow mode A/B (regret estimation)",
+          "passed": true,
+          "clawkitValue": "Shadow: v2 | Regret: N/A",
+          "detail": "Agreement: ? | Overlap: ?",
+          "latencyMs": 10
+        },
+        {
+          "label": "3.6 Subbrain response schema validation",
+          "passed": true,
+          "clawkitValue": "intent=true tools=true routing=false",
+          "detail": "Schema fields present: intent=true, tools=true, routing=false",
+          "latencyMs": 1654
+        }
+      ],
+      "clawkitScore": 50,
+      "baselineScore": 0
+    }
+  },
+  "summary": {
+    "clawkitOverall": 83,
+    "baselineOverall": 22,
+    "delta": 62,
+    "totalCases": 17,
+    "passed": 14
+  }
+}

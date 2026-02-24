@@ -34,11 +34,19 @@ jobs:
       - name: Check workspace dependency drift
         run: pnpm check:deps
 
+      - name: Check ghost file drift
+        run: pnpm ci:drift
+
       - name: Check integration mirror drift
         run: pnpm sync:integration-mirrors:check
 
       - name: Build all packages
         run: pnpm turbo run build
+
+      - name: Check WASM constraints
+        run: |
+          pnpm ci:wasm-size
+          pnpm ci:api-surface
 
       - name: Run Lint
         run: pnpm turbo run lint

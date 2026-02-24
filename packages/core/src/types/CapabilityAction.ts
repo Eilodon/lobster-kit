@@ -8,6 +8,8 @@
 
 import type { ActionType } from './EidolonTypes';
 
+let actionCounter = 0;
+
 /**
  * Generic action intent.
  *
@@ -72,8 +74,9 @@ export function createAction<T>(
     priority: CapabilityAction['priority'] = 'NORMAL',
     expiresAt?: number
 ): CapabilityAction<T> {
+    const nextId = actionCounter++;
     return {
-        id: `${domain}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: `${domain}-${Date.now()}-${nextId}`,
         domain,
         priority,
         payload,

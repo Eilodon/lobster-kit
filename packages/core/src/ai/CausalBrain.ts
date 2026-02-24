@@ -95,7 +95,7 @@ export class CausalBrain {
 
     constructor() {
         this.loadPriors();
-        this.initializeWasmGraph();
+        this.reinitWasmGraph();
     }
 
     private parseBooleanFlag(value: string | undefined, defaultValue: boolean): boolean {
@@ -267,13 +267,13 @@ export class CausalBrain {
 
         if (this.wasmGraph.import_edges) {
             try {
-                const payload: Record<string, { s: number; f: number }> = {};
+                const payload: Record<string, { successes: number; failures: number }> = {};
                 for (const [key, edge] of this.weights.entries()) {
                     const parsed = this.parseEdgeKey(key);
                     if (!parsed) continue;
-                    payload[`${VAR_TO_INDEX[parsed.cause]}->${VAR_TO_INDEX[parsed.effect]}`] = {
-                        s: edge.successes,
-                        f: edge.failures
+                    payload[`${parsed.cause}->${parsed.effect}`] = {
+                        successes: edge.successes,
+                        failures: edge.failures
                     };
                 }
                 this.wasmGraph.import_edges(payload);
@@ -375,10 +375,6 @@ export class CausalBrain {
             edge.successes = Number.isFinite(val.s) ? Math.max(0, val.s) : 0;
             edge.failures = Number.isFinite(val.f) ? Math.max(0, val.f) : 0;
             this.weights.set(key, edge);
-            // FIX: sync priors so rebuildRustGraphFromMap delta calc is correct
-            if (parsed) {
-                this.priors.set(key, { s: edge.successes, f: edge.failures });
-            }
         }
         this.rebuildRustGraphFromMap();
     }

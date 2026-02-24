@@ -1,0 +1,1 @@
+{"rustc":12013579709055016942,"features":"[]","declared_features":"[\"fail-on-warnings\", \"nightly-float\"]","target":8555734539376711143,"profile":10386308813174820261,"path":187775157263975635,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"release/.fingerprint/az-a5e3375f337f5395/dep-lib-az","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}

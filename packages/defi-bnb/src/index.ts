@@ -16,7 +16,7 @@ import { getPriceService } from './services/PriceService';
  *
  * This is the adapter facade for DeFi operations on opBNB.
  * For Eidolon soul/AI features, use @clawkit/soul.
- * For MCP server, use @clawkit/mcp.
+ * For MCP runtime, use packages/mcp-rust (via `pnpm mcp`).
  */
 export class ClawKit {
   public readonly defi: DeFiModule;

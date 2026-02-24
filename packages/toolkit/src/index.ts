@@ -14,6 +14,73 @@ import {
     IDomainAdapter,
 } from './adapters';
 
+type WriteClientAdapterShape = {
+    getAddresses: () => Promise<string[]>;
+    getChainId: () => Promise<number>;
+    signTypedData?: (args: unknown) => Promise<string>;
+    writeContract?: (args: unknown) => Promise<string>;
+    sendTransaction?: (args: unknown) => Promise<string>;
+};
+
+type ReadClientAdapterShape = {
+    readContract: (args: unknown) => Promise<unknown>;
+    getBlock?: (args?: unknown) => Promise<unknown>;
+    getBalance?: (args: unknown) => Promise<bigint>;
+    getChainId?: () => Promise<number>;
+};
+
+type PublicClientProbe = {
+    readContract?: unknown;
+    chain?: unknown;
+    transport?: unknown;
+};
+
+function createWriteClientAdapter(walletClient: ClawKitWalletClient): IWriteClient {
+    const source = walletClient as unknown as WriteClientAdapterShape;
+    const adapter: IWriteClient = {
+        getAddresses: () => walletClient.getAddresses(),
+        getChainId: () => walletClient.getChainId(),
+    };
+
+    if (typeof source.signTypedData === 'function') {
+        adapter.signTypedData = args => source.signTypedData!(args);
+    }
+    if (typeof source.writeContract === 'function') {
+        adapter.writeContract = args => source.writeContract!(args);
+    }
+    if (typeof source.sendTransaction === 'function') {
+        adapter.sendTransaction = args => source.sendTransaction!(args);
+    }
+
+    return adapter;
+}
+
+function createReadClientAdapter(readClient: IReadClient | PublicClient): IReadClient {
+    const source = readClient as unknown as ReadClientAdapterShape;
+    const adapter: IReadClient = {
+        readContract: args => source.readContract(args),
+    };
+
+    if (typeof source.getBlock === 'function') {
+        adapter.getBlock = args => source.getBlock!(args);
+    }
+    if (typeof source.getBalance === 'function') {
+        adapter.getBalance = args => source.getBalance!(args);
+    }
+    if (typeof source.getChainId === 'function') {
+        adapter.getChainId = () => source.getChainId!();
+    }
+
+    return adapter;
+}
+
+function isPublicClient(readClient: IReadClient): readClient is PublicClient {
+    const probe = readClient as unknown as PublicClientProbe;
+    return typeof probe.readContract === 'function'
+        && probe.chain !== undefined
+        && probe.transport !== undefined;
+}
+
 export class ClawKit implements IClawKit {
     public readonly adapters: DomainAdapterRegistry;
 
@@ -40,20 +107,25 @@ export class ClawKit implements IClawKit {
         this.validateConfig(config); // 🛡️ Zero-Trust Boot
 
         this.walletClient = walletClient;
-        this.writeClient = walletClient as unknown as IWriteClient;
+        this.writeClient = createWriteClientAdapter(walletClient);
         this.config = config;
 
         // Setup read client — injected or default opBNB
         if (readClient) {
-            this.readClient = readClient;
-            this.publicClient = readClient as unknown as PublicClient; // backward compat
+            this.readClient = createReadClientAdapter(readClient);
+            this.publicClient = isPublicClient(readClient)
+                ? readClient
+                : createPublicClient({
+                    chain: opBNB,
+                    transport: http(config.rpcUrl || 'https://opbnb-mainnet-rpc.bnbchain.org')
+                });
         } else {
             // Default: create opBNB PublicClient (backward-compatible behavior)
             this.publicClient = createPublicClient({
                 chain: opBNB,
                 transport: http(config.rpcUrl || 'https://opbnb-mainnet-rpc.bnbchain.org')
             });
-            this.readClient = this.publicClient as unknown as IReadClient;
+            this.readClient = createReadClientAdapter(this.publicClient);
         }
 
         // Initialize adapter registry

@@ -10,7 +10,7 @@ export { BreathEngine, BreathPhase, type PhaseDurations } from './ai/BreathEngin
 export { ThermodynamicEngine, type ThermoConfig, DEFAULT_THERMO_CONFIG } from './ai/ThermodynamicEngine';
 export { Vector, Matrix } from './ai/LinearAlgebra';
 export { DeepSeekOracle, type DeepSeekConfig } from './ai/DeepSeekOracle';
-export { CausalBrain, CausalEdge, type SentinelVariable } from './ai/CausalBrain';
+export { CausalBrain, CausalEdge, type SentinelVariable } from '@clawkit/core';
 export { type IOracle, type MarketContext, type OracleGenerationOptions, type OracleInsight } from './ai/IOracle';
 export { ClawOracle } from './sensors/ClawOracle';
 
@@ -21,7 +21,7 @@ export { EidolonGuard, type ValidationResult, type RiskParameters, type GuardCon
 
 // Brain & Consciousness
 export { ActiveLearning, type TradeOutcome } from './eidolon/ActiveLearning';
-export { DivineTransparency } from './eidolon/DivineTransparency';
+export { DivineTransparency } from '@clawkit/core';
 export * from './eidolon/EidolonTypes';
 
 // WASM
@@ -42,7 +42,8 @@ export {
     EidolonEventType,
     type EidolonEvent,
     type TradeExecutedEvent
-} from './events/EidolonBus';
+} from '@clawkit/core';
+export { KpiTracker, type KpiSnapshot } from './metrics/KpiTracker';
 // Cognitive Core (Phase 1 & 2)
 export { CognitiveArbiter } from './eidolon/CognitiveArbiter';
 export * from './eidolon/CognitiveTypes';

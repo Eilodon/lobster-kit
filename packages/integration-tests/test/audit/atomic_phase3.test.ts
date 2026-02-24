@@ -1,12 +1,20 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EidolonSimulator, ShadowTransaction } from '@clawkit/soul';
-import { GoPlusSecurity } from '../src/eidolon/oracles/GoPlusSecurity';
-import { PythAdapter } from '../src/eidolon/oracles/PythAdapter';
+import { GoPlusSecurity } from '@clawkit/soul';
+import { PythAdapter } from '@clawkit/soul';
 import axios from 'axios';
 
 // Mock dependencies
-vi.mock('axios');
+import axios from 'axios';
+vi.mock('axios', () => {
+    return {
+        default: {
+            get: vi.fn()
+        }
+    };
+});
+
 class MockWebSocket {
     onopen: () => void = () => { };
     onmessage: (event: any) => void = () => { };
@@ -101,7 +109,7 @@ describe('Atomic Audit Phase 3 Verification', () => {
         });
 
         it('should THROW on API error instead of returning null', async () => {
-            (axios.get as any).mockRejectedValue(new Error('Network Error'));
+            vi.mocked(axios.get).mockRejectedValue(new Error('Network Error'));
 
             await expect(security.checkToken('0xToken')).rejects.toThrow('Security Oracle Offline');
         });
@@ -132,7 +140,7 @@ describe('Atomic Audit Phase 3 Verification', () => {
 
         it('should fallback to HTTP on cache miss (Warm-up)', async () => {
             adapter = new PythAdapter();
-            (axios.get as any).mockResolvedValue({
+            vi.mocked(axios.get).mockResolvedValue({
                 data: {
                     parsed: [{
                         price: { price: '30000000000', expo: -8 } // 300.0
@@ -147,7 +155,7 @@ describe('Atomic Audit Phase 3 Verification', () => {
 
             // Subsequent call should be cached (if logic sets cache on http fallback)
             // Current logic sets cache on http fallback: this.priceCache.set(feedId, price);
-            (axios.get as any).mockClear();
+            vi.mocked(axios.get).mockClear();
             const price2 = await adapter.getPrice('BNB');
             expect(price2).toBe(300.0);
             expect(axios.get).not.toHaveBeenCalled();

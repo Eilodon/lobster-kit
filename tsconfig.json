@@ -11,9 +11,6 @@
       "path": "./packages/integration-tests"
     },
     {
-      "path": "./packages/mcp"
-    },
-    {
       "path": "./packages/soul"
     },
     {

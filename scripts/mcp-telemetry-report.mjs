@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
+import { execFileSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,6 +36,38 @@ function pct(v) {
   return `${(v * 100).toFixed(2)}%`;
 }
 
+function querySqliteJson(dbPath, sql) {
+  const output = execFileSync('sqlite3', ['-cmd', '.timeout 5000', '-json', dbPath, sql], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (!output.trim()) {
+    return [];
+  }
+  const parsed = JSON.parse(output);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function tableExists(dbPath, tableName) {
+  const rows = querySqliteJson(
+    dbPath,
+    `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}';`
+  );
+  return rows.length > 0;
+}
+
+function tableHasColumn(dbPath, tableName, columnName) {
+  if (!tableExists(dbPath, tableName)) return false;
+  const rows = querySqliteJson(dbPath, `PRAGMA table_info(${tableName});`);
+  return rows.some((row) => String(row?.name || '') === columnName);
+}
+
+function selectExpr(dbPath, tableName, columnName, fallbackExpr = '0', alias = columnName) {
+  return tableHasColumn(dbPath, tableName, columnName)
+    ? columnName
+    : `${fallbackExpr} AS ${alias}`;
+}
+
 const args = parseArgs(process.argv.slice(2));
 const limit = clampPositiveInt(args.limit, 30);
 const minCalls = clampPositiveInt(args.minCalls, 20);
@@ -45,35 +77,77 @@ if (!fs.existsSync(args.db)) {
   process.exit(1);
 }
 
-const db = new Database(args.db, { readonly: true });
+const rows = tableExists(args.db, 'tool_performance')
+  ? querySqliteJson(
+      args.db,
+      `
+      SELECT
+        tool_name,
+        call_count,
+        success_rate,
+        ${selectExpr(args.db, 'tool_performance', 'avg_latency_ms')},
+        ${selectExpr(args.db, 'tool_performance', 'latency_p95_ms', 'avg_latency_ms')},
+        ${selectExpr(args.db, 'tool_performance', 'fallback_rate', '0.0')},
+        last_called
+      FROM tool_performance
+      WHERE tool_name LIKE 'clawkit_%'
+      ORDER BY last_called DESC
+      LIMIT ${limit};
+      `
+    )
+  : [];
 
-const rows = db.prepare(`
-  SELECT
-    tool_name,
-    call_count,
-    success_rate,
-    avg_latency_ms,
-    latency_p95_ms,
-    fallback_rate,
-    last_called
-  FROM tool_performance
-  WHERE tool_name LIKE 'clawkit_%'
-  ORDER BY last_called DESC
-  LIMIT ?
-`).all(limit);
+const audits = tableExists(args.db, 'generated_tool_audit')
+  ? querySqliteJson(
+      args.db,
+      `
+      SELECT status, COUNT(*) AS count
+      FROM generated_tool_audit
+      GROUP BY status;
+      `
+    )
+  : [];
 
-const audits = db.prepare(`
-  SELECT
-    status,
-    COUNT(*) AS count
-  FROM generated_tool_audit
-  GROUP BY status
-`).all();
+let shadowSummary = null;
+if (tableExists(args.db, 'recommender_shadow_audit')) {
+  const overlapExpr = tableHasColumn(args.db, 'recommender_shadow_audit', 'top3_overlap_ratio')
+    ? 'top3_overlap_ratio'
+    : '0.0';
+  const shadowRows = querySqliteJson(
+    args.db,
+    `
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN top1_agreement = 1 THEN 1 ELSE 0 END) AS agreements,
+      AVG(${overlapExpr}) AS avg_top3_overlap
+    FROM recommender_shadow_audit;
+    `
+  );
+  shadowSummary = shadowRows[0] || null;
+}
 
-db.close();
+function printAuditSummaries() {
+  if (audits.length > 0) {
+    const summary = audits.map((entry) => `${entry.status}:${entry.count}`).join(' ');
+    console.log(`generated_tool_audit: ${summary}`);
+  }
+
+  if (shadowSummary && Number(shadowSummary.total ?? 0) > 0) {
+    const total = Number(shadowSummary.total ?? 0);
+    const agreements = Number(shadowSummary.agreements ?? 0);
+    const top1AgreementRate = agreements / Math.max(total, 1);
+    const top1DisagreementRate = 1 - top1AgreementRate;
+    const avgTop3Overlap = Number(shadowSummary.avg_top3_overlap ?? 0);
+    console.log(
+      `recommender_shadow_audit: total=${total} top1_agree=${pct(top1AgreementRate)} top1_disagree=${pct(top1DisagreementRate)} avg_top3_overlap=${pct(avgTop3Overlap)}`
+    );
+  }
+}
 
 if (rows.length === 0) {
+  console.log(`telemetry-report db=${path.relative(repoRoot, args.db)}`);
   console.log('telemetry-report: no cognitive tool data yet.');
+  printAuditSummaries();
   process.exit(0);
 }
 
@@ -98,10 +172,7 @@ for (const row of rows) {
   );
 }
 
-if (audits.length > 0) {
-  const summary = audits.map((entry) => `${entry.status}:${entry.count}`).join(' ');
-  console.log(`generated_tool_audit: ${summary}`);
-}
+printAuditSummaries();
 
 if (breaches > 0) {
   console.error(`telemetry-report: ${breaches} tool(s) breached thresholds.`);

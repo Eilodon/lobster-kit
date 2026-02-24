@@ -1,21 +1,105 @@
+const POW10_CACHE = new Map<number, bigint>([[0, 1n]]);
+
+function pow10(decimals: number): bigint {
+    if (!Number.isInteger(decimals) || decimals < 0) {
+        throw new Error(`BigMath: Invalid decimals '${decimals}'`);
+    }
+    const cached = POW10_CACHE.get(decimals);
+    if (cached !== undefined) return cached;
+
+    const computed = 10n ** BigInt(decimals);
+    POW10_CACHE.set(decimals, computed);
+    return computed;
+}
+
+function trimTrailingZeros(value: string): string {
+    let end = value.length;
+    while (end > 0 && value.charCodeAt(end - 1) === 48) {
+        end--;
+    }
+    return end === value.length ? value : value.slice(0, end);
+}
+
+function isDigits(value: string): boolean {
+    for (let i = 0; i < value.length; i++) {
+        const code = value.charCodeAt(i);
+        if (code < 48 || code > 57) return false;
+    }
+    return true;
+}
+
+type ParsedDecimal = {
+    negative: boolean;
+    intPart: string;
+    fracPart: string;
+};
+
+function parseDecimal(value: string): ParsedDecimal {
+    const normalized = value.trim();
+    if (!normalized) {
+        throw new Error(`BigMath: Invalid decimal input '${value}'`);
+    }
+
+    const negative = normalized.startsWith('-');
+    const unsigned = negative ? normalized.slice(1) : normalized;
+    if (!unsigned) {
+        throw new Error(`BigMath: Invalid decimal input '${value}'`);
+    }
+
+    const firstDot = unsigned.indexOf('.');
+    const lastDot = unsigned.lastIndexOf('.');
+    if (firstDot !== lastDot) {
+        throw new Error(`BigMath: Invalid decimal input '${value}'`);
+    }
+
+    const intPartRaw = firstDot >= 0 ? unsigned.slice(0, firstDot) : unsigned;
+    const fracPart = firstDot >= 0 ? unsigned.slice(firstDot + 1) : '';
+    const intPart = intPartRaw || '0';
+
+    if (!isDigits(intPart) || !isDigits(fracPart)) {
+        throw new Error(`BigMath: Invalid decimal input '${value}'`);
+    }
+    if (!intPartRaw && !fracPart) {
+        throw new Error(`BigMath: Invalid decimal input '${value}'`);
+    }
+
+    return { negative, intPart, fracPart };
+}
+
 // Native BigInt formatUnits/parseUnits — zero external dependencies
 function formatUnits(value: bigint, decimals: number): string {
-    const divisor = 10n ** BigInt(decimals);
+    const divisor = pow10(decimals);
     const negative = value < 0n;
     const abs = negative ? -value : value;
     const intPart = abs / divisor;
-    const fracPart = abs % divisor;
-    const fracStr = fracPart.toString().padStart(decimals, '0').replace(/0+$/, '');
     const sign = negative ? '-' : '';
+
+    if (decimals === 0) return `${sign}${intPart}`;
+
+    const fracPart = abs % divisor;
+    if (fracPart === 0n) return `${sign}${intPart}`;
+
+    let fracStr = fracPart.toString();
+    if (fracStr.length < decimals) {
+        fracStr = `${'0'.repeat(decimals - fracStr.length)}${fracStr}`;
+    }
+    fracStr = trimTrailingZeros(fracStr);
     return fracStr ? `${sign}${intPart}.${fracStr}` : `${sign}${intPart}`;
 }
 
 function parseUnits(value: string, decimals: number): bigint {
-    const negative = value.startsWith('-');
-    const unsigned = negative ? value.slice(1) : value;
-    const [intPart = '0', fracPart = ''] = unsigned.split('.');
-    const paddedFrac = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
-    const raw = BigInt(intPart + paddedFrac);
+    const { negative, intPart, fracPart } = parseDecimal(value);
+    const base = pow10(decimals);
+    const whole = BigInt(intPart) * base;
+
+    if (decimals === 0) {
+        return negative ? -whole : whole;
+    }
+
+    const clampedFrac = fracPart.length > decimals ? fracPart.slice(0, decimals) : fracPart;
+    const paddedFrac = clampedFrac.padEnd(decimals, '0');
+    const frac = paddedFrac ? BigInt(paddedFrac) : 0n;
+    const raw = whole + frac;
     return negative ? -raw : raw;
 }
 
@@ -31,19 +115,7 @@ export const HALF_RAY = RAY / 2n;
  */
 export class BigMath {
     private static decimalToScaledInt(value: string | number, scale: number): bigint {
-        const normalized = String(value).trim();
-        if (!/^-?\d+(\.\d+)?$/.test(normalized)) {
-            throw new Error(`BigMath: Invalid decimal input '${value}'`);
-        }
-
-        const negative = normalized.startsWith('-');
-        const unsigned = negative ? normalized.slice(1) : normalized;
-        const [intPart, fracPart = ''] = unsigned.split('.');
-        const base = 10n ** BigInt(scale);
-        const whole = BigInt(intPart) * base;
-        const frac = BigInt((fracPart + '0'.repeat(scale)).slice(0, scale) || '0');
-        const scaled = whole + frac;
-        return negative ? -scaled : scaled;
+        return parseUnits(String(value), scale);
     }
 
     /**

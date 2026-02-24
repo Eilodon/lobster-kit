@@ -56,3 +56,4 @@ test_output*.txt
 test_debug.txt
 packages/soul/core-rust/pkg/
 packages/soul/core-rust/pkg
+\ntarget/\ncrates/**/target/\n

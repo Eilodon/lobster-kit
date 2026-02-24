@@ -22,11 +22,13 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 export class MemoryRouter {
+    private static readonly HASH_YIELD_EVERY_ENTRIES = 256;
     private readonly episodicIndex = new ApproxVectorIndex({
         hyperplanes: 18,
         probes: 6,
     });
     private episodicIndexFingerprint = '';
+    private indexBuildPromise: Promise<void> | null = null;
 
     constructor(
         private readonly oracle: Pick<IOracle, 'embed'>,
@@ -38,7 +40,7 @@ export class MemoryRouter {
     public async query<T extends object>(context: MemoryQueryContext<T>): Promise<MemoryResult[]> {
         const embedding = await this.oracle.embed(context.worldState);
         const episodicEntries = await this.loadEpisodic();
-        this.ensureEpisodicIndex(episodicEntries);
+        await this.ensureEpisodicIndex(episodicEntries);
         const episodic = this.searchEpisodic(embedding, context.query, episodicEntries, 5);
         const semanticNodes = await this.memoryGraph.findRelatedByEmbedding(embedding, 5);
         const semantic = semanticNodes.map((node): MemoryResult => ({
@@ -118,17 +120,30 @@ export class MemoryRouter {
         return 0;
     }
 
-    private ensureEpisodicIndex(entries: MemoryEntry[]): void {
-        const fingerprint = this.fingerprint(entries);
-        if (fingerprint === this.episodicIndexFingerprint) return;
+    private async ensureEpisodicIndex(entries: MemoryEntry[]): Promise<void> {
+        if (this.indexBuildPromise) {
+            await this.indexBuildPromise;
+            return;
+        }
 
-        this.episodicIndex.rebuild(
-            entries.map((entry) => ({ id: entry.id, vector: entry.embedding }))
-        );
-        this.episodicIndexFingerprint = fingerprint;
+        this.indexBuildPromise = (async () => {
+            const fingerprint = await this.fingerprint(entries);
+            if (fingerprint === this.episodicIndexFingerprint) return;
+
+            this.episodicIndex.rebuild(
+                entries.map((entry) => ({ id: entry.id, vector: entry.embedding }))
+            );
+            this.episodicIndexFingerprint = fingerprint;
+        })();
+
+        try {
+            await this.indexBuildPromise;
+        } finally {
+            this.indexBuildPromise = null;
+        }
     }
 
-    private fingerprint(entries: MemoryEntry[]): string {
+    private async fingerprint(entries: MemoryEntry[]): Promise<string> {
         if (entries.length === 0) return '0';
 
         let hash = 2166136261 >>> 0;
@@ -163,8 +178,23 @@ export class MemoryRouter {
                     mix(quantize(entry.embedding[i], 10_000));
                 }
             }
+
+            if ((idx + 1) % MemoryRouter.HASH_YIELD_EVERY_ENTRIES === 0) {
+                await MemoryRouter.yieldToEventLoop();
+            }
         }
 
         return `${entries.length}|${hash.toString(16)}`;
+    }
+
+    private static async yieldToEventLoop(): Promise<void> {
+        const maybeSetImmediate = (globalThis as { setImmediate?: (cb: () => void) => void }).setImmediate;
+        await new Promise<void>((resolve) => {
+            if (typeof maybeSetImmediate === 'function') {
+                maybeSetImmediate(resolve);
+                return;
+            }
+            setTimeout(resolve, 0);
+        });
     }
 }

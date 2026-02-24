@@ -7,15 +7,8 @@ const mockGraph = {
     import_edges: vi.fn()
 };
 
-vi.mock('../src/WasmAdapter', () => ({
-    WasmAdapter: {
-        getInstance: () => ({
-            createCausalGraph: () => mockGraph
-        })
-    }
-}));
-
-import { CausalBrain } from '../src/ai/CausalBrain';
+import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
+import { CausalBrain } from '@clawkit/core';
 
 describe('CausalBrain WASM schema regression', () => {
     beforeEach(() => {
@@ -23,6 +16,9 @@ describe('CausalBrain WASM schema regression', () => {
         mockGraph.get_edge.mockClear();
         mockGraph.export_edges.mockClear();
         mockGraph.import_edges.mockClear();
+        CoreWasmAdapter.setInstance({
+            createCausalGraph: () => mockGraph
+        } as any);
     });
 
     it('should send named edge keys with successes/failures when importing synaptic map', () => {
@@ -43,7 +39,7 @@ describe('CausalBrain WASM schema regression', () => {
 
         const brain = new CausalBrain();
         brain.importSynapticMap({
-            'WhaleNetFlow->PriceDelta': { s: 7, f: 3 }
+            'WhaleNetFlow->PriceDelta': { s: 100, f: 50 }
         });
 
         expect(mockGraph.learn).toHaveBeenCalled();

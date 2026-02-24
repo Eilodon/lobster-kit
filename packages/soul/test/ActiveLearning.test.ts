@@ -4,6 +4,8 @@ import { ActiveLearning, LEARNING_CONFIG } from '../src/eidolon/ActiveLearning';
 import { DecisionLog, MarketState } from '../src/eidolon/EidolonTypes';
 import { IStorageProvider } from '@clawkit/core';
 import { AppendOnlyAdapter } from '@clawkit/core';
+import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
+import { WasmAdapter as SoulWasmAdapter } from '../src/WasmAdapter';
 
 // Mock Storage
 const mockStorage = {
@@ -22,6 +24,7 @@ describe('ActiveLearning', () => {
 
     beforeEach(async () => {
         vi.resetAllMocks();
+        CoreWasmAdapter.setInstance(SoulWasmAdapter.getInstance());
         mockStorage.load.mockResolvedValue(null); // Default empty
         mockStorage.readLog.mockResolvedValue([]);
 

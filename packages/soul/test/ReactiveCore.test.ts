@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EidolonBus, EidolonEventType } from '../src/events/EidolonBus';
+import { EidolonBus, EidolonEventType } from '@clawkit/core';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
 
 // Mock AppendOnlyAdapter while keeping other core exports intact.

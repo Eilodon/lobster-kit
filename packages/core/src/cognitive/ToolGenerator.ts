@@ -21,16 +21,79 @@ export interface GeneratedToolSpec {
 }
 
 function extractJsonPayload(raw: string): string | null {
-    const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+    const clean = raw.replace(/```(?:json)?/gi, '').trim();
     if ((clean.startsWith('{') && clean.endsWith('}')) || (clean.startsWith('[') && clean.endsWith(']'))) {
         return clean;
     }
-    const firstBrace = clean.indexOf('{');
-    const lastBrace = clean.lastIndexOf('}');
-    if (firstBrace >= 0 && lastBrace > firstBrace) {
-        return clean.slice(firstBrace, lastBrace + 1);
+
+    for (let i = 0; i < clean.length; i++) {
+        const ch = clean[i];
+        if (ch !== '{' && ch !== '[') continue;
+
+        const end = findBalancedJsonEnd(clean, i);
+        if (end < 0) continue;
+
+        const candidate = clean.slice(i, end + 1);
+        try {
+            JSON.parse(candidate);
+            return candidate;
+        } catch {
+            // Keep scanning for another valid JSON block.
+        }
     }
     return null;
+}
+
+function findBalancedJsonEnd(text: string, start: number): number {
+    let depthCurly = 0;
+    let depthSquare = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = start; i < text.length; i++) {
+        const ch = text[i];
+
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (ch === '"') {
+            inString = true;
+            continue;
+        }
+
+        if (ch === '{') {
+            depthCurly++;
+            continue;
+        }
+        if (ch === '}') {
+            depthCurly--;
+            if (depthCurly < 0) return -1;
+        } else if (ch === '[') {
+            depthSquare++;
+            continue;
+        } else if (ch === ']') {
+            depthSquare--;
+            if (depthSquare < 0) return -1;
+        }
+
+        if (depthCurly === 0 && depthSquare === 0) {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 function parseObject(raw: string): Record<string, unknown> | null {

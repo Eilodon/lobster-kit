@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'vitest';
-import * as wasm from '../pkg/core_rust';
+import * as wasm from '../../../crates/core-rust/pkg/core_rust';
 
 describe('Hotfix: Rust Panic in q64_96', () => {
     test('q64_96_div handles division by zero gracefully without panic', () => {

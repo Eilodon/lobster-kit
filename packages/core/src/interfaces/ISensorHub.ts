@@ -12,10 +12,12 @@
  * Generic read-only client for world state queries.
  * viem's PublicClient satisfies this interface automatically.
  */
+export type ReadClientArgs = Record<string, unknown>;
+
 export interface IReadClient {
-    readContract(args: unknown): Promise<unknown>;
-    getBlock?(args?: unknown): Promise<unknown>;
-    getBalance?(args: unknown): Promise<bigint>;
+    readContract(args: ReadClientArgs): Promise<unknown>;
+    getBlock?(args?: ReadClientArgs): Promise<unknown>;
+    getBalance?(args: ReadClientArgs): Promise<bigint>;
     getChainId?(): Promise<number>;
     [key: string]: unknown; // Allow domain-specific extensions
 }

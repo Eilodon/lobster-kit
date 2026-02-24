@@ -196,6 +196,17 @@ describe('Core Cognitive Modules', () => {
         expect((record?.latency_p95_ms ?? 0)).toBeGreaterThan(0);
     });
 
+    it('computes latency percentiles from bounded recent samples', async () => {
+        const tracker = new ToolPerformanceTracker(undefined, 4);
+        for (const latency of [1, 2, 3, 4, 5, 6]) {
+            await tracker.record('clawkit_reason_chain', true, latency);
+        }
+        const record = tracker.getRecord('clawkit_reason_chain');
+        expect(record).not.toBeNull();
+        expect(record?.latency_p50_ms).toBe(4);
+        expect(record?.latency_p95_ms).toBe(6);
+    });
+
     it('rejects unsafe generated-tool requests', async () => {
         const generator = new ToolGenerator();
         const safe = await generator.generate(
@@ -243,6 +254,44 @@ describe('Core Cognitive Modules', () => {
         expect(spec).not.toBeNull();
         expect(spec?.name.startsWith('clawkit_gen_')).toBe(true);
         expect(spec?.inputSchema.properties.max_lines?.type).toBe('number');
+    });
+
+    it('extracts valid JSON spec even when oracle output has trailing brace-like commentary', async () => {
+        const oracleBacked: CoreOracle = {
+            ...oracle,
+            async generate(prompt, options) {
+                if (options?.json && prompt.includes('Design a read-only MCP tool spec')) {
+                    return [
+                        'Sure, here is the payload:',
+                        JSON.stringify({
+                            name: 'clawkit_gen_resilient_parser',
+                            description: 'Read-only parser helper.',
+                            inputSchema: {
+                                type: 'object',
+                                properties: {
+                                    payload: { type: 'string', description: 'Raw text' },
+                                },
+                                required: ['payload'],
+                            },
+                            handlerHint: 'Read only.',
+                            capabilities: ['read_only', 'summarization'],
+                            allowed_domains: ['ops'],
+                        }),
+                        'Note: avoid malformed symbols like { in comments.',
+                    ].join('\n');
+                }
+                return '{}';
+            },
+        };
+
+        const generator = new ToolGenerator(oracleBacked);
+        const spec = await generator.generate(
+            'summarize logs',
+            createWorldState('ops', { channel: 'deploy' })
+        );
+        expect(spec).not.toBeNull();
+        expect(spec?.name).toBe('clawkit_gen_resilient_parser');
+        expect(spec?.inputSchema.required).toEqual(['payload']);
     });
 
     it('delegates through oracle-backed orchestrator', async () => {

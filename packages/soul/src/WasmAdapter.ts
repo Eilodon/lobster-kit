@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { Logger } from '@clawkit/core';
+import { Logger, WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
 
 export interface InvariantCheckResult {
     safe: boolean;
@@ -80,6 +80,9 @@ interface WasmCoreModule {
         discovery(): ConversationDomainConfig;
     };
     Intervenable?: GenericCtor;
+    WasmApproxVectorIndex?: new (hyperplanes?: number, probes?: number) => any;
+    BatchApprovalScanner?: new () => any;
+    get_abi_version?: () => number;
 }
 
 export interface SearchResult {
@@ -760,6 +763,48 @@ class WasmIntervenableProxy implements Intervenable {
 }
 
 /**
+ * WasmHyperMemoryProxy  wraps raw WASM HyperMemory for Zero-Copy search
+ */
+class WasmHyperMemoryProxy implements HyperMemory {
+    constructor(private readonly raw: any, private readonly getMemory: () => any) { }
+
+    insert(id: string, vector: Float32Array | number[]): void {
+        this.raw.insert(id, vector); // pass through
+    }
+
+    search(query: Float32Array | number[], k: number): SearchResult[] {
+        const vec = query instanceof Float32Array ? query : new Float32Array(query);
+        const ptr = this.raw.search(vec, k);
+        const len = this.raw.last_search_len();
+
+        if (len === 0) return [];
+
+        let wasmMem = this.getMemory();
+        if (wasmMem && typeof wasmMem === 'object' && wasmMem.buffer) {
+            wasmMem = wasmMem.buffer;
+        }
+
+        const view = new Float32Array(wasmMem, ptr, len * 2);
+        const results: SearchResult[] = [];
+
+        for (let i = 0; i < len; i++) {
+            const idx = view[i * 2];
+            const score = view[i * 2 + 1];
+            results.push({
+                id: this.raw.get_id(idx),
+                score
+            });
+        }
+
+        return results;
+    }
+
+    count(): number { return this.raw.count(); }
+    export_data(): unknown { return this.raw.export_data(); }
+    import_data(data: unknown): void { this.raw.import_data(data); }
+}
+
+/**
  * 🦀 WASM ADAPTER
 
  * Bridges the gap between TypeScript (Brain) and Rust (Heart).
@@ -790,6 +835,20 @@ export class WasmAdapter {
         WasmAdapter.instance = null as unknown as WasmAdapter;
     }
 
+    private verifyABI(module: WasmCoreModule): void {
+        const EXPECTED_ABI = 1;
+        if (typeof module.get_abi_version === 'function') {
+            const version = module.get_abi_version();
+            if (version !== EXPECTED_ABI) {
+                Logger.warn(`⚠️ WASM ABI Mismatch! Expected ${EXPECTED_ABI}, got ${version}. Falling back to TS.`);
+                throw new Error('ABI_MISMATCH');
+            }
+        } else {
+            Logger.warn(`⚠️ WASM ABI Mismatch! get_abi_version not found in wasm module. Falling back to TS.`);
+            throw new Error('ABI_MISSING');
+        }
+    }
+
     public async init(): Promise<void> {
         if (this.initialized) return;
 
@@ -810,8 +869,10 @@ export class WasmAdapter {
                     path.resolve(__dirname, '../core-rust/pkg/core_rust.js'),
                     path.resolve(__dirname, '../../core-rust/pkg/core_rust.js'),
                     path.resolve(__dirname, '../../../core-rust/pkg/core_rust.js'), // If deeply nested
-                    // Absolute fallback (rare but possible in Docker)
-                    path.resolve(process.cwd(), 'packages/soul/core-rust/pkg/core_rust.js')
+                    // New workspace layout: crates/core-rust
+                    path.resolve(__dirname, '../../crates/core-rust/pkg/core_rust.js'),
+                    path.resolve(process.cwd(), 'crates/core-rust/pkg/core_rust.js'),
+                    path.resolve(process.cwd(), '../../crates/core-rust/pkg/core_rust.js'),
                 ];
 
                 let jsPath: string | null = null;
@@ -826,16 +887,19 @@ export class WasmAdapter {
                     const wasmPath = jsPath.replace('.js', '_bg.wasm');
                     const module = await import(jsPath);
 
-                    // Case 1A: Node/Vitest where default is the exports object
                     if (module.default && typeof module.default !== 'function' && (module.default.ValueInvariant || module.default.CausalGraph)) {
+                        this.verifyABI(module.default);
                         this.coreModule = module.default;
                         this.fallbackMode = false;
+                        CoreWasmAdapter.setInstance(this);
                         Logger.info(`🦀 WASM Core Loaded (Node/Vitest Mode) from ${jsPath}`);
                     }
                     // Case 1B: Direct exports (ESM/CJS mixed)
                     else if (module.ValueInvariant || module.CausalGraph) {
+                        this.verifyABI(module);
                         this.coreModule = module;
                         this.fallbackMode = false;
+                        CoreWasmAdapter.setInstance(this);
                         Logger.info(`🦀 WASM Core Loaded (Direct Mode) from ${jsPath}`);
                     }
                     // Case 1C: Initialize WASM memory with Binary (Web/Bundler support)
@@ -843,8 +907,10 @@ export class WasmAdapter {
                         const buffer = fs.readFileSync(wasmPath);
                         if (typeof module.default === 'function') {
                             await module.default(buffer);
+                            this.verifyABI(module);
                             this.coreModule = module;
                             this.fallbackMode = false;
+                            CoreWasmAdapter.setInstance(this);
                             Logger.info(`🦀 WASM Core Loaded & Initialized from ${wasmPath}`);
                         } else {
                             Logger.warn('⚠️ WASM module default export missing');
@@ -864,6 +930,7 @@ export class WasmAdapter {
                     this.fallbackMode = true;
                 }
             } catch (e1) {
+                console.error('⚠️ WASM load failed:', e1);
                 Logger.warn('⚠️ WASM load failed:', e1);
                 this.coreModule = null; // Fallback
                 this.fallbackMode = true;
@@ -958,8 +1025,9 @@ export class WasmAdapter {
 
     public createHyperMemory(dimension: number): HyperMemory {
         const Ctor = this.coreModule?.HyperMemory;
-        if (Ctor) {
-            return new Ctor(dimension) as HyperMemory;
+        const getMem = (this.coreModule as any)?.hyper_memory_buffer;
+        if (Ctor && typeof getMem === 'function') {
+            return new WasmHyperMemoryProxy(new Ctor(dimension), getMem);
         }
         return new MockHyperMemory(dimension);
     }
@@ -1043,6 +1111,32 @@ export class WasmAdapter {
         }
 
         return numerator / denominator;
+    }
+
+    public createApproxVectorIndex(hyperplanes?: number, probes?: number): any {
+        if (!this.coreModule || !this.coreModule.WasmApproxVectorIndex) {
+            console.warn('WasmAdapter: WasmApproxVectorIndex construct requested but WASM module not loaded or WasmApproxVectorIndex not exported.');
+            return null;
+        }
+        try {
+            return new this.coreModule.WasmApproxVectorIndex(hyperplanes, probes);
+        } catch (e) {
+            console.error('WasmAdapter: Failed to instantiate WasmApproxVectorIndex', e);
+            return null;
+        }
+    }
+
+    public createBatchApprovalScanner(): any {
+        if (!this.coreModule || !this.coreModule.BatchApprovalScanner) {
+            console.warn('WasmAdapter: BatchApprovalScanner construct requested but WASM module not loaded or not exported.');
+            return null;
+        }
+        try {
+            return new this.coreModule.BatchApprovalScanner();
+        } catch (e) {
+            console.error('WasmAdapter: Failed to instantiate BatchApprovalScanner', e);
+            return null;
+        }
     }
 
     /**

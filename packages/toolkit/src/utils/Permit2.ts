@@ -13,6 +13,7 @@
  */
 
 import { encodeAbiParameters, parseAbi } from 'viem';
+import type { IReadClient } from '@clawkit/core';
 import { ClawKitWalletClient, toAddress } from '../types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ const PERMIT2_ABI = parseAbi([
  */
 export async function signPermit2(
     walletClient: ClawKitWalletClient,
-    publicClient: { readContract: (args: unknown) => Promise<unknown> },
+    publicClient: Pick<IReadClient, 'readContract'>,
     token: string,
     spender: string,
     amount: bigint,

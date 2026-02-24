@@ -30,6 +30,9 @@ const mirrorRules = [
       content.replace(
         "import { IStorageProvider } from './IStorageProvider';",
         "import type { IStorageProvider } from '@clawkit/core';"
+      ).replace(
+        "import { AsyncLock } from \"../utils/AsyncLock\";",
+        "import { AsyncLock } from '@clawkit/core';"
       )
   },
   {

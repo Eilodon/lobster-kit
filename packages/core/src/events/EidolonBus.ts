@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { ActionType, DecisionLog } from '../types/EidolonTypes';
 import { EventRingBuffer } from './EventRingBuffer';
+import type { ZodType } from 'zod';
 
 /**
  * ⚡ EIDOLON NERVOUS SYSTEM
@@ -176,6 +177,25 @@ export class EidolonBus extends EventEmitter {
         callback: (event: T) => void
     ): () => void {
         const handler = (event: EidolonEvent) => callback(event as T);
+        this.on(type, handler);
+        return () => this.off(type, handler);
+    }
+
+    /**
+     * Runtime-safe typed subscription using Zod validation at the event boundary.
+     */
+    public subscribeTypedValidated<T extends EidolonEvent>(
+        type: T['type'],
+        schema: ZodType<T>,
+        callback: (event: T) => void
+    ): () => void {
+        const handler = (event: EidolonEvent) => {
+            const parsed = schema.safeParse(event);
+            if (!parsed.success) {
+                return;
+            }
+            callback(parsed.data);
+        };
         this.on(type, handler);
         return () => this.off(type, handler);
     }

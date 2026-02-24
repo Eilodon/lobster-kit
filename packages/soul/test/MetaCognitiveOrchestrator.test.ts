@@ -11,6 +11,15 @@ const mockOracle = {
     counterfactual: vi.fn(),
     getName: vi.fn().mockReturnValue('MockOracle'),
     extractCausalHypothesis: vi.fn(),
+    generate: vi.fn().mockImplementation(async (prompt: string) => {
+        if (prompt.includes('update my user profile')) {
+            return JSON.stringify({ tool: 'clawkit_update_user', score: 0.95 });
+        }
+        if (prompt.includes('compress this')) {
+            return JSON.stringify({ tool: 'clawkit_compress_context', score: 0.88 });
+        }
+        return JSON.stringify({ tool: 'clawkit_reason_chain', score: 0.5 });
+    })
 } as unknown as IOracle;
 
 describe('MetaCognitiveOrchestrator HOTL-Native Integration', () => {

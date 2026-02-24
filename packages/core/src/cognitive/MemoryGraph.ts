@@ -31,8 +31,23 @@ function lexicalScore(query: string, concept: string): number {
 
 export class MemoryGraph {
     private readonly nodes = new Map<string, MemoryNode>();
+    private readonly maxCachedNodes: number;
+    private readonly hydrateLimit: number;
+    private readonly maxEdgesPerNode: number;
+    private hydrated = false;
 
-    constructor(private readonly store?: SQLiteLearningStore) { }
+    constructor(
+        private readonly store?: SQLiteLearningStore,
+        options: {
+            maxCachedNodes?: number;
+            hydrateLimit?: number;
+            maxEdgesPerNode?: number;
+        } = {}
+    ) {
+        this.maxCachedNodes = Math.max(1, options.maxCachedNodes ?? 2000);
+        this.hydrateLimit = Math.max(1, options.hydrateLimit ?? 1000);
+        this.maxEdgesPerNode = Math.max(1, options.maxEdgesPerNode ?? 64);
+    }
 
     public async addNode(node: MemoryNode): Promise<void> {
         const normalized: MemoryNode = {
@@ -40,7 +55,7 @@ export class MemoryGraph {
             updated_at: Date.now(),
             connections: node.connections ?? [],
         };
-        this.nodes.set(node.id, normalized);
+        this.setNode(node.id, normalized);
         if (this.store?.upsertSemanticNode) {
             await this.store.upsertSemanticNode(normalized);
             for (const edge of normalized.connections) {
@@ -56,7 +71,9 @@ export class MemoryGraph {
             .filter((entry) => entry.score > 0)
             .sort((a, b) => b.score - a.score)
             .slice(0, Math.max(limit, depth * 3));
-        return scored.map((entry) => entry.node);
+        const out = scored.map((entry) => entry.node);
+        this.touchMany(out);
+        return out;
     }
 
     public async findRelatedByEmbedding(embedding: number[], limit = 10): Promise<MemoryNode[]> {
@@ -65,7 +82,9 @@ export class MemoryGraph {
             .map((node) => ({ node, score: cosineSimilarity(embedding, node.embedding) }))
             .sort((a, b) => b.score - a.score)
             .slice(0, limit);
-        return scored.map((entry) => entry.node);
+        const out = scored.map((entry) => entry.node);
+        this.touchMany(out);
+        return out;
     }
 
     public async merge(a: string, b: string): Promise<void> {
@@ -92,7 +111,7 @@ export class MemoryGraph {
             connections: Array.from(mergedConnections.values()),
             updated_at: Date.now(),
         };
-        this.nodes.set(a, merged);
+        this.setNode(a, merged);
         this.nodes.delete(b);
 
         if (this.store?.upsertSemanticNode) {
@@ -107,10 +126,39 @@ export class MemoryGraph {
 
     private async hydrateFromStore(): Promise<void> {
         if (!this.store?.listSemanticNodes) return;
-        if (this.nodes.size > 0) return;
-        const nodes = await this.store.listSemanticNodes();
+        if (this.hydrated) return;
+        const nodes = await this.store.listSemanticNodes(this.hydrateLimit, this.maxEdgesPerNode);
         for (const node of nodes) {
-            this.nodes.set(node.id, node);
+            this.setNode(node.id, node);
+        }
+        this.hydrated = true;
+    }
+
+    private setNode(id: string, node: MemoryNode): void {
+        // Map insertion order is used as LRU order.
+        this.nodes.delete(id);
+        this.nodes.set(id, node);
+        this.evictIfNeeded();
+    }
+
+    private touchMany(nodes: MemoryNode[]): void {
+        for (const node of nodes) {
+            this.touch(node.id);
+        }
+    }
+
+    private touch(id: string): void {
+        const node = this.nodes.get(id);
+        if (!node) return;
+        this.nodes.delete(id);
+        this.nodes.set(id, node);
+    }
+
+    private evictIfNeeded(): void {
+        while (this.nodes.size > this.maxCachedNodes) {
+            const oldest = this.nodes.keys().next().value;
+            if (!oldest) break;
+            this.nodes.delete(oldest);
         }
     }
 }

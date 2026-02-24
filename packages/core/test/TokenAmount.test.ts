@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TokenAmount } from '../src/math/TokenAmount';
+import { TokenAmount } from '../../toolkit/src/math/TokenAmount';
 
 describe('TokenAmount', () => {
     it('should parse and format human amounts safely', () => {

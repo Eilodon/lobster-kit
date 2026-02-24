@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EidolonGuard } from '../src/eidolon/EidolonGuard';
-import { WasmAdapter } from '../src/WasmAdapter';
+import { WasmAdapter as SoulWasmAdapter } from '../src/WasmAdapter';
+import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
 
 function stableBucket(seed: string): number {
     let hash = 2166136261 >>> 0;
@@ -89,12 +90,14 @@ describe('EidolonGuard Canary Consistency (Rust ON/OFF)', () => {
 
     beforeEach(() => {
         vi.restoreAllMocks();
-        vi.spyOn(WasmAdapter, 'getInstance').mockReturnValue({
+        const mockInstance = {
             createValueInvariant: () => mockValueInvariant,
             createAntiRug: () => mockAntiRug,
             createCausalGraph: () => mockCausalGraph,
             createTraumaRegistry: () => mockTraumaRegistry
-        } as any);
+        } as any;
+        vi.spyOn(SoulWasmAdapter, 'getInstance').mockReturnValue(mockInstance);
+        CoreWasmAdapter.setInstance(mockInstance);
     });
 
     afterEach(() => {

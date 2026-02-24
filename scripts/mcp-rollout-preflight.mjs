@@ -9,9 +9,9 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 
 const PROFILE_TO_FILE = {
-  development: 'packages/mcp/env/mcp.development.env.example',
-  staging: 'packages/mcp/env/mcp.staging.env.example',
-  production: 'packages/mcp/env/mcp.production.env.example',
+  development: 'packages/mcp-rust/env/mcp.development.env.example',
+  staging: 'packages/mcp-rust/env/mcp.staging.env.example',
+  production: 'packages/mcp-rust/env/mcp.production.env.example',
 };
 
 function parseArgs(argv) {
@@ -63,6 +63,20 @@ function parseNumber(raw, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function parseCsv(raw, fallback) {
+  const source = typeof raw === 'string' && raw.trim().length > 0 ? raw : fallback;
+  return String(source)
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+    .map((entry) => {
+      if (entry === 'dev') return 'development';
+      if (entry === 'prod') return 'production';
+      if (entry === 'stage') return 'staging';
+      return entry;
+    });
+}
+
 function loadEnvProfile(profile, envFile) {
   const profileFile = PROFILE_TO_FILE[profile];
   const target = envFile
@@ -87,26 +101,48 @@ function loadEnvProfile(profile, envFile) {
 }
 
 function getConfig(values) {
+  const runtimeProfileRaw = String(values.MCP_ENV_PROFILE ?? values.RUNTIME_ENV ?? values.NODE_ENV ?? 'development')
+    .toLowerCase();
+  const runtimeProfile = runtimeProfileRaw === 'dev'
+    ? 'development'
+    : runtimeProfileRaw === 'prod'
+      ? 'production'
+      : runtimeProfileRaw === 'stage'
+        ? 'staging'
+        : runtimeProfileRaw;
+
   return {
+    runtimeProfile,
+    primaryRuntime: String(values.MCP_PRIMARY_RUNTIME ?? 'rust').toLowerCase(),
     cognitiveToolsEnabled: parseBoolean(values.COGNITIVE_TOOLS_ENABLED, true),
     reasonChainEnabled: parseBoolean(values.REASON_CHAIN_ENABLED, true),
     contextCompressionEnabled: parseBoolean(values.CONTEXT_COMPRESSION_ENABLED, true),
     orchestratorEnabled: parseBoolean(values.ORCHESTRATOR_ENABLED, false),
     toolGenExperimentalEnabled: parseBoolean(values.TOOL_GEN_EXPERIMENTAL_ENABLED, false),
     toolGenOracleExecution: parseBoolean(values.TOOL_GEN_ORACLE_EXECUTION, false),
+    toolGenAllowedEnvs: parseCsv(values.TOOL_GEN_ALLOWED_ENVS, 'development,staging'),
     generatedToolMax: Math.floor(parseNumber(values.TOOL_GEN_MAX_DYNAMIC_TOOLS, 32)),
+    toolGenPromoteMinCalls: Math.floor(parseNumber(values.TOOL_GEN_PROMOTE_MIN_CALLS, 30)),
+    toolGenPromoteMaxErrorRate: parseNumber(values.TOOL_GEN_PROMOTE_MAX_ERROR_RATE, 0.15),
+    toolGenPromoteMaxP95Ms: parseNumber(values.TOOL_GEN_PROMOTE_MAX_P95_MS, 1800),
+    toolGenPromoteMaxFallbackRate: parseNumber(values.TOOL_GEN_PROMOTE_MAX_FALLBACK_RATE, 0.2),
+    toolGenPromoteMinSatisfaction: parseNumber(values.TOOL_GEN_PROMOTE_MIN_SATISFACTION, 0.7),
     canaryPercent: parseNumber(values.COGNITIVE_CANARY_PERCENT, 100),
     shadowModeEnabled: parseBoolean(values.COGNITIVE_SHADOW_MODE_ENABLED, false),
     shadowSamplePercent: parseNumber(values.COGNITIVE_SHADOW_SAMPLE_PERCENT, 100),
     rollbackErrorRate: parseNumber(values.COGNITIVE_AUTO_ROLLBACK_ERROR_RATE, 0.35),
     rollbackP95Ms: parseNumber(values.COGNITIVE_AUTO_ROLLBACK_P95_MS, 3000),
     rollbackMinCalls: Math.floor(parseNumber(values.COGNITIVE_AUTO_ROLLBACK_MIN_CALLS, 20)),
+    recommenderPrimary: String(values.COGNITIVE_RECOMMENDER_PRIMARY ?? 'v2').toLowerCase(),
+    recommenderShadow: String(values.COGNITIVE_RECOMMENDER_SHADOW ?? 'v1').toLowerCase(),
+    reasoningLatencyBudgetMs: Math.floor(parseNumber(values.COGNITIVE_REASONING_LATENCY_BUDGET_MS, 1200)),
   };
 }
 
 function validate(profile, cfg) {
   const errors = [];
   const warnings = [];
+  const allowedEnvSet = new Set(['development', 'staging', 'production']);
 
   if (cfg.canaryPercent < 0 || cfg.canaryPercent > 100) {
     errors.push('COGNITIVE_CANARY_PERCENT must be within [0, 100].');
@@ -125,6 +161,62 @@ function validate(profile, cfg) {
   }
   if (cfg.generatedToolMax < 1 || cfg.generatedToolMax > 128) {
     errors.push('TOOL_GEN_MAX_DYNAMIC_TOOLS must be within [1, 128].');
+  }
+  if (cfg.toolGenPromoteMinCalls < 1) {
+    errors.push('TOOL_GEN_PROMOTE_MIN_CALLS must be >= 1.');
+  }
+  if (cfg.toolGenPromoteMaxErrorRate < 0 || cfg.toolGenPromoteMaxErrorRate > 1) {
+    errors.push('TOOL_GEN_PROMOTE_MAX_ERROR_RATE must be within [0, 1].');
+  }
+  if (cfg.toolGenPromoteMaxP95Ms < 1) {
+    errors.push('TOOL_GEN_PROMOTE_MAX_P95_MS must be >= 1.');
+  }
+  if (cfg.toolGenPromoteMaxFallbackRate < 0 || cfg.toolGenPromoteMaxFallbackRate > 1) {
+    errors.push('TOOL_GEN_PROMOTE_MAX_FALLBACK_RATE must be within [0, 1].');
+  }
+  if (cfg.toolGenPromoteMinSatisfaction < 0 || cfg.toolGenPromoteMinSatisfaction > 1) {
+    errors.push('TOOL_GEN_PROMOTE_MIN_SATISFACTION must be within [0, 1].');
+  }
+  if (!allowedEnvSet.has(cfg.runtimeProfile)) {
+    warnings.push(`MCP_ENV_PROFILE=${cfg.runtimeProfile} is unusual; expected development|staging|production.`);
+  }
+  if (cfg.toolGenAllowedEnvs.length === 0) {
+    errors.push('TOOL_GEN_ALLOWED_ENVS must include at least one environment.');
+  }
+  for (const envName of cfg.toolGenAllowedEnvs) {
+    if (!allowedEnvSet.has(envName)) {
+      errors.push(`TOOL_GEN_ALLOWED_ENVS contains invalid value: ${envName}`);
+    }
+  }
+  if (profile !== cfg.runtimeProfile) {
+    warnings.push(`Profile mismatch: --profile=${profile} but MCP_ENV_PROFILE=${cfg.runtimeProfile}.`);
+  }
+  if (cfg.toolGenExperimentalEnabled && !cfg.toolGenAllowedEnvs.includes(cfg.runtimeProfile)) {
+    errors.push(`TOOL_GEN_EXPERIMENTAL_ENABLED=true but runtime profile ${cfg.runtimeProfile} is not in TOOL_GEN_ALLOWED_ENVS.`);
+  }
+  if (cfg.toolGenAllowedEnvs.includes('production')) {
+    warnings.push('TOOL_GEN_ALLOWED_ENVS includes production. Keep disabled unless rollout has explicit approval.');
+  }
+  if (!['v1', 'v2'].includes(cfg.recommenderPrimary)) {
+    errors.push('COGNITIVE_RECOMMENDER_PRIMARY must be v1 or v2.');
+  }
+  if (!['v1', 'v2'].includes(cfg.recommenderShadow)) {
+    errors.push('COGNITIVE_RECOMMENDER_SHADOW must be v1 or v2.');
+  }
+  if (cfg.recommenderPrimary === cfg.recommenderShadow) {
+    warnings.push('Recommender primary and shadow are identical; A/B shadow signal will be weak.');
+  }
+  if (cfg.reasoningLatencyBudgetMs < 200) {
+    errors.push('COGNITIVE_REASONING_LATENCY_BUDGET_MS must be >= 200.');
+  }
+  if (!['rust', 'node'].includes(cfg.primaryRuntime)) {
+    errors.push('MCP_PRIMARY_RUNTIME must be rust or node.');
+  }
+  if (profile !== 'development' && cfg.primaryRuntime !== 'rust') {
+    errors.push('MCP_PRIMARY_RUNTIME must be rust outside development.');
+  }
+  if (profile === 'production' && cfg.primaryRuntime !== 'rust') {
+    errors.push('Production runtime must be rust.');
   }
 
   if (!cfg.cognitiveToolsEnabled && (cfg.reasonChainEnabled || cfg.contextCompressionEnabled || cfg.orchestratorEnabled)) {
@@ -170,19 +262,30 @@ function printSummary(profile, source, cfg, warnings, errors) {
   console.log(`mcp-rollout-preflight profile=${profile}`);
   console.log(`env_source=${source ? path.relative(repoRoot, source) : 'process.env'}`);
   console.log('config:');
+  console.log(`- MCP_ENV_PROFILE=${cfg.runtimeProfile}`);
+  console.log(`- MCP_PRIMARY_RUNTIME=${cfg.primaryRuntime}`);
   console.log(`- COGNITIVE_TOOLS_ENABLED=${cfg.cognitiveToolsEnabled}`);
   console.log(`- REASON_CHAIN_ENABLED=${cfg.reasonChainEnabled}`);
   console.log(`- CONTEXT_COMPRESSION_ENABLED=${cfg.contextCompressionEnabled}`);
   console.log(`- ORCHESTRATOR_ENABLED=${cfg.orchestratorEnabled}`);
   console.log(`- TOOL_GEN_EXPERIMENTAL_ENABLED=${cfg.toolGenExperimentalEnabled}`);
   console.log(`- TOOL_GEN_ORACLE_EXECUTION=${cfg.toolGenOracleExecution}`);
+  console.log(`- TOOL_GEN_ALLOWED_ENVS=${cfg.toolGenAllowedEnvs.join(',')}`);
   console.log(`- TOOL_GEN_MAX_DYNAMIC_TOOLS=${cfg.generatedToolMax}`);
+  console.log(`- TOOL_GEN_PROMOTE_MIN_CALLS=${cfg.toolGenPromoteMinCalls}`);
+  console.log(`- TOOL_GEN_PROMOTE_MAX_ERROR_RATE=${cfg.toolGenPromoteMaxErrorRate}`);
+  console.log(`- TOOL_GEN_PROMOTE_MAX_P95_MS=${cfg.toolGenPromoteMaxP95Ms}`);
+  console.log(`- TOOL_GEN_PROMOTE_MAX_FALLBACK_RATE=${cfg.toolGenPromoteMaxFallbackRate}`);
+  console.log(`- TOOL_GEN_PROMOTE_MIN_SATISFACTION=${cfg.toolGenPromoteMinSatisfaction}`);
   console.log(`- COGNITIVE_CANARY_PERCENT=${cfg.canaryPercent}`);
   console.log(`- COGNITIVE_SHADOW_MODE_ENABLED=${cfg.shadowModeEnabled}`);
   console.log(`- COGNITIVE_SHADOW_SAMPLE_PERCENT=${cfg.shadowSamplePercent}`);
   console.log(`- COGNITIVE_AUTO_ROLLBACK_ERROR_RATE=${cfg.rollbackErrorRate}`);
   console.log(`- COGNITIVE_AUTO_ROLLBACK_P95_MS=${cfg.rollbackP95Ms}`);
   console.log(`- COGNITIVE_AUTO_ROLLBACK_MIN_CALLS=${cfg.rollbackMinCalls}`);
+  console.log(`- COGNITIVE_RECOMMENDER_PRIMARY=${cfg.recommenderPrimary}`);
+  console.log(`- COGNITIVE_RECOMMENDER_SHADOW=${cfg.recommenderShadow}`);
+  console.log(`- COGNITIVE_REASONING_LATENCY_BUDGET_MS=${cfg.reasoningLatencyBudgetMs}`);
 
   if (warnings.length > 0) {
     console.log('warnings:');

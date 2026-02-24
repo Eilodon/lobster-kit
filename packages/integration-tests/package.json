@@ -14,7 +14,6 @@
         "@clawkit/soul": "workspace:*",
         "@clawkit/toolkit": "workspace:*",
         "@clawkit/defi-bnb": "workspace:*",
-        "@clawkit/mcp": "workspace:*",
         "viem": "^2.7.0",
         "zod": "^3.25.76",
         "dotenv": "^16.4.1"

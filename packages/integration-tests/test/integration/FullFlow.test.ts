@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { EidolonGuard } from '../src/eidolon/EidolonGuard';
-import { EidolonBus, EidolonEventType } from '@clawkit/soul';
-import { WasmAdapter } from '../src/eidolon/WasmAdapter';
+import { EidolonGuard, EidolonBus, EidolonEventType, WasmAdapter } from '@clawkit/soul';
 import path from 'path';
 
 // Mock dependencies (but try to use real logic where possible)

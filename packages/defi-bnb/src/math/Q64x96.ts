@@ -1,18 +1,26 @@
+import { WasmAdapter } from '@clawkit/core';
+
 /**
  * Q64.96 fixed-point helpers for UniswapV3/PancakeV3 math.
- * Pure TypeScript implementation (no WASM dependency).
- * For WASM-accelerated version, use @clawkit/soul.
+ * Hybrid Mode:
+ * - Transparently uses WASM accelerated math from @clawkit/soul if running in the full agent.
+ * - Falls back to pure TypeScript implementation dynamically if running isolated.
  */
 export class Q64x96 {
-    private static readonly Q96 = 1n << 96n;
-    private static readonly WAD = 10n ** 18n;
-
     static mul(aRaw: bigint, bRaw: bigint): bigint {
+        const adapter = WasmAdapter.getInstance();
+        if (typeof (adapter as any).q64_96_mul === 'function') {
+            return (adapter as any).q64_96_mul(aRaw, bRaw);
+        }
         return (aRaw * bRaw) >> 96n;
     }
 
     static div(aRaw: bigint, bRaw: bigint): bigint {
         if (bRaw === 0n) throw new Error('Q64x96: division by zero');
+        const adapter = WasmAdapter.getInstance();
+        if (typeof (adapter as any).q64_96_div === 'function') {
+            return (adapter as any).q64_96_div(aRaw, bRaw);
+        }
         return (aRaw << 96n) / bRaw;
     }
 
@@ -25,8 +33,13 @@ export class Q64x96 {
         token0Decimals: number,
         token1Decimals: number
     ): bigint {
-        // price = (sqrtPriceX96 / 2^96)^2 * 10^(d0-d1) * 1e18
-        const price = (sqrtPriceX96 * sqrtPriceX96 * this.WAD) >> (96n * 2n);
+        const adapter = WasmAdapter.getInstance();
+        if (typeof (adapter as any).sqrt_price_x96_to_price_wad === 'function') {
+            return (adapter as any).sqrt_price_x96_to_price_wad(sqrtPriceX96, token0Decimals, token1Decimals);
+        }
+
+        const WAD = 10n ** 18n;
+        const price = (sqrtPriceX96 * sqrtPriceX96 * WAD) >> (96n * 2n);
         const decimalAdj = BigInt(10 ** Math.abs(token0Decimals - token1Decimals));
         if (token0Decimals >= token1Decimals) {
             return price * decimalAdj;

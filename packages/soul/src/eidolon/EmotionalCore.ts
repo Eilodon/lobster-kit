@@ -2,7 +2,7 @@ import { ThermodynamicEngine } from '../ai/ThermodynamicEngine';
 import { BreathEngine, BreathPhase } from '../ai/BreathEngine';
 import { Vector } from '../ai/LinearAlgebra';
 import { AppendOnlyAdapter, BioParametersConfig } from '@clawkit/core';
-import { EidolonBus, EidolonEventType } from '../events/EidolonBus';
+import { EidolonBus, EidolonEventType } from '@clawkit/core';
 import { SentinelMode, ModeConfig, MODE_CONFIGS } from './EidolonTypes';
 
 export interface EmotionalState {

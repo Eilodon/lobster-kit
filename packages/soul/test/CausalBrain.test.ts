@@ -1,5 +1,5 @@
 import { afterAll, describe, it, expect, beforeEach } from 'vitest';
-import { CausalBrain, CausalEdge } from '../src/ai/CausalBrain';
+import { CausalBrain, CausalEdge } from '@clawkit/core';
 
 describe('CausalBrain (Synaptic Plasticity)', () => {
     let brain: CausalBrain;

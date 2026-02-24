@@ -9,7 +9,7 @@ Define strict package ownership so ClawKit can evolve from a DeFi-first product 
 | `@clawkit/core` | Domain primitives, interfaces, shared utilities, event bus, metrics | Core contracts and reusable abstractions |
 | `@clawkit/soul` | Agent cognition, emotional model, guard logic, swarm behavior | Brain and soul runtime |
 | `@clawkit/toolkit` | Concrete execution toolkit and external capability wiring | Action body and adapters for domains |
-| `@clawkit/mcp` | Public tool interface via MCP | Universal interface layer |
+| `packages/mcp-rust` | Public MCP runtime (Rust stdio server) | Universal interface layer |
 | `@clawkit/defi-bnb` | DeFi-specific adapter surface and migration compatibility | Domain adapter (legacy + focused DeFi use) |
 
 ## Architectural Guardrails
@@ -35,8 +35,8 @@ Define strict package ownership so ClawKit can evolve from a DeFi-first product 
 ## Phase-1 Status (Adapter Registry)
 - `@clawkit/toolkit` now exposes `DomainAdapterRegistry` for domain-agnostic action routing.
 - `@clawkit/toolkit` stays domain-agnostic and does **not** ship built-in domain adapters.
-- Runtime hosts (`@clawkit/mcp`, apps, workers) must register domain adapters explicitly (for example `@clawkit/defi-bnb` -> `OpBnbDefiAdapter`).
-- `@clawkit/mcp` calls domain actions through adapter contracts instead of hard-coding module internals.
+- Runtime hosts (`packages/mcp-rust`, apps, workers) must register domain adapters explicitly (for example `@clawkit/defi-bnb` -> `OpBnbDefiAdapter`).
+- MCP runtime calls domain actions through adapter contracts instead of hard-coding module internals.
 
 ## Next Refactor Targets
 1. Split DeFi-specific services in `toolkit` into `defi-bnb` adapters behind stable interfaces.

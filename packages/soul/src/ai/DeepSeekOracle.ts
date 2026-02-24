@@ -3,6 +3,7 @@ import { IOracle, MarketContext, OracleGenerationOptions, OracleInsight } from '
 import { DEFAULT_WEIGHTS, ReasoningWeights } from '../eidolon/EidolonTypes';
 import { withRetry } from '@clawkit/core';
 import type { CriticResult, WorldState } from '@clawkit/core';
+import { extractFirstJsonPayload } from '../utils/jsonExtraction';
 
 const BoundedNumber = z.number().finite().min(-50).max(50);
 const OracleWeightsSchema = z.object({
@@ -252,7 +253,7 @@ export class DeepSeekOracle implements IOracle {
                 return this.generateDeterministic(prompt, options);
             }
             if (options.json) {
-                const normalized = this.extractFirstJson(raw);
+                const normalized = extractFirstJsonPayload(raw);
                 return normalized ?? this.generateDeterministic(prompt, options);
             }
             return raw.trim();
@@ -495,24 +496,4 @@ Provide ONLY raw JSON. No markdown formatting.
         return compact.slice(0, 600);
     }
 
-    private extractFirstJson(raw: string): string | null {
-        const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-        if ((clean.startsWith('{') && clean.endsWith('}')) || (clean.startsWith('[') && clean.endsWith(']'))) {
-            return clean;
-        }
-
-        const firstBrace = clean.indexOf('{');
-        const lastBrace = clean.lastIndexOf('}');
-        if (firstBrace >= 0 && lastBrace > firstBrace) {
-            return clean.slice(firstBrace, lastBrace + 1);
-        }
-
-        const firstBracket = clean.indexOf('[');
-        const lastBracket = clean.lastIndexOf(']');
-        if (firstBracket >= 0 && lastBracket > firstBracket) {
-            return clean.slice(firstBracket, lastBracket + 1);
-        }
-
-        return null;
-    }
 }

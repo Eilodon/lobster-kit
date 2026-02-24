@@ -2,7 +2,7 @@ import type { IReadClient, IWriteClient } from '@clawkit/core';
 import * as fs from 'fs';
 import * as path from 'path';
 import { IClawKit, AppendOnlyAdapter, BigMath, withTimeout, Logger, RiskConfigPreset } from '@clawkit/core';
-import { DivineTransparency } from './DivineTransparency';
+import { DivineTransparency } from '@clawkit/core';
 import { MarketState, ActionType, DecisionLog, SentinelMode, ModeConfig } from './EidolonTypes';
 import { ActiveLearning, TradeOutcome } from './ActiveLearning';
 import { EmotionalCore, EmotionalState } from './EmotionalCore';
@@ -11,7 +11,7 @@ import { ClawOracle } from '../sensors/ClawOracle';
 import { GoPlusSecurity } from '../oracles/GoPlusSecurity';
 import { EidolonSimulator, ShadowTransaction, SimulationResult } from '../simulation/EidolonSimulator';
 import { DeepSeekOracle } from '../ai/DeepSeekOracle';
-import { EidolonBus, EidolonEvent, EidolonEventType, TradeExecutedEvent } from '../events/EidolonBus';
+import { EidolonBus, EidolonEvent, EidolonEventType, TradeExecutedEvent } from '@clawkit/core';
 import { TraumaRegistry } from './TraumaRegistry';
 import { KpiTracker, KpiSnapshot } from '../metrics/KpiTracker';
 
@@ -324,20 +324,14 @@ export class EidolonGuard {
 
         // 🛑 FIX 2: Stale State Syndrome (Fail-Closed)
         // 15 seconds TTL. If snapshot is older, we are blind.
-        // ATOMIC FIX: Attempt synchronous update before failing
+        // Must fail fast; don't perform sync refresh from validation path.
         if (this.lastSnapshotTime > 0 && (Date.now() - this.lastSnapshotTime > 15000)) {
-            this.debug('⚠️ State stale. Attempting synchronous snapshot update...');
-            await this.updateSnapshot();
-
-            // Re-check after update
-            if (Date.now() - this.lastSnapshotTime > 15000) {
-                return {
-                    approved: false,
-                    riskScore: 100,
-                    confidence: 0,
-                    reason: `💀 STALE STATE: Data is ${((Date.now() - this.lastSnapshotTime) / 1000).toFixed(1)}s old. Limit 15s. Sync update failed.`
-                };
-            }
+            return {
+                approved: false,
+                riskScore: 100,
+                confidence: 0,
+                reason: `💀 STALE STATE: Data is ${((Date.now() - this.lastSnapshotTime) / 1000).toFixed(1)}s old. Limit 15s.`
+            };
         }
 
         try {

@@ -74,15 +74,8 @@ const mockGraph = {
     })
 };
 
-vi.mock('../src/WasmAdapter', () => ({
-    WasmAdapter: {
-        getInstance: () => ({
-            createCausalGraph: () => mockGraph
-        })
-    }
-}));
-
-import { CausalBrain } from '../src/ai/CausalBrain';
+import { WasmAdapter as CoreWasmAdapter } from '@clawkit/core';
+import { CausalBrain } from '@clawkit/core';
 
 describe('CausalBrain Rust Bridge', () => {
     const originalCausalRust = process.env.EIDOLON_CAUSAL_RUST;
@@ -93,6 +86,9 @@ describe('CausalBrain Rust Bridge', () => {
         mockGraph.learn.mockClear();
         mockGraph.get_edge.mockClear();
         mockGraph.export_edges.mockClear();
+        CoreWasmAdapter.setInstance({
+            createCausalGraph: () => mockGraph
+        } as any);
     });
 
     it('should route learn/predict through wasm graph when available', () => {

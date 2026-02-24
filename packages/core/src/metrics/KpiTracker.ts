@@ -35,6 +35,8 @@ export class KpiTracker {
     private readonly reservoir: number[] = [];
     private readonly reservoirSize = 500; // Sample size sufficient for P95 estimation
     private samplesSeen = 0;
+    private p95LatencyCache = 0;
+    private p95LatencyDirty = true;
 
     private readonly invariantDrawdownThresholdRatio: number;
 
@@ -87,6 +89,8 @@ export class KpiTracker {
                 this.reservoir[j] = latencyMs;
             }
         }
+
+        this.p95LatencyDirty = true;
     }
 
     recordPortfolioSnapshot(totalPortfolioUsd: number): void {
@@ -172,6 +176,8 @@ export class KpiTracker {
         this.gasTotal = 0;
         this.reservoir.length = 0;
         this.samplesSeen = 0;
+        this.p95LatencyCache = 0;
+        this.p95LatencyDirty = true;
         this.peakPortfolioUsd = 0;
         this.maxDrawdownByBlockRatio = 0;
         this.drawdownSnapshots = 0;
@@ -183,10 +189,19 @@ export class KpiTracker {
     }
 
     private computeP95Latency(): number {
-        if (this.reservoir.length === 0) return 0;
-        // Sorting 500 items is negligible (microseconds) compared to 4096+
+        if (this.reservoir.length === 0) {
+            this.p95LatencyCache = 0;
+            this.p95LatencyDirty = false;
+            return 0;
+        }
+        if (!this.p95LatencyDirty) {
+            return this.p95LatencyCache;
+        }
+
         const sorted = [...this.reservoir].sort((a, b) => a - b);
         const idx = Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1);
-        return sorted[idx];
+        this.p95LatencyCache = sorted[idx];
+        this.p95LatencyDirty = false;
+        return this.p95LatencyCache;
     }
 }

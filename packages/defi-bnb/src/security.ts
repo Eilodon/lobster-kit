@@ -585,15 +585,27 @@ export class SecurityModule {
     const userAddress = await this.getAddress();
     console.info(`🛡️ Security Monitor Active for user: ${userAddress}`);
 
-    // Known Safe Spenders
-    const safeSpenders = new Set([
+    const safeSpenders = [
       PANCAKE_ROUTER.toLowerCase(),
       CLAWKIT_CONTRACTS.BatchExecutor.toLowerCase(),
       CLAWKIT_CONTRACTS.ApprovalRevoker.toLowerCase(),
       '0x0000000000000000000000000000000000000000' // Zero address
-    ]);
+    ];
 
-    // 1. Heartbeat (keep existing logic but make it actually useful)
+    // Try to mount the WASM scanner
+    const { WasmAdapter } = await import('@clawkit/core');
+    const adapter = WasmAdapter.getInstance();
+    let wasmScanner: any = null;
+    if (typeof (adapter as any).createBatchApprovalScanner === 'function') {
+      wasmScanner = (adapter as any).createBatchApprovalScanner();
+      if (wasmScanner) {
+        wasmScanner.add_safe_spenders(safeSpenders);
+      }
+    }
+
+    const safeSpendersSet = new Set(safeSpenders);
+
+    // 1. Heartbeat
     const unwatchBlock = this.publicClient.watchBlockNumber({
       onBlockNumber: async (blockNumber) => {
         if (blockNumber % 50n === 0n) {
@@ -607,17 +619,11 @@ export class SecurityModule {
     });
 
     // 2. Watch Approval Events
-    // P3: Merge config tokens with any additional user-supplied tokens
     const configTokens = Object.values(this.config.chainConfig?.tokens || {})
       .map(t => t.address);
     const knownTokens = [...new Set([...configTokens, ...additionalTokens])];
     console.info(`🛡️ Watching ${knownTokens.length} tokens for suspicious approvals.`);
 
-    // Create filters for Approval(owner, spender, value)
-    // topic0 = Approval keccak
-    // topic1 = owner (userAddress)
-
-    // Note: viem watchContractEvent can handle this nicely
     const unwatchEvents = this.publicClient.watchContractEvent({
       address: knownTokens as `0x${string}`[],
       abi: parseAbi(['event Approval(address indexed owner, address indexed spender, uint256 value)']),
@@ -626,30 +632,55 @@ export class SecurityModule {
         owner: toAddress(userAddress) // Only watch approvals FROM us
       },
       onLogs: (logs) => {
-        for (const log of logs) {
-          const { spender, value } = log.args;
-          // Check if spender is safe
-          if (spender && !safeSpenders.has(spender.toLowerCase())) {
-            callback({
-              type: 'SUSPICIOUS_APPROVAL',
-              severity: 'HIGH',
-              message: `🚨 Unknown Spender Approved!`,
-              details: {
-                token: log.address,
-                spender: spender,
-                amount: value?.toString()
-              },
-              timestamp: Date.now()
-            });
+        if (!logs || logs.length === 0) return;
 
-            // Auto-Defense could go here (e.g. queue revoke)
-            // limit auto-revoke to avoid gas drain wars
+        // BATCH MODE: Condense logs and push to zero-allocation WASM scan
+        if (wasmScanner && logs.length > 5) {
+          const spendersCSV = logs.map(l => (l.args as any).spender || '').join(',');
+          const threatsCSV = wasmScanner.scan_approvals_csv(spendersCSV);
+
+          if (threatsCSV) {
+            const threatIndices = threatsCSV.split(',').map(Number);
+            for (const idx of threatIndices) {
+              if (isNaN(idx)) continue;
+              const log = logs[idx];
+              const { spender, value } = log.args as any;
+              callback({
+                type: 'SUSPICIOUS_APPROVAL',
+                severity: 'HIGH',
+                message: `🚨 Unknown Spender Approved! (WASM Detected)`,
+                details: {
+                  token: log.address,
+                  spender: spender,
+                  amount: value?.toString()
+                },
+                timestamp: Date.now()
+              });
+            }
+          }
+        } else {
+          // FALLBACK / LOW-VOLUME MODE
+          for (const log of logs) {
+            const { spender, value } = log.args as any;
+            if (spender && !safeSpendersSet.has(spender.toLowerCase())) {
+              callback({
+                type: 'SUSPICIOUS_APPROVAL',
+                severity: 'HIGH',
+                message: `🚨 Unknown Spender Approved!`,
+                details: {
+                  token: log.address,
+                  spender: spender,
+                  amount: value?.toString()
+                },
+                timestamp: Date.now()
+              });
+            }
           }
         }
       }
     });
 
-    // Return unsubscriber that kills both
+    // Return unsubscriber
     return () => {
       unwatchBlock();
       unwatchEvents();

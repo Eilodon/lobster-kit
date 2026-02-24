@@ -30,7 +30,7 @@ function toOptions(
 
 export class ToolPerformanceTracker {
     private readonly records = new Map<string, ToolPerformanceRecord>();
-    private readonly latencySamples = new Map<string, number[]>();
+    private readonly latencySamples = new Map<string, NumericRingBuffer>();
     private hydrated = false;
     private hydrationPromise: Promise<void> | null = null;
 
@@ -167,18 +167,18 @@ export class ToolPerformanceTracker {
     }
 
     private pushLatencySample(toolName: string, latencyMs: number): void {
-        const samples = this.latencySamples.get(toolName) ?? [];
-        samples.push(latencyMs);
-        if (samples.length > this.maxLatencySamples) {
-            samples.splice(0, samples.length - this.maxLatencySamples);
+        let samples = this.latencySamples.get(toolName);
+        if (!samples) {
+            samples = new NumericRingBuffer(Math.max(1, this.maxLatencySamples));
+            this.latencySamples.set(toolName, samples);
         }
-        this.latencySamples.set(toolName, samples);
+        samples.push(latencyMs);
     }
 
     private computeLatencyPercentiles(toolName: string): { p50: number; p95: number } {
-        const samples = this.latencySamples.get(toolName) ?? [];
-        if (samples.length === 0) return { p50: 0, p95: 0 };
-        const sorted = [...samples].sort((a, b) => a - b);
+        const samples = this.latencySamples.get(toolName);
+        if (!samples || samples.length === 0) return { p50: 0, p95: 0 };
+        const sorted = samples.toSortedArray();
         return {
             p50: this.percentile(sorted, 0.5),
             p95: this.percentile(sorted, 0.95),
@@ -189,5 +189,37 @@ export class ToolPerformanceTracker {
         if (sortedValues.length === 0) return 0;
         const idx = Math.max(0, Math.min(sortedValues.length - 1, Math.ceil(sortedValues.length * ratio) - 1));
         return sortedValues[idx];
+    }
+}
+
+class NumericRingBuffer {
+    private readonly values: Float64Array;
+    private nextIndex = 0;
+    private count = 0;
+
+    constructor(private readonly capacity: number) {
+        this.values = new Float64Array(capacity);
+    }
+
+    public get length(): number {
+        return this.count;
+    }
+
+    public push(value: number): void {
+        this.values[this.nextIndex] = value;
+        this.nextIndex = (this.nextIndex + 1) % this.capacity;
+        if (this.count < this.capacity) {
+            this.count++;
+        }
+    }
+
+    public toSortedArray(): number[] {
+        const out = new Array<number>(this.count);
+        const start = this.count < this.capacity ? 0 : this.nextIndex;
+        for (let i = 0; i < this.count; i++) {
+            out[i] = this.values[(start + i) % this.capacity];
+        }
+        out.sort((a, b) => a - b);
+        return out;
     }
 }

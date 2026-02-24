@@ -26,7 +26,9 @@ describe('DeFiModule', () => {
         };
 
         const config: ClawKitConfig = {
-            chainConfig: OPBNB_CONFIG
+            chainConfig: OPBNB_CONFIG,
+            privacyMode: 'strict',
+            fallbackBNBPrice: 600
         };
 
         const mockSecurity = {
@@ -81,7 +83,9 @@ describe('DeFiModule', () => {
             mockPublic.getGasPrice.mockResolvedValue(1n);
             const config: ClawKitConfig = {
                 chainConfig: OPBNB_CONFIG,
-                approvalMode: 'EXACT'
+                approvalMode: 'EXACT',
+                privacyMode: 'strict',
+                fallbackBNBPrice: 600
             };
             const mockSecurity = {
                 scanContract: vi.fn().mockResolvedValue({ riskScore: 0 })

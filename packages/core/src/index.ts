@@ -6,8 +6,8 @@
 
 // Interfaces
 export { IClawKit } from './interfaces/IClawKit';
-export type { ISensorHub, IReadClient } from './interfaces/ISensorHub';
-export type { IActuatorHub, IWriteClient } from './interfaces/IActuatorHub';
+export type { ISensorHub, IReadClient, ReadClientArgs } from './interfaces/ISensorHub';
+export type { IActuatorHub, IWriteClient, WriteClientArgs } from './interfaces/IActuatorHub';
 export type { IMemoryHub } from './interfaces/IMemoryHub';
 
 // Types
@@ -49,8 +49,13 @@ export type { IOracle, MarketContext, OracleGenerationOptions, OracleInsight } f
 
 
 // Utilities
+export { WasmAdapter } from './WasmAdapter';
 export { AsyncLock } from './utils/AsyncLock';
 export { Logger } from './utils/Logger';
 export { withRetry, withTimeout, CircuitBreaker, type RetryConfig, type CircuitBreakerOptions } from './utils/Resilience';
 export { BigMath, WAD, RAY, HALF_WAD, HALF_RAY } from './utils/BigMath';
 export { BioParametersConfig, RiskConfigPreset, type BioParameters, type RiskConfig } from './config';
+
+export { DivineTransparency } from './DivineTransparency';
+
+export { CausalBrain, CausalEdge, type SentinelVariable } from './ai/CausalBrain';

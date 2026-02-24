@@ -133,92 +133,6 @@ export class MetaCognitiveOrchestrator {
     };
 
     /**
-     * Executes the keyword-based TF-IDF tool recommendation (replicated from MCP logic).
-     */
-    private recommendTool(message: string): { tool: string, score: number } {
-        const keywords: Array<{ kw: string, tool: string, weight: number }> = [
-            // User Data
-            { kw: "user", tool: "clawkit_recall_user", weight: 0.3 },
-            { kw: "profile", tool: "clawkit_recall_user", weight: 0.3 },
-            { kw: "who am i", tool: "clawkit_recall_user", weight: 0.8 },
-            { kw: "update", tool: "clawkit_update_user", weight: 0.7 },
-            { kw: "save", tool: "clawkit_update_user", weight: 0.5 },
-            { kw: "set preference", tool: "clawkit_update_user", weight: 0.8 },
-            { kw: "user", tool: "clawkit_update_user", weight: 0.2 },
-            { kw: "profile", tool: "clawkit_update_user", weight: 0.2 },
-
-            // Memory
-            { kw: "memory", tool: "clawkit_memory_query", weight: 0.5 },
-            { kw: "remember", tool: "clawkit_memory_query", weight: 0.6 },
-            { kw: "search", tool: "clawkit_memory_query", weight: 0.4 },
-
-            // Context
-            { kw: "compress", tool: "clawkit_compress_context", weight: 0.8 },
-            { kw: "summarize", tool: "clawkit_compress_context", weight: 0.6 },
-            { kw: "too long", tool: "clawkit_compress_context", weight: 0.5 },
-
-            { kw: "similar", tool: "clawkit_recall_similar", weight: 0.6 },
-            { kw: "context", tool: "clawkit_recall_similar", weight: 0.4 },
-            { kw: "related", tool: "clawkit_recall_similar", weight: 0.5 },
-
-            // Reasoning / Simulation
-            { kw: "reason", tool: "clawkit_reason_chain", weight: 0.6 },
-            { kw: "think", tool: "clawkit_reason_chain", weight: 0.6 },
-            { kw: "logic", tool: "clawkit_reason_chain", weight: 0.5 },
-            { kw: "plan", tool: "clawkit_reason_chain", weight: 0.6 },
-
-            { kw: "simulate", tool: "clawkit_simulate_response", weight: 0.8 },
-            { kw: "test", tool: "clawkit_simulate_response", weight: 0.5 },
-            { kw: "what if", tool: "clawkit_simulate_response", weight: 0.7 },
-
-            // Patterns / Learning
-            { kw: "pattern", tool: "clawkit_check_pattern", weight: 0.5 },
-            { kw: "behavior", tool: "clawkit_check_pattern", weight: 0.4 },
-            { kw: "check", tool: "clawkit_check_pattern", weight: 0.3 },
-
-            { kw: "commit", tool: "clawkit_commit_pattern", weight: 0.8 },
-            { kw: "learn", tool: "clawkit_commit_pattern", weight: 0.6 },
-            { kw: "pattern", tool: "clawkit_commit_pattern", weight: 0.3 },
-
-            { kw: "outcome", tool: "clawkit_record_outcome", weight: 0.7 },
-            { kw: "result", tool: "clawkit_record_outcome", weight: 0.5 },
-
-            // Swarm / Dreams
-            { kw: "dream", tool: "clawkit_dream_conversation", weight: 0.8 },
-            { kw: "sleep", tool: "clawkit_dream_conversation", weight: 0.8 },
-            { kw: "consolidate", tool: "clawkit_dream_conversation", weight: 0.7 },
-
-            { kw: "swarm", tool: "clawkit_orchestrate", weight: 0.8 },
-            { kw: "agents", tool: "clawkit_orchestrate", weight: 0.7 },
-            { kw: "orchestrate", tool: "clawkit_orchestrate", weight: 0.9 },
-        ];
-
-        const msgLower = message.toLowerCase();
-        const scores = new Map<string, number>();
-
-        for (const { kw, tool, weight } of keywords) {
-            if (msgLower.includes(kw)) {
-                scores.set(tool, (scores.get(tool) || 0) + weight);
-            }
-        }
-
-        if (scores.size === 0) {
-            return { tool: "clawkit_reason_chain", score: 0.5 }; // Fallback
-        }
-
-        let bestTool = "";
-        let bestScore = -1;
-        for (const [tool, score] of scores.entries()) {
-            if (score > bestScore) {
-                bestScore = score;
-                bestTool = tool;
-            }
-        }
-
-        return { tool: bestTool, score: Math.min(bestScore, 0.99) };
-    }
-
-    /**
      * Execute the full 3-Layer pipeline for inbound messages.
      * Determines EXACTLY how to handle a potential tool execution based on HOTL principles.
      */
@@ -227,10 +141,38 @@ export class MetaCognitiveOrchestrator {
         // LAYER 1: MANDATORY SENSING (Always Runs)
         // ───────────────────────────────────────────────────────────────────────
 
-        // 1a. Tool Recommendation & Intent Parsing
-        const recommendation = this.recommendTool(ctx.message);
-        const suggestedTool = recommendation.tool;
-        const intentConfidence = recommendation.score;
+        // 1a. Oracle-based Tool Calling & Intent Parsing
+        let suggestedTool = "clawkit_reason_chain";
+        let intentConfidence = 0.5;
+
+        try {
+            if (this.oracle.generate) {
+                const prompt = `Evaluate the user message and recommend the best MCP tool to handle it.
+Respond ONLY with a JSON object containing {"tool": "tool_name", "score": number between 0 and 1}.
+Available Tools:
+- clawkit_recall_user / clawkit_update_user
+- clawkit_memory_query / clawkit_compress_context / clawkit_recall_similar
+- clawkit_reason_chain / clawkit_simulate_response
+- clawkit_check_pattern / clawkit_commit_pattern / clawkit_record_outcome
+- clawkit_orchestrate / clawkit_dream_conversation
+
+User Message: "${ctx.message}"
+Context Type: "${ctx.contextType}"`;
+
+                const responseStr = await this.oracle.generate(prompt, { maxTokens: 100, json: true, temperature: 0.1 });
+                const response = JSON.parse(responseStr);
+
+                if (response.tool && typeof response.score === 'number') {
+                    suggestedTool = response.tool;
+                    intentConfidence = Math.max(0.0, Math.min(0.99, response.score));
+                }
+            } else {
+                console.warn("[MetaCognitiveOrchestrator] Oracle.generate is not implemented. Falling back to default.");
+            }
+        } catch (error) {
+            console.error("[MetaCognitiveOrchestrator] Failed to parse Oracle tool recommendation:", error);
+            // Fallback stays as clawkit_reason_chain with low confidence
+        }
 
         // 1b. Thermodynamic State (Entropy)
         // We pulse the thermo engine with a dummy state to measure system chaos

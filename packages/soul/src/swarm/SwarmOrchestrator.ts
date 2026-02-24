@@ -7,36 +7,19 @@ import type {
     Resolution,
     TaskResult
 } from '../eidolon/CognitiveTypes';
+import { parseFirstJsonObject } from '../utils/jsonExtraction';
 
 type OracleGenerator = Pick<IOracle, 'generate'>;
 
-function randomId(prefix: string): string {
-    return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-}
+let agentCounter = 0;
 
-function extractJsonPayload(raw: string): string | null {
-    const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-    if ((clean.startsWith('{') && clean.endsWith('}')) || (clean.startsWith('[') && clean.endsWith(']'))) {
-        return clean;
-    }
-    const firstBrace = clean.indexOf('{');
-    const lastBrace = clean.lastIndexOf('}');
-    if (firstBrace >= 0 && lastBrace > firstBrace) {
-        return clean.slice(firstBrace, lastBrace + 1);
-    }
-    return null;
+function nextAgentId(prefix: string): string {
+    const id = agentCounter++;
+    return `${prefix}-${Date.now()}-${id}`;
 }
 
 function parseObject(raw: string): Record<string, unknown> | null {
-    const payload = extractJsonPayload(raw);
-    if (!payload) return null;
-    try {
-        const parsed = JSON.parse(payload);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-        return parsed as Record<string, unknown>;
-    } catch {
-        return null;
-    }
+    return parseFirstJsonObject(raw);
 }
 
 export class SwarmOrchestrator {
@@ -46,7 +29,7 @@ export class SwarmOrchestrator {
 
     public async spawnAgent(role: AgentRole, task: string): Promise<string> {
         const capabilities = this.capabilitiesFor(role, task);
-        const id = randomId(role);
+        const id = nextAgentId(role);
         this.agents.set(id, {
             id,
             role,

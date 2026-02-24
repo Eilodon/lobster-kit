@@ -9,6 +9,11 @@ describe('BigMath (Metabolic Precision)', () => {
         expect(BigMath.fromWad(wad)).toBe("1.5");
     });
 
+    it('should parse fractional shorthand and truncate extra precision safely', () => {
+        expect(BigMath.toWad('-.5')).toBe(-500000000000000000n);
+        expect(BigMath.toWad('1.2345678901234567899')).toBe(1234567890123456789n);
+    });
+
     it('should multiply WAD correctly (rounding)', () => {
         const a = BigMath.toWad("2.0");
         const b = BigMath.toWad("0.5");
@@ -57,5 +62,10 @@ describe('BigMath (Metabolic Precision)', () => {
 
     it('should throw on division by zero', () => {
         expect(() => BigMath.divWad(100n, 0n)).toThrow("Division by zero");
+    });
+
+    it('should reject malformed decimals', () => {
+        expect(() => BigMath.toWad('1.2.3')).toThrow("Invalid decimal input");
+        expect(() => BigMath.toWad('.')).toThrow("Invalid decimal input");
     });
 });

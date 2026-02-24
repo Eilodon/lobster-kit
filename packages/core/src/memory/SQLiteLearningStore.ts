@@ -335,7 +335,7 @@ export class SQLiteLearningStore implements IStorageProvider {
         stmt.run(node.id, node.concept, JSON.stringify(node.embedding), node.updated_at ?? Date.now());
     }
 
-    async listSemanticNodes(limit = 1000): Promise<MemoryNode[]> {
+    async listSemanticNodes(limit = 1000, maxEdgesPerNode = 64): Promise<MemoryNode[]> {
         if (!this.db) return [];
         const nodeRows = this.db.prepare<{
             id: string;
@@ -343,26 +343,23 @@ export class SQLiteLearningStore implements IStorageProvider {
             embedding: string;
             updated_at: number;
         }>('SELECT * FROM semantic_nodes ORDER BY updated_at DESC LIMIT ?').all(limit);
-        const edgeRows = this.db.prepare<{
-            from_id: string;
+        const boundedEdgeLimit = Math.max(1, maxEdgesPerNode);
+        const edgeStmt = this.db.prepare<{
             to_id: string;
             relation: string;
             weight: number;
-        }>('SELECT from_id, to_id, relation, weight FROM semantic_edges').all();
-
-        const edgesByFrom = new Map<string, Array<{ to: string; relation: string; weight: number }>>();
-        for (const edge of edgeRows) {
-            const list = edgesByFrom.get(edge.from_id) ?? [];
-            list.push({ to: edge.to_id, relation: edge.relation, weight: Number(edge.weight) });
-            edgesByFrom.set(edge.from_id, list);
-        }
+        }>('SELECT to_id, relation, weight FROM semantic_edges WHERE from_id = ? ORDER BY updated_at DESC LIMIT ?');
 
         return nodeRows.map((row) => ({
             id: row.id,
             concept: row.concept,
             embedding: this.safeParseArray(row.embedding),
             updated_at: Number(row.updated_at),
-            connections: edgesByFrom.get(row.id) ?? [],
+            connections: edgeStmt.all(row.id, boundedEdgeLimit).map((edge) => ({
+                to: edge.to_id,
+                relation: edge.relation,
+                weight: Number(edge.weight),
+            })),
         }));
     }
 
@@ -460,9 +457,14 @@ export class SQLiteLearningStore implements IStorageProvider {
         };
     }
 
-    async listToolPerformance(): Promise<ToolPerformanceRecord[]> {
+    async listToolPerformance(limit: number = 1000): Promise<ToolPerformanceRecord[]> {
+        const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 1000;
+        if (safeLimit === 0) return [];
+
         if (!this.db) {
-            const records = await this.fallback.readLog<unknown>(SQLiteLearningStore.TOOL_PERFORMANCE_LOG_KEY, 10_000);
+            // Read a wider recent window so we can still dedupe by tool_name accurately.
+            const recentWindow = Math.max(safeLimit * 5, 5000);
+            const records = await this.fallback.readLog<unknown>(SQLiteLearningStore.TOOL_PERFORMANCE_LOG_KEY, recentWindow);
             const latestByTool = new Map<string, ToolPerformanceRecord>();
             for (const record of records) {
                 const normalized = this.normalizeToolPerformanceRecord(record);
@@ -472,7 +474,9 @@ export class SQLiteLearningStore implements IStorageProvider {
                     latestByTool.set(normalized.tool_name, normalized);
                 }
             }
-            return Array.from(latestByTool.values()).sort((a, b) => b.last_called - a.last_called);
+            return Array.from(latestByTool.values())
+                .sort((a, b) => b.last_called - a.last_called)
+                .slice(0, safeLimit);
         }
         const rows = this.db.prepare<{
             tool_name: string;
@@ -486,7 +490,7 @@ export class SQLiteLearningStore implements IStorageProvider {
             fallback_rate: number;
             user_satisfaction: number;
             last_called: number;
-        }>('SELECT * FROM tool_performance ORDER BY last_called DESC').all();
+        }>('SELECT * FROM tool_performance ORDER BY last_called DESC LIMIT ?').all(safeLimit);
         return rows.map((row) => ({
             ...row,
             call_count: Number(row.call_count),

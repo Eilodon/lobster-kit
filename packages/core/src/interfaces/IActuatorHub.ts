@@ -10,6 +10,8 @@
 
 import { CapabilityAction, ActionResult } from '../types/CapabilityAction';
 
+export type WriteClientArgs = Record<string, unknown>;
+
 /**
  * Generic transaction signing / write client.
  * viem's WalletClient satisfies this interface automatically.
@@ -17,9 +19,9 @@ import { CapabilityAction, ActionResult } from '../types/CapabilityAction';
 export interface IWriteClient {
     getAddresses(): Promise<string[]>;
     getChainId(): Promise<number>;
-    signTypedData?(args: unknown): Promise<string>;
-    writeContract?(args: unknown): Promise<string>;
-    sendTransaction?(args: unknown): Promise<string>;
+    signTypedData?(args: WriteClientArgs): Promise<string>;
+    writeContract?(args: WriteClientArgs): Promise<string>;
+    sendTransaction?(args: WriteClientArgs): Promise<string>;
     [key: string]: unknown; // Allow domain-specific extensions
 }
 

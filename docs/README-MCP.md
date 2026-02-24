@@ -7,7 +7,7 @@ This module exposes **ClawKit-BNB** as a Model Context Protocol (MCP) server, al
 ### 1. Run via Command Line
 You can test the server directly:
 ```bash
-npm run mcp
+pnpm mcp
 ```
 *Note: It runs on `stdio`, so you won't see output unless you pipe it to an MCP client.*
 
@@ -30,8 +30,8 @@ Add this to your `mcp-config.json` (or equivalent settings):
 {
   "mcpServers": {
     "clawkit-eidolon": {
-      "command": "npm",
-      "args": ["run", "mcp"],
+      "command": "pnpm",
+      "args": ["mcp"],
       "cwd": "/absolute/path/to/clawkit-bnb",
       "env": {
         "PRIVATE_KEY": "YOUR_PRIVATE_KEY_HERE" 
@@ -64,9 +64,9 @@ Add this to your `mcp-config.json` (or equivalent settings):
 ## 🎛 Rollout Profiles
 
 Environment templates:
-- `packages/mcp/env/mcp.development.env.example`
-- `packages/mcp/env/mcp.staging.env.example`
-- `packages/mcp/env/mcp.production.env.example`
+- `packages/mcp-rust/env/mcp.development.env.example`
+- `packages/mcp-rust/env/mcp.staging.env.example`
+- `packages/mcp-rust/env/mcp.production.env.example`
 
 Key rollout flags:
 - `COGNITIVE_CANARY_PERCENT`

@@ -3,31 +3,34 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // --- MOCKS ---
 
 // Mock WasmAdapter
-vi.mock('../src/eidolon/WasmAdapter', () => ({
-    WasmAdapter: {
-        getInstance: () => ({
-            createValueInvariant: () => ({
-                check_invariant: () => ({ safe: true, circuit_broken: false }),
-                update_snapshot: vi.fn()
-            }),
-            createAntiRug: () => ({
-                check_token_security: () => ({ score: 100, is_honeypot: false, contract_verified: true, status: 'SAFE' }),
-                add_to_whitelist: vi.fn(),
-                add_to_blacklist: vi.fn(),
-                import_lists: vi.fn(),
-                export_lists: vi.fn(),
-                compute_score: vi.fn().mockReturnValue({ score: 99, is_honeypot: false, contract_verified: true, status: 'SAFE' })
-            }),
-            init: vi.fn(),
-        })
-    }
-}));
+vi.mock('@clawkit/soul', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@clawkit/soul')>();
+    return {
+        ...actual,
+        WasmAdapter: {
+            getInstance: () => ({
+                createValueInvariant: () => ({
+                    check_invariant: () => ({ safe: true, circuit_broken: false }),
+                    update_snapshot: vi.fn()
+                }),
+                createAntiRug: () => ({
+                    check_token_security: () => ({ score: 100, is_honeypot: false, contract_verified: true, status: 'SAFE' }),
+                    add_to_whitelist: vi.fn(),
+                    add_to_blacklist: vi.fn(),
+                    import_lists: vi.fn(),
+                    export_lists: vi.fn(),
+                    compute_score: vi.fn().mockReturnValue({ score: 99, is_honeypot: false, contract_verified: true, status: 'SAFE' })
+                }),
+                init: vi.fn(),
+            })
+        }
+    };
+});
 
-// Auto-Mock GoPlusSecurity
-vi.mock('../src/eidolon/oracles/GoPlusSecurity');
+// Removed broken vi.mock of GoPlusSecurity
 
-import { GoPlusSecurity } from '../src/eidolon/oracles/GoPlusSecurity';
-import { EidolonGuard } from '../src/eidolon/EidolonGuard';
+import { GoPlusSecurity } from '@clawkit/soul';
+import { EidolonGuard } from '@clawkit/soul';
 import { ClawKit } from '../src/index';
 
 // Mock Dependencies
@@ -44,21 +47,23 @@ const mockKit = {
 
 describe('🔒 ATOMIC FIXES VERIFICATION', () => {
     let guard: EidolonGuard;
+    let mockSecurityOracle: { checkToken: ReturnType<typeof vi.fn> };
+    let mockSecurityCache: Map<string, any>;
 
     beforeEach(() => {
         vi.useFakeTimers();
-        vi.mocked(GoPlusSecurity).mockClear();
 
-        // Mock checkToken implementation
-        // Since it's auto-mocked, prototype methods are spies
-        GoPlusSecurity.prototype.checkToken = vi.fn().mockResolvedValue({
-            is_honeypot: '0',
-            honeypot_with_same_creator: '0',
-            isOpenSource: '1',
-            is_proxy: '0',
-            owner_address: '0x0000000000000000000000000000000000000000',
-            owner_change_balance: '0'
-        });
+        mockSecurityOracle = {
+            checkToken: vi.fn().mockResolvedValue({
+                is_honeypot: '0',
+                honeypot_with_same_creator: '0',
+                isOpenSource: '1',
+                is_proxy: '0',
+                owner_address: '0x0000000000000000000000000000000000000000',
+                owner_change_balance: '0'
+            })
+        };
+        mockSecurityCache = new Map();
     });
 
     afterEach(() => {
@@ -69,7 +74,13 @@ describe('🔒 ATOMIC FIXES VERIFICATION', () => {
     describe('Fix 2: Stale State Syndrome (Fail-Closed)', () => {
         it('should BLOCK if market state is older than 15s', async () => {
             guard = new EidolonGuard(mockKit);
-
+            (guard as any).securityOracle = mockSecurityOracle;
+            (guard as any).securityCache = mockSecurityCache;
+            (guard as any).antiRug = {
+                check_token_security: vi.fn().mockReturnValue({ is_honeypot: false, score: 90, contract_verified: true, status: 'SAFE' }),
+                compute_score: vi.fn().mockReturnValue({ is_honeypot: false, score: 90, contract_verified: true, status: 'SAFE' }),
+                import_lists: vi.fn()
+            };
             vi.setSystemTime(100000);
             (guard as any).lastSnapshotTime = 80000;
 
@@ -81,6 +92,13 @@ describe('🔒 ATOMIC FIXES VERIFICATION', () => {
 
         it('should ALLOW if market state is fresh (<15s)', async () => {
             guard = new EidolonGuard(mockKit);
+            (guard as any).securityOracle = mockSecurityOracle;
+            (guard as any).securityCache = mockSecurityCache;
+            (guard as any).antiRug = {
+                check_token_security: vi.fn().mockReturnValue({ is_honeypot: false, score: 90, contract_verified: true, status: 'SAFE' }),
+                compute_score: vi.fn().mockReturnValue({ is_honeypot: false, score: 90, contract_verified: true, status: 'SAFE' }),
+                import_lists: vi.fn()
+            };
             vi.setSystemTime(100000);
             (guard as any).lastSnapshotTime = 90000; // 10s ago
 
@@ -124,6 +142,14 @@ describe('🔒 ATOMIC FIXES VERIFICATION', () => {
             });
             (guard as any).mind = { explain: slowMind };
 
+            // Mock security checks
+            (guard as any).securityOracle = mockSecurityOracle;
+            (guard as any).securityCache = mockSecurityCache;
+            (guard as any).antiRug = {
+                check_token_security: vi.fn().mockReturnValue({ is_honeypot: false, score: 90, contract_verified: true, status: 'SAFE' }),
+                compute_score: vi.fn().mockReturnValue({ is_honeypot: false, score: 90, contract_verified: true, status: 'SAFE' }),
+                import_lists: vi.fn()
+            };
             const result = await guard.validateAction('BUY', { amountUSD: 100, tokenAddress: '0x123' });
 
             expect(mindResolved).toBe(false);

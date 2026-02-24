@@ -6,6 +6,7 @@ import type {
     UserSensory,
     VerifiedResponse
 } from './CognitiveTypes';
+import { parseFirstJsonObject } from '../utils/jsonExtraction';
 
 type OracleGenerator = Pick<IOracle, 'refine' | 'generate'>;
 
@@ -17,29 +18,8 @@ function scoreFromIssues(issueCount: number, confidence: number): number {
     return clamp01(1 - issueCount * 0.15) * 0.7 + clamp01(confidence) * 0.3;
 }
 
-function extractJsonPayload(raw: string): string | null {
-    const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-    if ((clean.startsWith('{') && clean.endsWith('}')) || (clean.startsWith('[') && clean.endsWith(']'))) {
-        return clean;
-    }
-    const firstBrace = clean.indexOf('{');
-    const lastBrace = clean.lastIndexOf('}');
-    if (firstBrace >= 0 && lastBrace > firstBrace) {
-        return clean.slice(firstBrace, lastBrace + 1);
-    }
-    return null;
-}
-
 function parseJsonObject(raw: string): Record<string, unknown> | null {
-    const payload = extractJsonPayload(raw);
-    if (!payload) return null;
-    try {
-        const parsed = JSON.parse(payload);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-        return parsed as Record<string, unknown>;
-    } catch {
-        return null;
-    }
+    return parseFirstJsonObject(raw);
 }
 
 function toStringArray(input: unknown): string[] {

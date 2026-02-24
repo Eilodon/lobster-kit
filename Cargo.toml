@@ -1,0 +1,23 @@
+[workspace]
+members = [
+  "crates/core-rust",
+  "crates/mcp-server",
+]
+resolver = "2"
+
+[workspace.dependencies]
+# Shared dependencies — version đồng nhất cho toàn workspace
+tokio = { version = "1.37", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+nalgebra = { version = "0.32", features = ["serde-serialize"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+
+# Optimized release profile for both WASM and native builds
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+

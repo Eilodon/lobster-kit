@@ -1,9 +1,8 @@
 import { DecisionLog, DEFAULT_WEIGHTS as REASONING_WEIGHTS, QTable, Q_CONFIG, MarketState, ActionType, QStateHash } from './EidolonTypes';
 import { IStorageProvider, AppendOnlyAdapter } from '@clawkit/core';
-import { CausalBrain, SentinelVariable } from '../ai/CausalBrain';
+import { CausalBrain, SentinelVariable } from '@clawkit/core';
 import { RollingHistoryBuffer } from '../events/RollingHistoryBuffer';
 import { WasmAdapter, LiquidBrain, HyperMemory } from '../WasmAdapter';
-import { HippocampalReplayEngine, ReplayEpisode } from './HippocampalReplayEngine';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -87,7 +86,7 @@ export class ActiveLearning {
   private weights = { ...REASONING_WEIGHTS }; // @deprecated: Keeping for backward compatibility
   private qTable: QTable = {}; // 🧠 The Brain 2.0
   private cognitiveBrain: CausalBrain; // 🧠 The Brain 3.0 (Bayesian)
-  private replayEngine: HippocampalReplayEngine; // 🧠 The Brain 3.5+ (Hippocampal Replay 2.0)
+  private replayBuffer: RollingHistoryBuffer<DecisionLog>; // 🧠 The Brain 3.5 (Memory)
   private liquidBrain?: LiquidBrain;   // 🧠 The Brain 4.0 (Liquid)
   private hyperMemory?: HyperMemory;   // 🧠 The Brain 5.0 (Holographic)
   private lastIntuition: Float32Array | null = null; // [NEW] Introspection
@@ -141,7 +140,7 @@ export class ActiveLearning {
     this.storage = storage ?? new AppendOnlyAdapter();
     this.cognitiveBrain = new CausalBrain();
     this.tradeHistory = new RollingHistoryBuffer<TradeOutcome>(this.TRADE_HISTORY_CAPACITY);
-    this.replayEngine = new HippocampalReplayEngine(2000);
+    this.replayBuffer = new RollingHistoryBuffer<DecisionLog>(2000); // 🧠 Memory Capacity
   }
 
   /**
@@ -211,20 +210,40 @@ export class ActiveLearning {
     // This allows the agent to learn chains of decisions.
     // If nextState is not provided, we effectively treat it as a terminal state (Gamma=0 for this step)
     // FIX Bug #16: Allow passing nextState for Temporal Difference learning
-    const tdError = this.updateQValue(decision.marketState, decision.action, reward, decision.marketState); // Using current state as next state approximate
+    this.updateQValue(decision.marketState, decision.action, reward, decision.marketState); // Using current state as next state approximate
 
     // 🧠 THE BRAIN 3.0: Bayesian Causal Learning
-    this.reinforceCausalBeliefs(decision, outcome);
+    // We verify if our "Priors" held true.
+    // 1. Whale Flow -> Price Delta
+    if (decision.marketState.whaleFlow === 'ACCUMULATING') {
+      // If Whales bought, did we profit? (Proxy for Price went up)
+      this.cognitiveBrain.learn('WhaleNetFlow', 'PriceDelta', outcome.profitLoss > 0);
+    } else if (decision.marketState.whaleFlow === 'DUMPING') {
+      // If Whales sold, did we lose? (Proxy for Price went down)
+      // Actually, if we SOLD, we profited if price went down.
+      // If we BOUGHT and Whales Dumped, we likely lost.
+      // Causal Link: Whale Dumping -> Price Down.
+      // If we BOUGHT, profit < 0 means Price Down.
+      // So if Whale=Dumping AND Profit < 0 (Price Down), then Whale->PriceDelta check passes (Price did go down).
+      // Wait, 'PriceDelta' usually means Positive Delta.
+      // If Price Down, PriceDelta is False?
+      // Let's assume PriceDelta = "Price Increased".
+      // CAUSE: Whale Dumping. EFFECT: Price Increased?
+      // we expect this to be FALSE.
+      // If we have Profit < 0 (on Buy), then Price Decreased. So Effect (Price Increase) did NOT happen.
+      // So OutcomePositive = false.
+      // this.cognitiveBrain.learn('WhaleNetFlow', 'PriceDelta', false);
+      // Correct.
+      if (decision.action === 'BUY') {
+        this.cognitiveBrain.learn('WhaleNetFlow', 'PriceDelta', outcome.profitLoss > 0);
+      }
+    }
 
-    // 🧠 HIPPOCAMPAL REPLAY 2.0 (Awake Tagging)
-    this.awakeReplay({
-      decision,
-      reward,
-      outcomeSuccess: outcome.success,
-      outcomeProfitLoss: outcome.profitLoss,
-      predictionError: Math.min(1, Math.abs(tdError)),
-      timestamp: Date.now()
-    });
+    // 2. Sentiment -> Price Delta
+    // If Sentiment is Greed, did price go up?
+    if (decision.marketState.sentiment === 'EUPHORIC' && decision.action === 'BUY') {
+      this.cognitiveBrain.learn('Sentiment', 'PriceDelta', outcome.profitLoss > 0);
+    }
 
     // Legacy Weight Update (Keep for compatibility until full migration)
     if (outcome.success) {
@@ -263,7 +282,7 @@ export class ActiveLearning {
    * Q(s,a) = Q(s,a) + alpha * (R + gamma * max(Q(s',a')) - Q(s,a))
    * FIX Bug #16: Implemented correct Q-Learning equation
    */
-  private updateQValue(state: MarketState, action: ActionType, reward: number, nextState?: MarketState): number {
+  private updateQValue(state: MarketState, action: ActionType, reward: number, nextState?: MarketState): void {
     const stateHash = this.getMarketStateHash(state);
 
     // Initialize state if new
@@ -292,14 +311,12 @@ export class ActiveLearning {
     // NewQ = OldQ + Alpha * (Reward + Gamma * MaxNextQ - OldQ)
     // FIX L4: Use Q_CONFIG.GAMMA consistently
     const gamma = Q_CONFIG.GAMMA;
-    const tdError = reward + gamma * maxNextQ - currentQ;
-    const newQ = currentQ + this.learningRate * tdError;
+    const newQ = currentQ + this.learningRate * (reward + gamma * maxNextQ - currentQ);
 
     this.qTable[stateHash][action] = newQ;
     this.dirtyQStates.add(stateHash);
     this.pendingUpdates++;
     this.debug(`    🧠 Q - UPDATE[${stateHash}][${action}]: ${currentQ.toFixed(4)} -> ${newQ.toFixed(4)} (R: ${reward.toFixed(4)}, MaxNext: ${maxNextQ.toFixed(4)})`);
-    return tdError;
   }
 
   /**
@@ -881,91 +898,6 @@ export class ActiveLearning {
   }
 
   /**
-   * 🧠 HIPPOCAMPAL REPLAY 2.0 - Awake phase
-   * Tag high prediction-error outcomes for later consolidation.
-   */
-  public awakeReplay(episode: ReplayEpisode): void {
-    this.replayEngine.awakeReplay(episode, episode.predictionError);
-  }
-
-  /**
-   * 🧠 HIPPOCAMPAL REPLAY 2.0 - Sleep phase
-   * Prioritized replay + light fictive learning for sample efficiency.
-   */
-  public sleepConsolidate(batchSize: number = 32): number {
-    const prioritized = this.replayEngine.sleepConsolidate(batchSize);
-    if (prioritized.length === 0) return 0;
-
-    for (const episode of prioritized) {
-      const replayReward = episode.source === 'fictive'
-        ? episode.reward * 0.6
-        : episode.reward;
-      this.updateQValue(
-        episode.decision.marketState,
-        episode.decision.action,
-        replayReward,
-        episode.decision.marketState
-      );
-
-      // Keep compositional-causal learning anchored to real experiences.
-      if (episode.source === 'awake') {
-        this.reinforceCausalBeliefs(episode.decision, {
-          decisionId: episode.decision.timestamp,
-          profitLoss: episode.outcomeProfitLoss,
-          capitalAtRisk: 1,
-          slippage: 0,
-          gasUsed: 0,
-          success: episode.outcomeSuccess
-        });
-      }
-    }
-
-    return prioritized.length;
-  }
-
-  /**
-   * 🧠 HIPPOCAMPAL REPLAY 2.0 - Fictive phase
-   * Learn from imagined alternatives before touching live capital.
-   */
-  public fictiveLearning(samples: number = 8): number {
-    const imagined = this.replayEngine.fictiveLearning(samples);
-    for (const episode of imagined) {
-      const dampedReward = episode.reward * 0.5;
-      this.updateQValue(
-        episode.decision.marketState,
-        episode.decision.action,
-        dampedReward,
-        episode.decision.marketState
-      );
-    }
-    return imagined.length;
-  }
-
-  public getReplayStats(): {
-    totalEpisodes: number;
-    meanPriority: number;
-    meanPredictionError: number;
-    awakeEpisodes: number;
-    fictiveEpisodes: number;
-  } {
-    return this.replayEngine.getStats();
-  }
-
-  private reinforceCausalBeliefs(decision: DecisionLog, outcome: TradeOutcome): void {
-    // 1) Whale Flow -> Price Delta
-    if (decision.marketState.whaleFlow === 'ACCUMULATING') {
-      this.cognitiveBrain.learn('WhaleNetFlow', 'PriceDelta', outcome.profitLoss > 0);
-    } else if (decision.marketState.whaleFlow === 'DUMPING' && decision.action === 'BUY') {
-      this.cognitiveBrain.learn('WhaleNetFlow', 'PriceDelta', outcome.profitLoss > 0);
-    }
-
-    // 2) Sentiment -> Price Delta
-    if (decision.marketState.sentiment === 'EUPHORIC' && decision.action === 'BUY') {
-      this.cognitiveBrain.learn('Sentiment', 'PriceDelta', outcome.profitLoss > 0);
-    }
-  }
-
-  /**
    * Runtime causal bias for decision confidence.
    * Converts synaptic probabilities into action-specific confidence deltas.
    */
@@ -1040,15 +972,15 @@ export class ActiveLearning {
    */
   public async dream(): Promise<void> {
     const batchSize = 32;
-    const consolidated = this.sleepConsolidate(batchSize);
-    if (consolidated === 0) return;
+    const samples = this.replayBuffer.sample(batchSize);
 
-    const fictive = this.fictiveLearning(Math.max(4, Math.floor(batchSize / 4)));
-    this.debug(`🌙 DREAMING: consolidated=${consolidated}, fictive=${fictive}`);
+    if (samples.length < batchSize) return;
 
-    if (this.autoSaveEnabled) {
-      this.scheduleAutoSave();
-    }
+    this.debug(`🌙 DREAMING: Re-living ${samples.length} memories...`);
+
+    // Train Causal Brain
+    // In a real implementation, we'd update the Bayesian Network here
+    // For now, we just log that we are reinforcing patterns
   }
 
   public getIntuition(): number[] {

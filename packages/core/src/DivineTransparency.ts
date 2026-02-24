@@ -21,7 +21,7 @@ import {
 export class DivineTransparency {
   private readonly MAX_HISTORY_SIZE = 1000;
   private decisionHistory: DecisionLog[] = [];
-  private historyIndex = 0; // FIX: ring pointer for O(1) circular eviction
+  private historyIndex = 0; // Points to oldest slot once buffer is full
   private weights: ReasoningWeights = DEFAULT_WEIGHTS;
   private oracle?: IOracle;
 
@@ -149,12 +149,12 @@ export class DivineTransparency {
       marketState: state
     };
 
-    this.decisionHistory.push(log);
-
-    // FIX: O(1) ring eviction — replace oldest slot rather than shifting entire array
-    if (this.decisionHistory.length > this.MAX_HISTORY_SIZE) {
-      this.decisionHistory[this.historyIndex % this.MAX_HISTORY_SIZE] = log;
-      this.historyIndex++;
+    // Real circular buffer: bounded length, O(1) insert/evict.
+    if (this.decisionHistory.length < this.MAX_HISTORY_SIZE) {
+      this.decisionHistory.push(log);
+    } else {
+      this.decisionHistory[this.historyIndex] = log;
+      this.historyIndex = (this.historyIndex + 1) % this.MAX_HISTORY_SIZE;
     }
 
     this.logToConsole(log);
@@ -264,21 +264,38 @@ export class DivineTransparency {
    * Get decision history for analysis
    */
   public getHistory(): DecisionLog[] {
-    return this.decisionHistory;
+    return this.getOrderedHistory();
   }
 
   /**
    * Get recent decisions
    */
   public getRecentDecisions(count: number = 10): DecisionLog[] {
-    return this.decisionHistory.slice(-count);
+    const safeCount = Math.max(0, Math.floor(count));
+    if (safeCount === 0) return [];
+    const ordered = this.getOrderedHistory();
+    return ordered.slice(-safeCount);
   }
 
   /**
    * Export history for analysis
    */
   public exportHistory(): string {
-    return JSON.stringify(this.decisionHistory, null, 2);
+    return JSON.stringify(this.getOrderedHistory(), null, 2);
+  }
+
+  private getOrderedHistory(): DecisionLog[] {
+    const size = this.decisionHistory.length;
+    if (size === 0) return [];
+
+    if (size < this.MAX_HISTORY_SIZE || this.historyIndex === 0) {
+      return [...this.decisionHistory];
+    }
+
+    return [
+      ...this.decisionHistory.slice(this.historyIndex),
+      ...this.decisionHistory.slice(0, this.historyIndex),
+    ];
   }
 
   // Helper description methods

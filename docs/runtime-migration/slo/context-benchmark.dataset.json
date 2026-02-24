@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "id": "defi-risk-01",
+      "target_tokens": 40,
+      "context": "Market monitor summary. Gas spike warning at 38 gwei during execution window. User wallet risk exposure is 72 percent after leverage increase. Recommendation: reduce leverage and set stop loss at 5 percent before next rebalance. Secondary note: keep slippage below 0.8 percent.",
+      "required_facts": [
+        "38 gwei",
+        "risk exposure is 72 percent",
+        "stop loss at 5 percent"
+      ]
+    },
+    {
+      "id": "incident-response-02",
+      "target_tokens": 44,
+      "context": "Incident timeline. A compromised spender contract requested unlimited allowance from wallet 0xabc123ef45. Emergency response should trigger approval revoker and pause automation bots. Required follow-up: revoke unlimited allowance and rotate hot wallet keys within 30 minutes. Ignore duplicate alerts from noisy webhook retries.",
+      "required_facts": [
+        "wallet 0xabc123ef45",
+        "approval revoker",
+        "revoke unlimited allowance"
+      ]
+    },
+    {
+      "id": "portfolio-guard-03",
+      "target_tokens": 38,
+      "context": "Daily portfolio note. Drawdown reached 14 percent after correlated move in alt basket. Treasury policy says reduce leverage to 1.5x and hold 35 percent in stable allocation. Next review requires checking liquidity depth and gas pressure before any new entry. Archive older chat fragments.",
+      "required_facts": [
+        "drawdown reached 14 percent",
+        "reduce leverage to 1.5x",
+        "35 percent in stable allocation"
+      ]
+    },
+    {
+      "id": "user-profile-04",
+      "target_tokens": 34,
+      "context": "User memory update. Preferred mode is Peer with concise technical explanations. Risk tolerance is 0.35 and user explicitly asked to avoid meme coin exposure. If confidence is low, propose options instead of auto execute. Save this profile for future sessions.",
+      "required_facts": [
+        "preferred mode is Peer",
+        "risk tolerance is 0.35",
+        "avoid meme coin exposure"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { WasmAdapter } from '../src/eidolon/WasmAdapter';
+import { WasmAdapter } from '@clawkit/soul';
 
 describe('🧬 RUST EVOLUTION: The Singularity Verification', () => {
     let adapter: WasmAdapter;
@@ -99,9 +99,10 @@ describe('🧬 RUST EVOLUTION: The Singularity Verification', () => {
             // Old: 1/1 = 1.0
             // New: (1+1)/(1+2) = 0.666...
 
-            graph.learn(100, 200, true); // Cause 100 -> Effect 200 (Success)
+            // SentinelVariable enum currently supports values 0..12.
+            graph.learn(0, 1, true); // Cause 0 -> Effect 1 (Success)
 
-            const edgeJson = graph.get_edge(100, 200);
+            const edgeJson = graph.get_edge(0, 1);
             // edgeJson is an object (serde serialization)
 
             // In WasmAdapter, get_edge returns JsValue which is an object

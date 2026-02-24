@@ -2,14 +2,16 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { EmotionalCore } from '../src/eidolon/EmotionalCore';
 import { AppendOnlyAdapter } from '@clawkit/core';
-import { EidolonBus } from '../src/events/EidolonBus';
+import { EidolonBus } from '@clawkit/core';
 
 // Mock dependencies
-vi.mock('../src/events/EidolonBus');
 vi.mock('@clawkit/core', async () => {
-    const actual = await vi.importActual('@clawkit/core');
+    const actual = await vi.importActual<any>('@clawkit/core');
     return {
         ...actual,
+        EidolonBus: {
+            getInstance: vi.fn(),
+        },
         AppendOnlyAdapter: vi.fn().mockImplementation(() => ({
             load: vi.fn(),
             save: vi.fn(),

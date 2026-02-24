@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { Readable } from "stream";
 import { IStorageProvider } from "./IStorageProvider";
+import { AsyncLock } from '@clawkit/core';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
@@ -15,10 +16,13 @@ import * as path from 'path';
  * FIX Bug #19: Converted to fully Async I/O
  */
 export class GreenfieldAdapter implements IStorageProvider {
+    private static readonly DEFAULT_MAX_LOAD_BYTES = 32 * 1024 * 1024; // 32MB safety guard
     private client: S3Client | null = null;
     private bucketName: string;
     private useLocalFallback: boolean = false;
     private readonly localDir: string; // FIX: resolved absolute path, readonly
+    private readonly maxLoadBytes: number;
+    private lock = new AsyncLock();
 
     constructor(config: {
         endpoint?: string,
@@ -26,12 +30,16 @@ export class GreenfieldAdapter implements IStorageProvider {
         accessKeyId?: string,
         secretAccessKey?: string,
         bucketName: string,
-        useLocalFallback?: boolean
+        useLocalFallback?: boolean,
+        maxLoadBytes?: number
     }) {
         this.bucketName = config.bucketName;
         this.useLocalFallback = config.useLocalFallback || false;
         // FIX: always resolve to absolute path to avoid cwd-dependent bugs
         this.localDir = path.resolve(config.useLocalFallback ? './data/memory' : './data/memory');
+        this.maxLoadBytes = Number.isFinite(config.maxLoadBytes) && Number(config.maxLoadBytes) > 0
+            ? Math.floor(Number(config.maxLoadBytes))
+            : GreenfieldAdapter.DEFAULT_MAX_LOAD_BYTES;
 
         if (!this.useLocalFallback && config.endpoint && config.accessKeyId && config.secretAccessKey) {
             this.client = new S3Client({
@@ -89,11 +97,14 @@ export class GreenfieldAdapter implements IStorageProvider {
         if (this.useLocalFallback) {
             await this.ensureLocalDir();
             const filePath = path.join(this.localDir, key);
-            const tempPath = `${filePath}.tmp`;
 
-            // Atomic Write: Write to tmp -> Rename
-            await fs.writeFile(tempPath, jsonString);
-            await fs.rename(tempPath, filePath);
+            await this.lock.run(async () => {
+                const tempPath = `${filePath}_${Date.now()}.tmp`;
+
+                // Atomic Write: Write to tmp -> Rename
+                await fs.writeFile(tempPath, jsonString);
+                await fs.rename(tempPath, filePath);
+            });
             return;
         }
 
@@ -111,23 +122,21 @@ export class GreenfieldAdapter implements IStorageProvider {
             // Fallback save to ensure no data loss
             await this.ensureLocalDir();
             const filePath = path.join(this.localDir, key);
-            const tempPath = `${filePath}.tmp`;
 
-            // Atomic Write: Write to tmp -> Rename
-            await fs.writeFile(tempPath, jsonString);
-            await fs.rename(tempPath, filePath);
+            await this.lock.run(async () => {
+                const tempPath = `${filePath}_${Date.now()}.tmp`;
+
+                // Atomic Write: Write to tmp -> Rename
+                await fs.writeFile(tempPath, jsonString);
+                await fs.rename(tempPath, filePath);
+            });
         }
     }
 
     async load<T>(key: string): Promise<T | null> {
         if (this.useLocalFallback) {
             const localPath = path.join(this.localDir, key);
-            try {
-                const content = await fs.readFile(localPath, 'utf-8');
-                return JSON.parse(content);
-            } catch {
-                return null;
-            }
+            return this.readLocalJson<T>(localPath);
         }
 
         try {
@@ -138,7 +147,7 @@ export class GreenfieldAdapter implements IStorageProvider {
             const response = await this.client?.send(command);
 
             if (response?.Body) {
-                const str = await this.streamToString(response.Body as Readable);
+                const str = await this.streamToString(response.Body as Readable, this.maxLoadBytes);
                 return JSON.parse(str);
             }
             return null;
@@ -151,8 +160,7 @@ export class GreenfieldAdapter implements IStorageProvider {
             try {
                 if (existsSync(localPath)) {
                     console.log(`⚠️ Loading ${key} from local backup.`);
-                    const content = await fs.readFile(localPath, 'utf-8');
-                    return JSON.parse(content);
+                    return this.readLocalJson<T>(localPath);
                 }
             } catch {
                 // Local backup missing or unreadable.
@@ -184,13 +192,69 @@ export class GreenfieldAdapter implements IStorageProvider {
         }
     }
 
+    private async readLocalJson<T>(filePath: string): Promise<T | null> {
+        try {
+            const stats = await fs.stat(filePath);
+            if (stats.size > this.maxLoadBytes) {
+                console.error(`❌ Refusing to load oversized local payload (${stats.size} bytes > ${this.maxLoadBytes} bytes): ${path.basename(filePath)}`);
+                return null;
+            }
+            const content = await fs.readFile(filePath, 'utf-8');
+            return JSON.parse(content) as T;
+        } catch {
+            return null;
+        }
+    }
+
     // Helper
-    private streamToString(stream: Readable): Promise<string> {
+    private streamToString(stream: Readable, maxBytes: number): Promise<string> {
         return new Promise((resolve, reject) => {
-            const chunks: Buffer[] = [];
-            stream.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-            stream.on("error", (err) => reject(err));
-            stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+            const decoder = new TextDecoder('utf-8');
+            const parts: string[] = [];
+            let totalBytes = 0;
+            let settled = false;
+
+            const cleanup = () => {
+                stream.removeListener('data', onData);
+                stream.removeListener('error', onError);
+                stream.removeListener('end', onEnd);
+            };
+
+            const fail = (error: Error) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                if (typeof stream.destroy === 'function') {
+                    stream.destroy();
+                }
+                reject(error);
+            };
+
+            const onData = (chunk: Buffer | Uint8Array | string) => {
+                const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                totalBytes += buf.length;
+                if (totalBytes > maxBytes) {
+                    fail(new Error(`GreenfieldAdapter: payload exceeds maxLoadBytes (${maxBytes} bytes)`));
+                    return;
+                }
+                parts.push(decoder.decode(buf, { stream: true }));
+            };
+
+            const onError = (error: unknown) => {
+                fail(error instanceof Error ? error : new Error(String(error)));
+            };
+
+            const onEnd = () => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                parts.push(decoder.decode());
+                resolve(parts.join(''));
+            };
+
+            stream.on('data', onData);
+            stream.once('error', onError);
+            stream.once('end', onEnd);
         });
     }
 
@@ -208,7 +272,9 @@ export class GreenfieldAdapter implements IStorageProvider {
             }) + '\n';
 
             await this.ensureLocalDir();
-            await fs.appendFile(localPath, entry, 'utf-8');
+            await this.lock.run(async () => {
+                await fs.appendFile(localPath, entry, 'utf-8');
+            });
         } catch (e) {
             console.error(`❌ Failed to append to ${key}`, e);
             throw e;

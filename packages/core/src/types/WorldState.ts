@@ -8,6 +8,10 @@
 
 import type { MarketState } from './EidolonTypes';
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Generic world perception snapshot.
  *
@@ -64,13 +68,16 @@ export function createWorldState<T extends object>(
  * Type guard — check if a value is a valid WorldState.
  */
 export function isWorldState(value: unknown): value is WorldState {
+    if (!isPlainRecord(value)) return false;
+    if (typeof value.domain !== 'string' || value.domain.trim().length === 0) return false;
+    if (!isPlainRecord(value.sensory)) return false;
+    if (typeof value.timestamp !== 'number' || !Number.isFinite(value.timestamp)) return false;
+    if (typeof value.confidence !== 'number' || !Number.isFinite(value.confidence)) return false;
+    if (value.confidence < 0 || value.confidence > 1) return false;
+    if (value.meta !== undefined && !isPlainRecord(value.meta)) return false;
+
     return (
-        typeof value === 'object' &&
-        value !== null &&
-        typeof (value as WorldState).domain === 'string' &&
-        typeof (value as WorldState).sensory === 'object' &&
-        typeof (value as WorldState).timestamp === 'number' &&
-        typeof (value as WorldState).confidence === 'number'
+        true
     );
 }
 

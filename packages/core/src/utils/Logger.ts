@@ -35,17 +35,43 @@ function normalizeContext(ctx: unknown): Record<string, unknown> {
     return ctx as Record<string, unknown>;
 }
 
-function redact(obj: unknown, depth = 0): unknown {
-    if (depth > 10 || obj === null || obj === undefined) return obj;
-    if (typeof obj === 'bigint') return obj.toString();
-    if (typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) return obj.map(item => redact(item, depth + 1));
-
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-        out[k] = REDACTED_KEYS.has(k) ? '[REDACTED]' : redact(v, depth + 1);
+function sanitize(value: unknown, depth: number, stack: WeakSet<object>): unknown {
+    if (depth > 10) return '[Truncated]';
+    if (value === null || value === undefined) return value;
+    if (value instanceof Error) {
+        return { error: value.message, stack: value.stack, name: value.name };
     }
-    return out;
+    if (typeof value === 'bigint') return value.toString();
+    if (typeof value !== 'object') return value;
+
+    if (stack.has(value)) return '[Circular]';
+    stack.add(value);
+
+    try {
+        if (Array.isArray(value)) {
+            return value.map(item => sanitize(item, depth + 1, stack));
+        }
+
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+            out[k] = REDACTED_KEYS.has(k) ? '[REDACTED]' : sanitize(v, depth + 1, stack);
+        }
+        return out;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return `[Unserializable: ${message}]`;
+    } finally {
+        stack.delete(value);
+    }
+}
+
+function redact(ctx: unknown): Record<string, unknown> {
+    const normalized = normalizeContext(ctx);
+    const redacted = sanitize(normalized, 0, new WeakSet<object>());
+    if (redacted && typeof redacted === 'object' && !Array.isArray(redacted)) {
+        return redacted as Record<string, unknown>;
+    }
+    return { value: redacted };
 }
 
 interface LogRecord {
@@ -87,10 +113,30 @@ class EidolonLogger {
         };
 
         if (this.correlationId) record.cid = this.correlationId;
-        if (context !== undefined) Object.assign(record, redact(normalizeContext(context)));
+        if (context !== undefined) Object.assign(record, redact(context));
+
+        let line: string;
+        try {
+            line = JSON.stringify(record);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            line = JSON.stringify({
+                ts: new Date().toISOString(),
+                level: 'error',
+                msg: 'Logger serialization failure',
+                pid: process.pid,
+                name: this.name,
+                originalMsg: msg,
+                serializationError: message,
+            });
+        }
 
         // Force STDERR — never touches STDOUT (MCP JSON-RPC safety)
-        process.stderr.write(JSON.stringify(record) + '\n');
+        try {
+            process.stderr.write(line + '\n');
+        } catch {
+            // Swallow logger I/O failures to keep application flow alive.
+        }
     }
 
     info(msg: string, context?: unknown): void {

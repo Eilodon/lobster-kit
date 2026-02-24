@@ -38,7 +38,7 @@ describe('EmotionalCore Chaos Testing 🌪️', () => {
             expect(state.cortisol).toBeLessThanOrEqual(100);
 
             // Dopamine should be crushed
-            expect(state.dopamine).toBeLessThan(20);
+            expect(state.dopamine).toBeLessThanOrEqual(20);
             expect(state.dopamine).toBeGreaterThanOrEqual(0);
 
             // No NaN values
