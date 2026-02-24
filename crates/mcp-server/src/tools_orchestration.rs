@@ -274,7 +274,7 @@ impl EidolonMcpServer {
             let shadow_mode_requested = params
                 .get("shadow_mode")
                 .and_then(|value| value.as_bool())
-                .unwrap_or_else(|| Self::env_flag("COGNITIVE_SHADOW_MODE_ENABLED", false));
+                .unwrap_or_else(|| Self::env_flag("COGNITIVE_SHADOW_MODE_ENABLED", true));
             let shadow_sample_percent = Self::env_percent(
                 "COGNITIVE_SHADOW_SAMPLE_PERCENT",
                 super::DEFAULT_SHADOW_SAMPLE_PERCENT,

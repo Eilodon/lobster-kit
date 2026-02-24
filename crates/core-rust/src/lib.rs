@@ -2,7 +2,7 @@ mod security;
 #[path = "q64_96.rs"]
 mod q64_96_wasm;
 mod hyper_memory;
-mod liquid_brain;
+pub mod liquid_brain;
 
 // New Eidolon Engine modules
 mod order_book;

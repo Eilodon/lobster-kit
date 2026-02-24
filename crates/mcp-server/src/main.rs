@@ -5,11 +5,14 @@ mod embedding;
 mod helpers;
 mod mcp_protocol;
 mod memory;
+mod memory_persist;
 mod oracle;
 mod reasoning;
 mod resources;
 mod subbrain_auto;
 mod telemetry;
+mod tensor_oracle;
+mod tool_forge;
 mod tool_gen;
 mod tools_core;
 mod tools_learning;
@@ -94,11 +97,18 @@ pub struct EidolonMcpServer {
     users_file_path: Arc<PathBuf>,
     // Upgrade 3: Stateful Memory
     memories: Arc<Mutex<Vec<MemoryEntry>>>,
+    memories_file_path: Arc<PathBuf>,
+    pub(crate) last_input_ms: Arc<std::sync::atomic::AtomicU64>,
+    pub dynamic_tools: Arc<tokio::sync::Mutex<HashMap<String, tool_forge::WasmTool>>>,
     // Lightweight telemetry for MCP resources.
     tool_metrics: Arc<Mutex<HashMap<String, ToolTelemetry>>>,
     telemetry_db_path: Arc<PathBuf>,
     // Phase 5: ONNX Embedding Engine for sense_intent
     embedding_engine: Arc<Option<EmbeddingEngine>>,
+    // Phase 6: LiquidBrain adaptive neural classifier
+    liquid_brain: Arc<Mutex<core_rust::liquid_brain::LiquidBrain>>,
+    // Phase 6: The Epistemic Core (Candle Tensor Engine)
+    tensor_oracle: Arc<crate::tensor_oracle::TensorOracle>,
 }
 
 impl EidolonMcpServer {
@@ -155,6 +165,15 @@ impl EidolonMcpServer {
             }
         };
 
+        // Phase 3: Memory persistence path
+        let memories_file_path = users_file_path
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("clawkit_memories.json");
+
+        // Phase 3: Load memories from disk if available
+        let memories = Self::load_memories_from_disk_sync(&memories_file_path);
+
         Self {
             oracle: Arc::new(oracle),
             causal_brain: Arc::new(Mutex::new(CausalGraph::new())),
@@ -169,10 +188,19 @@ impl EidolonMcpServer {
             )),
             users: Arc::new(Mutex::new(users)),
             users_file_path: Arc::new(users_file_path),
-            memories: Arc::new(Mutex::new(Vec::new())),
+            memories: Arc::new(Mutex::new(memories)),
+            memories_file_path: Arc::new(memories_file_path),
+            last_input_ms: Arc::new(std::sync::atomic::AtomicU64::new(chrono::Utc::now().timestamp_millis() as u64)),
+            dynamic_tools: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             tool_metrics: Arc::new(Mutex::new(loaded_tool_metrics)),
             telemetry_db_path: Arc::new(telemetry_db_path),
             embedding_engine: Arc::new(embedding_engine),
+            // Phase 6: LiquidBrain — 64 input (pseudo_embed dim), 16 hidden neurons
+            liquid_brain: Arc::new(Mutex::new(
+                core_rust::liquid_brain::LiquidBrain::new(64, 16),
+            )),
+            // Phase 6: The Epistemic Core
+            tensor_oracle: Arc::new(crate::tensor_oracle::TensorOracle::new()),
         }
     }
 
@@ -227,6 +255,35 @@ async fn main() {
         std::env::var("DEEPSEEK_API_KEY").unwrap_or_else(|_| "dummy_key".to_string()),
     );
     let server = EidolonMcpServer::new(oracle);
+
+    // Initializing Phase 6: The Epistemic Core
+    eprintln!("[ClawKit TensorOracle] Booting internal LLM Engine...");
+    if let Err(e) = server.tensor_oracle.boot_engine().await {
+        eprintln!("[ClawKit TensorOracle] CRITICAL ENGINE BOOT FAILURE: {}", e);
+    } else {
+        eprintln!("[ClawKit TensorOracle] Precomputing Epistemic Pre-Hook (Zero-Allocation Memory Profile)");
+        let user_profile = "Eidolon-V Operating Context. Core Directives: Ruthless efficiency. Optimization is paramount. Maximize Thermodynamic Entropy in exploration.";
+        if let Err(e) = server.tensor_oracle.precompute_epistemic_hook(user_profile).await {
+            eprintln!("[ClawKit] Failed to preload Epistemic Pre-Hook: {}", e);
+        }
+    }
+
+    let server_dream_clone = server.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+            let now = chrono::Utc::now().timestamp_millis() as u64;
+            let last_input = server_dream_clone.last_input_ms.load(std::sync::atomic::Ordering::Relaxed);
+            
+            // Dynamic threshold based on system state
+            let base_threshold = 300_000; // 5 minutes standard
+            
+            if now > last_input + base_threshold {
+                eprintln!("[Eidolon-V] Dream Sequence Initiated. Processing historical memories...");
+                server_dream_clone.trigger_dream_sequence().await;
+            }
+        }
+    });
 
     server.run_stdio().await;
 }

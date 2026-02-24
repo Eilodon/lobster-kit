@@ -331,7 +331,7 @@ async function benchmarkIntentClassification(mcp) {
     // due to multi-signal weighting. Thresholds are calibrated to this range.
     let detectedRisk = null;
     if (riskScore !== null) {
-      detectedRisk = riskScore > 0.5 ? 'high' : riskScore > 0.25 ? 'medium' : 'low';
+      detectedRisk = riskScore > 0.45 ? 'high' : riskScore > 0.22 ? 'medium' : 'low';
     }
     // Also check recommended_mode for Ollama fallback responses
     if (result.recommended_mode) {

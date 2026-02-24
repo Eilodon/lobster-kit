@@ -95,12 +95,13 @@ impl LiquidBrain {
         self.next_state_buffer.fill(0.0);
     }
     
-    // Plasticity: Hebbian-like update
+    // Plasticity: Hebbian-like update with weight decay
     pub fn optimize(&mut self, reward_signal: f32) {
         // If reward is positive, strengthen connections that were active
         // If negative, weaken them.
         
         let learning_rate = 0.001 * reward_signal;
+        let weight_decay = 0.999; // Prevents saturation at ±1.0
         
         // Simple rule: dW = lr * post * pre
         // Not true backprop, but "Fluid Intelligence" adaptation
@@ -109,6 +110,8 @@ impl LiquidBrain {
         for h in 0..self.hidden_size {
             for i in 0..self.hidden_size {
                 let idx = h * self.hidden_size + i;
+                // Decay first to prevent weight saturation
+                self.weights_hh[idx] *= weight_decay;
                 let change = learning_rate * self.state[h] * self.state[i]; 
                 self.weights_hh[idx] += change;
                 

@@ -36,6 +36,7 @@ pub struct ThermodynamicEngine {
     grad_h_buffer: DVector<f32>,
     grad_s_buffer: DVector<f32>,
     dz_buffer: DVector<f32>,
+    pub entropy_override: Option<(f32, u64)>, // (entropy_value, explicit_expiration_timestamp_ms)
 }
 
 impl ThermodynamicEngine {
@@ -72,11 +73,21 @@ impl ThermodynamicEngine {
             grad_h_buffer: DVector::zeros(dim),
             grad_s_buffer: DVector::zeros(dim),
             dz_buffer: DVector::zeros(dim),
+            entropy_override: None,
         }
     }
     
     /// Compute entropy S = -Σ p_i log(p_i)
-    pub fn entropy(&self, state: &DVector<f32>) -> f32 {
+    pub fn entropy(&mut self, state: &DVector<f32>) -> f32 {
+        if let Some((target_entropy, expiration)) = self.entropy_override {
+            let now = chrono::Utc::now().timestamp_millis() as u64;
+            if now < expiration {
+                return target_entropy;
+            } else {
+                self.entropy_override = None;
+            }
+        }
+        
         let eps = self.config.epsilon;
         let mut s = 0.0;
 

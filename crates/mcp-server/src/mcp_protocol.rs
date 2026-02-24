@@ -139,37 +139,52 @@ impl EidolonMcpServer {
             .map(|code| code.to_string())
     }
 
-    pub(crate) fn list_tools_payload() -> serde_json::Value {
-        serde_json::json!({
-            "tools": [
-                { "name": "clawkit_recall_user", "description": "Recall User Profile", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" } } } },
-                { "name": "clawkit_sense_intent", "description": "Sense intent", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "user_id": { "type": "string" } }, "required": ["query"] } },
-                { "name": "clawkit_check_pattern", "description": "Check safety guardrail", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" }, "mode": { "type": "string" } } } },
-                { "name": "clawkit_simulate_response", "description": "Simulate causal response", "inputSchema": { "type": "object", "properties": { "action": { "type": "string" } } } },
-                { "name": "clawkit_commit_pattern", "description": "Commit to memory", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" } } } },
-                { "name": "clawkit_reason_chain", "description": "Deep reasoning chain", "inputSchema": { "type": "object", "properties": { "draft": { "type": "string" }, "context": { "type": "string" }, "mode": { "type": "string", "enum": ["auto", "fast", "deep"] }, "latency_budget_ms": { "type": "number" } } } },
-                { "name": "clawkit_recall_similar", "description": "Recall similar memories", "inputSchema": { "type": "object", "properties": { "context": { "type": "string" }, "k": { "type": "number" } } } },
-                { "name": "clawkit_memory_query", "description": "Query Vector Memory", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "route": { "type": "string", "enum": ["auto", "episodic", "semantic", "causal"] }, "k": { "type": "number" } } } },
-                { "name": "clawkit_compress_context", "description": "Compress Context", "inputSchema": { "type": "object", "properties": { "target_tokens": { "type": "number" }, "context": { "type": "string", "description": "Raw text to compress. If empty, compresses from memory store." }, "preserve_recent": { "type": "number" }, "dedupe_threshold": { "type": "number" }, "focus_terms": { "type": "array", "items": { "type": "string" } } } } },
-                { "name": "clawkit_record_outcome", "description": "Record outcome and learn", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" }, "mode": { "type": "string" }, "severity": { "type": "number" } } } },
-                { "name": "clawkit_update_user", "description": "Update User", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" } } } },
-                { "name": "clawkit_dream_conversation", "description": "Dream conversation replay", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" } } } },
-                { "name": "clawkit_orchestrate", "description": "Orchestrate mult-agents", "inputSchema": { "type": "object", "properties": { "agent_count": { "type": "number" }, "task": { "type": "string" }, "confidence": { "type": "number" }, "latency_budget_ms": { "type": "number" } } } },
-                { "name": "clawkit_tool_recommend", "description": "Recommend tool", "inputSchema": { "type": "object", "properties": { "task": { "type": "string" }, "available_tools": { "type": "array", "items": { "type": "string" } }, "recommender_model": { "type": "string", "enum": ["v1", "v2"] }, "shadow_mode": { "type": "boolean" } } } },
-                { "name": "clawkit_subbrain_auto", "description": "Sub-Brain Auto-Orchestration: Automatically classifies intent, recommends tools, and executes based on confidence", "inputSchema": { "type": "object", "properties": { "input": { "type": "string", "description": "User input to analyze" }, "user_id": { "type": "string" }, "auto_execute": { "type": "boolean", "default": true }, "force_execute": { "type": "boolean", "default": false }, "max_tools": { "type": "number", "default": 3 }, "include_raw_results": { "type": "boolean", "default": true } }, "required": ["input"] } },
-                { "name": "clawkit_route_action", "description": "Meta-cognitive routing policy returning AUTO, PROPOSE, or ASK_USER", "inputSchema": { "type": "object", "properties": { "suggested_tool": { "type": "string" }, "intent_confidence": { "type": "number" }, "context_type": { "type": "string" } }, "required": ["suggested_tool", "intent_confidence"] } },
-                { "name": "clawkit_generated_tool_decision", "description": "Generated tool governance decision", "inputSchema": { "type": "object", "properties": { "tool_name": { "type": "string" }, "action": { "type": "string", "enum": ["accept", "reject", "promote"] }, "need": { "type": "string" }, "reason": { "type": "string" } } } },
-                { "name": "eidolon_oracle_sense", "description": "Legacy Oracle market sensing", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } } } },
-                { "name": "eidolon_defi_quote", "description": "Legacy DeFi quote bridge", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } },
-                { "name": "eidolon_security_scan", "description": "Legacy contract security scan bridge", "inputSchema": { "type": "object", "properties": { "contract": { "type": "string" } } } },
-                { "name": "eidolon_get_portfolio", "description": "Legacy portfolio snapshot bridge", "inputSchema": { "type": "object", "properties": { "owner": { "type": "string" } } } },
-                { "name": "eidolon_execute_swap", "description": "Legacy execute swap bridge", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } },
-                { "name": "eidolon_panic_button", "description": "Legacy emergency mode bridge", "inputSchema": { "type": "object", "properties": { "wallet": { "type": "string" } } } },
-                { "name": "eidolon_recall", "description": "Legacy user recall alias", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" }, "wallet": { "type": "string" }, "address": { "type": "string" } } } },
-                { "name": "eidolon_intuition", "description": "Legacy intent sensing alias", "inputSchema": { "type": "object", "properties": {} } },
-                { "name": "eidolon_dream", "description": "Legacy dream replay alias", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" }, "cycles": { "type": "number" } } } }
-            ]
-        })
+    pub(crate) async fn list_tools_payload(&self) -> serde_json::Value {
+        let mut tools = vec![
+            serde_json::json!({ "name": "clawkit_recall_user", "description": "Recall User Profile", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" } } } }),
+            serde_json::json!({ "name": "clawkit_sense_intent", "description": "Sense intent", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "user_id": { "type": "string" } }, "required": ["query"] } }),
+            serde_json::json!({ "name": "clawkit_check_pattern", "description": "Check safety guardrail", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" }, "mode": { "type": "string" } } } }),
+            serde_json::json!({ "name": "clawkit_simulate_response", "description": "Simulate causal response", "inputSchema": { "type": "object", "properties": { "action": { "type": "string" } } } }),
+            serde_json::json!({ "name": "clawkit_commit_pattern", "description": "Commit to memory", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" } } } }),
+            serde_json::json!({ "name": "clawkit_reason_chain", "description": "Deep reasoning chain", "inputSchema": { "type": "object", "properties": { "draft": { "type": "string" }, "context": { "type": "string" }, "mode": { "type": "string", "enum": ["auto", "fast", "deep"] }, "latency_budget_ms": { "type": "number" } } } }),
+            serde_json::json!({ "name": "clawkit_recall_similar", "description": "Recall similar memories", "inputSchema": { "type": "object", "properties": { "context": { "type": "string" }, "k": { "type": "number" } } } }),
+            serde_json::json!({ "name": "clawkit_memory_query", "description": "Query Vector Memory", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "route": { "type": "string", "enum": ["auto", "episodic", "semantic", "causal"] }, "k": { "type": "number" } } } }),
+            serde_json::json!({ "name": "clawkit_compress_context", "description": "Compress Context", "inputSchema": { "type": "object", "properties": { "target_tokens": { "type": "number" }, "context": { "type": "string", "description": "Raw text to compress. If empty, compresses from memory store." }, "preserve_recent": { "type": "number" }, "dedupe_threshold": { "type": "number" }, "focus_terms": { "type": "array", "items": { "type": "string" } } } } }),
+            serde_json::json!({ "name": "clawkit_record_outcome", "description": "Record outcome and learn", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" }, "mode": { "type": "string" }, "severity": { "type": "number" } } } }),
+            serde_json::json!({ "name": "clawkit_update_user", "description": "Update User", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" } } } }),
+            serde_json::json!({ "name": "clawkit_dream_conversation", "description": "Dream conversation replay", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" } } } }),
+            serde_json::json!({ "name": "clawkit_orchestrate", "description": "Orchestrate mult-agents", "inputSchema": { "type": "object", "properties": { "agent_count": { "type": "number" }, "task": { "type": "string" }, "confidence": { "type": "number" }, "latency_budget_ms": { "type": "number" } } } }),
+            serde_json::json!({ "name": "clawkit_tool_recommend", "description": "Recommend tool", "inputSchema": { "type": "object", "properties": { "task": { "type": "string" }, "available_tools": { "type": "array", "items": { "type": "string" } }, "recommender_model": { "type": "string", "enum": ["v1", "v2"] }, "shadow_mode": { "type": "boolean" } } } }),
+            serde_json::json!({ "name": "clawkit_subbrain_auto", "description": "Sub-Brain Auto-Orchestration: Automatically classifies intent, recommends tools, and executes based on confidence", "inputSchema": { "type": "object", "properties": { "input": { "type": "string", "description": "User input to analyze" }, "user_id": { "type": "string" }, "auto_execute": { "type": "boolean", "default": true }, "force_execute": { "type": "boolean", "default": false }, "max_tools": { "type": "number", "default": 3 }, "include_raw_results": { "type": "boolean", "default": true } }, "required": ["input"] } }),
+            serde_json::json!({ "name": "clawkit_route_action", "description": "Meta-cognitive routing policy returning AUTO, PROPOSE, or ASK_USER", "inputSchema": { "type": "object", "properties": { "suggested_tool": { "type": "string" }, "intent_confidence": { "type": "number" }, "context_type": { "type": "string" } }, "required": ["suggested_tool", "intent_confidence"] } }),
+            serde_json::json!({ "name": "clawkit_generated_tool_decision", "description": "Generated tool governance decision", "inputSchema": { "type": "object", "properties": { "tool_name": { "type": "string" }, "action": { "type": "string", "enum": ["accept", "reject", "promote"] }, "need": { "type": "string" }, "reason": { "type": "string" } } } }),
+            serde_json::json!({ "name": "clawkit_forge_tool", "description": "Forge a WASM tool", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "code": { "type": "string" } }, "required": ["name", "code"] } }),
+            serde_json::json!({ "name": "clawkit_set_entropy", "description": "Force entropy state", "inputSchema": { "type": "object", "properties": { "target_entropy": { "type": "number" }, "duration_ms": { "type": "number" } }, "required": ["target_entropy", "duration_ms"] } }),
+            // Legacy aliases
+            serde_json::json!({ "name": "eidolon_oracle_sense", "description": "Legacy Oracle market sensing", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_defi_quote", "description": "Legacy DeFi quote bridge", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
+            serde_json::json!({ "name": "eidolon_security_scan", "description": "Legacy contract security scan bridge", "inputSchema": { "type": "object", "properties": { "contract": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_get_portfolio", "description": "Legacy portfolio snapshot bridge", "inputSchema": { "type": "object", "properties": { "owner": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_execute_swap", "description": "Legacy execute swap bridge", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
+            serde_json::json!({ "name": "eidolon_panic_button", "description": "Legacy emergency mode bridge", "inputSchema": { "type": "object", "properties": { "wallet": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_recall", "description": "Legacy user recall alias", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" }, "wallet": { "type": "string" }, "address": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_intuition", "description": "Legacy intent sensing alias", "inputSchema": { "type": "object", "properties": {} } }),
+            serde_json::json!({ "name": "eidolon_dream", "description": "Legacy dream replay alias", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" }, "cycles": { "type": "number" } } } })
+        ];
+
+        let dynamic_tools = self.dynamic_tools.lock().await;
+        for (name, tool) in dynamic_tools.iter() {
+            tools.push(serde_json::json!({
+                "name": name,
+                "description": format!("(Dynamic) {}", tool.description),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "input": { "type": "number" } }
+                }
+            }));
+        }
+
+        serde_json::json!({ "tools": tools })
     }
 
     pub(crate) fn normalize_legacy_tool_call(

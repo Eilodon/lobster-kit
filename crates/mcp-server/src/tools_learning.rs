@@ -32,6 +32,17 @@ impl EidolonMcpServer {
                 trauma.heal(mode, pattern);
             }
 
+            // Phase 6: LiquidBrain online learning from outcome
+            {
+                let reward_signal = if severity > 0.0 {
+                    -(severity / 5.0) // Negative reward for bad outcomes
+                } else {
+                    1.0 // Positive reward for healed/good outcomes
+                };
+                let mut brain = self.liquid_brain.lock().await;
+                brain.optimize(reward_signal);
+            }
+
             let mut brain = self.causal_brain.lock().await;
             brain.learn(
                 core_rust::sentinel::variables::SentinelVariable::Sentiment,
@@ -82,6 +93,9 @@ impl EidolonMcpServer {
                 let excess = mems.len() - 10_000;
                 mems.drain(0..excess);
             }
+            drop(mems);
+            // Phase 3: Persist memories to disk
+            self.save_memories_to_disk().await;
 
             serde_json::json!({
                 "status": "outcome_recorded",

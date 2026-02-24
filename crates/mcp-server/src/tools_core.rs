@@ -30,8 +30,8 @@ impl EidolonMcpServer {
                 clamp01(params["intent_confidence"].as_f64().unwrap_or(0.5)) as f32;
 
             let thermo_coherence = {
-                let thermo = self.thermo.lock().await;
-                let state = nalgebra::DVector::from_vec(vec![0.15f32, 0.25, 0.35, 0.45, 0.55]);
+            let mut thermo = self.thermo.lock().await;
+            let state = nalgebra::DVector::from_vec(vec![0.15f32, 0.25, 0.35, 0.45, 0.55]);
                 let entropy = thermo.entropy(&state).max(0.0);
                 (1.0 / (1.0 + entropy)).clamp(0.35, 1.0)
             };
@@ -221,9 +221,21 @@ Query: "{}" → "#,
 
             let profile_sensitive_boost =
                 critical_action_score * (0.12 + profile_sensitivity * 0.18);
+
+            // Phase 6: Neural risk score via LiquidBrain (adapts with feedback)
+            let neural_risk_score = {
+                let embed = pseudo_embed(query);
+                let mut brain = self.liquid_brain.lock().await;
+                let output = brain.forward(embed);
+                // Average hidden state as risk signal, clamped to [0, 1]
+                let raw = output.iter().sum::<f32>() / output.len().max(1) as f32;
+                (raw.tanh() * 0.5 + 0.5).clamp(0.0, 1.0) as f64
+            };
+
             let composite_risk_score = clamp01(
-                model_risk_score * 0.55
-                    + lexical_risk_score * 0.20
+                model_risk_score * 0.40
+                    + neural_risk_score * 0.20
+                    + lexical_risk_score * 0.15
                     + historical_risk_prior * 0.10
                     + actor_risk_score * 0.05
                     + profile_sensitive_boost
@@ -249,18 +261,27 @@ Query: "{}" → "#,
 
             let recommended_mode = if abstained {
                 "Peer".to_string()
-            } else if composite_risk_score >= 0.55 {
+            } else if composite_risk_score >= 0.50 {
                 "Berserk".to_string()
-            } else if composite_risk_score >= 0.35 {
+            } else if composite_risk_score >= 0.30 {
                 "Stalking".to_string()
             } else {
                 "Peer".to_string()
             };
-
-            let thermo = self.thermo.lock().await;
-            let state_vec = nalgebra::DVector::from_element(5, 0.5);
-            let thermo_entropy = thermo.entropy(&state_vec);
-            drop(thermo);
+            // Phase 1B: Evolve thermodynamic state with live risk signals
+            let thermo_entropy = {
+                let mut thermo = self.thermo.lock().await;
+                let target = nalgebra::DVector::from_vec(vec![
+                    composite_risk_score as f32,      // Volatility proxy
+                    model_risk_score as f32,          // Trend proxy
+                    (1.0 - lexical_risk_score) as f32, // Liquidity (inverse of risk)
+                    confidence_calibrated as f32,     // Cycle = confidence
+                    actor_risk_score as f32,          // Momentum = actor risk
+                ]);
+                let mut state = nalgebra::DVector::from_element(5, 0.5);
+                thermo.step(&mut state, &target);
+                thermo.entropy(&state)
+            };
 
             serde_json::json!({
                 "success": true,
@@ -271,6 +292,7 @@ Query: "{}" → "#,
                 "inference_backend": inference_backend,
                 "ensemble": {
                     "model_risk_score": model_risk_score,
+                    "neural_risk_score": neural_risk_score,
                     "lexical_risk_score": lexical_risk_score,
                     "historical_risk_prior": historical_risk_prior,
                     "actor_risk_score": actor_risk_score,
@@ -479,6 +501,9 @@ Query: "{}" → "#,
                 let excess = mems.len() - 10_000;
                 mems.drain(0..excess);
             }
+            drop(mems);
+            // Phase 3: Persist memories to disk
+            self.save_memories_to_disk().await;
 
             serde_json::json!({
                 "status": "committed",
@@ -486,5 +511,45 @@ Query: "{}" → "#,
                 "new_entropy": entropy,
                 "embedding_backend": embedding_backend
             })
+    }
+    pub(crate) async fn handle_set_entropy(&self, params: serde_json::Value) -> serde_json::Value {
+        let target_entropy = params["target_entropy"].as_f64().unwrap_or(0.5) as f32;
+        let duration_ms = params["duration_ms"].as_u64().unwrap_or(60000);
+        let expiration = chrono::Utc::now().timestamp_millis() as u64 + duration_ms;
+        
+        let mut thermo = self.thermo.lock().await;
+        thermo.entropy_override = Some((target_entropy, expiration));
+        
+        serde_json::json!({
+            "status": "success",
+            "message": format!("Entropy overridden to {} until {}", target_entropy, expiration)
+        })
+    }
+
+    pub(crate) async fn trigger_dream_sequence(&self) {
+        let mut mems = self.memories.lock().await;
+        if mems.len() < 2 {
+            return;
+        }
+        
+        // Take the last two memories for associative binding
+        // (In a real implementation, this would use a fast K-means or semantic clustering)
+        let sample: Vec<String> = mems.iter().rev().take(2).map(|m| m.content.clone()).collect();
+        let content = format!("Dream Synthesis: Identified a deep causal link between '{}' and '{}'", sample[0], sample[1]);
+        
+        let (embedding, _) = self.embed_text_with_fallback(&content);
+        mems.push(MemoryEntry {
+            timestamp: chrono::Utc::now().timestamp_millis(),
+            category: "dream_insight".to_string(),
+            content,
+            embedding,
+        });
+        
+        if mems.len() > 10_000 {
+            let excess = mems.len() - 10_000;
+            mems.drain(0..excess);
+        }
+        drop(mems);
+        self.save_memories_to_disk().await;
     }
 }

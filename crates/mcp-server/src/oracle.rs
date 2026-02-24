@@ -24,6 +24,11 @@ impl DeepSeekOracle {
     }
 
     pub async fn analyze(&self, context: &str) -> String {
+        self.analyze_with_temp(context, None).await
+    }
+
+    pub async fn analyze_with_temp(&self, context: &str, temp_override: Option<f64>) -> String {
+        let temp = temp_override.unwrap_or(0.1);
         // Actual HTTP request to DeepSeek API
         let payload = serde_json::json!({
             "model": "deepseek-chat",
@@ -31,7 +36,7 @@ impl DeepSeekOracle {
                 { "role": "system", "content": "You are Eidolon-V Oracle." },
                 { "role": "user", "content": context }
             ],
-            "temperature": 0.1
+            "temperature": temp
         });
 
         match self
@@ -69,6 +74,8 @@ pub struct OllamaRequest {
     pub model: String,
     pub prompt: String,
     pub stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<serde_json::Value>,
 }
 
 #[derive(serde::Deserialize)]
@@ -77,10 +84,17 @@ pub struct OllamaResponse {
 }
 
 pub async fn query_local_llm(prompt: &str) -> String {
+    query_local_llm_with_temp(prompt, None).await
+}
+
+pub async fn query_local_llm_with_temp(prompt: &str, temp_override: Option<f64>) -> String {
+    let options = temp_override.map(|t| serde_json::json!({ "temperature": t }));
+    
     let req = OllamaRequest {
         model: std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "deepseek-coder-v2:16b".to_string()),
         prompt: prompt.to_string(),
         stream: false,
+        options,
     };
 
     let url = std::env::var("OLLAMA_URL")

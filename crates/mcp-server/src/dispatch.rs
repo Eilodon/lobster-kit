@@ -36,8 +36,17 @@ impl EidolonMcpServer {
             "eidolon_get_portfolio" => self.handle_get_portfolio(params).await,
             "eidolon_execute_swap" => self.handle_execute_swap(params).await,
             "eidolon_panic_button" => self.handle_panic_button(params).await,
+            "clawkit_forge_tool" => self.handle_forge_tool(params).await,
+            "clawkit_set_entropy" => self.handle_set_entropy(params).await,
             "clawkit_oracle_query" => self.handle_oracle_query(params).await,
-            _ => serde_json::json!({ "error": "Unknown tool" }),
+            _ => {
+                let is_dynamic = { self.dynamic_tools.lock().await.contains_key(resolved_method.as_str()) };
+                if is_dynamic {
+                    self.execute_dynamic_tool(resolved_method.as_str(), params).await
+                } else {
+                    serde_json::json!({ "error": "Unknown tool" })
+                }
+            },
         }
     }
     pub async fn run_stdio(&self) {
@@ -62,6 +71,9 @@ impl EidolonMcpServer {
                     if let Some(method) = method_val.as_str() {
                         let id = req["id"].clone();
                         let method_owned = method.to_string();
+                        // Track last input ms for Continuous Background Dreaming
+                        self.last_input_ms.store(chrono::Utc::now().timestamp_millis() as u64, std::sync::atomic::Ordering::Relaxed);
+                        
                         let params = req.get("params").cloned().unwrap_or(serde_json::json!({}));
 
                         let server_clone = self.clone();
@@ -77,7 +89,7 @@ impl EidolonMcpServer {
                                     })
                                 }
                                 "notifications/initialized" => return,
-                                "tools/list" => Self::list_tools_payload(),
+                                "tools/list" => server_clone.list_tools_payload().await,
                                 "resources/list" => server_clone.list_resources_payload(),
                                 "resources/templates/list" => {
                                     serde_json::json!({
@@ -175,6 +187,43 @@ impl EidolonMcpServer {
                                                     }),
                                                 )
                                                 .await;
+
+                                            // Phase 4: Auto-promotion governance check
+                                            {
+                                                let db_path = (*server_clone.telemetry_db_path).clone();
+                                                let tool_for_promo = tool_name.clone();
+                                                let perf_row = tokio::task::spawn_blocking(move || {
+                                                    EidolonMcpServer::load_tool_performance_row_sync(
+                                                        &db_path,
+                                                        &tool_for_promo,
+                                                    )
+                                                })
+                                                .await
+                                                .ok()
+                                                .and_then(Result::ok)
+                                                .flatten();
+
+                                                if let Some(row) = perf_row {
+                                                    let thresholds = Self::promotion_thresholds();
+                                                    let (eligible, failures) =
+                                                        Self::evaluate_tool_promotion(&row, &thresholds);
+                                                    if eligible {
+                                                        eprintln!(
+                                                            "[ClawKit] 🏆 Tool '{}' promotion-eligible (calls:{}, err:{:.3}%, p95:{:.1}ms)",
+                                                            tool_name, row.call_count,
+                                                            (1.0 - row.success_rate) * 100.0,
+                                                            row.latency_p95_ms
+                                                        );
+                                                    } else if row.call_count >= thresholds.min_calls {
+                                                        // Only log failures after min_calls met (avoid noise)
+                                                        eprintln!(
+                                                            "[ClawKit] ⚠️  Tool '{}' promotion blocked: {:?}",
+                                                            tool_name, failures
+                                                        );
+                                                    }
+                                                }
+                                            }
+
                                             Self::as_mcp_tool_text_response(result_content, false)
                                         }
                                     }

@@ -63,7 +63,7 @@ impl EidolonMcpServer {
                 };
 
                 let entropy = {
-                    let thermo = self.thermo.lock().await;
+                    let mut thermo = self.thermo.lock().await;
                     let baseline = nalgebra::DVector::from_element(5, 0.5);
                     thermo.entropy(&baseline)
                 };

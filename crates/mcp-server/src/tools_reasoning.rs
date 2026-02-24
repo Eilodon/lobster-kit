@@ -2,7 +2,7 @@ use crate::EidolonMcpServer;
 use crate::embedding::EmbeddingEngine;
 use crate::types::*;
 use crate::helpers::*;
-use crate::oracle::query_local_llm;
+use crate::oracle::{query_local_llm, query_local_llm_with_temp};
 use core_rust::sentinel::causal::CausalGraph;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -22,20 +22,44 @@ impl EidolonMcpServer {
                 .select_reasoning_mode(requested_mode, draft, context, latency_budget_ms)
                 .await;
 
+            let trauma_severity = {
+                let trauma = self.trauma.lock().await;
+                trauma.get_trauma_severity(core_rust::sentinel::modes::SentinelMode::Zen, "reason_chain")
+            };
+
+            let base_temp = if mode_selected == "deep" { 0.4 } else { 0.1 };
+            let trauma_penalty = (trauma_severity / 5.0).clamp(0.0, 1.0) as f64;
+            let final_temp = (base_temp - trauma_penalty * 0.35).max(0.01);
+
+            let trauma_context = if trauma_severity > 1.0 {
+                format!("\nCRITICAL SYSTEM WARNING: Model is under TRUAMA INHIBITION (Severity {:.1}/5.0). EXTREME CAUTION REQUIRED. Zero hallucination tolerance.", trauma_severity)
+            } else {
+                "".to_string()
+            };
+
             let prompt = format!(
-                "Evaluate this draft against the context. Does the draft hallucinate facts not in context? How much does it overlap with the core context? Return ONLY a JSON object with 'factual_consistency' (float 0.0-1.0) and 'context_overlap' (float 0.0-1.0).\nDraft: {}\nContext: {}",
-                draft, context
+                "Evaluate this draft against the context. Does the draft hallucinate facts not in context? How much does it overlap with the core context? Return ONLY a JSON object with 'factual_consistency' (float 0.0-1.0) and 'context_overlap' (float 0.0-1.0).\nDraft: {}\nContext: {}{}",
+                draft, context, trauma_context
             );
 
-            let llm_res = query_local_llm(&prompt).await;
+            // Phase 6 Epistemic Core: Utilize the embedded local TensorOracle.
             let mut factual_consistency = 0.5;
             let mut context_overlap = 0.5;
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&llm_res) {
-                if let Some(fc) = parsed.get("factual_consistency").and_then(|v| v.as_f64()) {
-                    factual_consistency = clamp01(fc);
-                }
-                if let Some(co) = parsed.get("context_overlap").and_then(|v| v.as_f64()) {
-                    context_overlap = clamp01(co);
+
+            // Generate using Qwen3 Tensor Engine logic natively.
+            // Mode "deep" -> use high entropy (thinking), otherwise reflex (low entropy).
+            let expected_entropy = if mode_selected == "deep" { 0.8 } else { 0.2 };
+            // is_action = false (Reasoning is strictly an Analysis layer)
+            let llm_res = self.tensor_oracle.generate_with_thermodynamics(&prompt, expected_entropy, trauma_severity as f32, false).await;
+            
+            if let Ok(raw_response) = llm_res {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw_response) {
+                    if let Some(fc) = parsed.get("factual_consistency").and_then(|v| v.as_f64()) {
+                        factual_consistency = clamp01(fc);
+                    }
+                    if let Some(co) = parsed.get("context_overlap").and_then(|v| v.as_f64()) {
+                        context_overlap = clamp01(co);
+                    }
                 }
             }
 

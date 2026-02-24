@@ -124,15 +124,21 @@ impl EidolonMcpServer {
         // ─────────────────────────────────────────────────────────────────
         // LAYER 3: ROUTING DECISION
         // ─────────────────────────────────────────────────────────────────
-        let confidence = tool_recommendations["recommender"]["primary_tool_correction_rate"]
-            .as_f64()
-            .unwrap_or(0.5);
+        // Combine intent confidence (how well we understood the query)
+        // with recommender confidence (how well we can serve it)
+        let intent_confidence = intent_analysis["confidence"].as_f64().unwrap_or(0.5);
+        let recommender_score = tool_recommendations["recommended_tools"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|t| t["relevance_score"].as_f64())
+            .unwrap_or(0.3);
+        let confidence = intent_confidence * 0.6 + recommender_score * 0.4;
 
         let force_execute = params["force_execute"].as_bool().unwrap_or(false);
 
-        let strategy = if force_execute || (confidence > 0.75 && auto_execute) {
+        let strategy = if force_execute || (confidence > 0.60 && auto_execute) {
             AutoRoutingStrategy::AutoExecute
-        } else if confidence > 0.45 {
+        } else if confidence > 0.35 {
             AutoRoutingStrategy::ProposeTools
         } else {
             AutoRoutingStrategy::DeepAnalysis
@@ -158,7 +164,25 @@ impl EidolonMcpServer {
                 .unwrap_or_else(|| suggested_tools.iter().take(max_tools).map(|s| s.to_string()).collect());
 
             // Execute each tool
+            let now_ms = chrono::Utc::now().timestamp_millis();
             for tool_name in &top_tools {
+                // Phase 1C: Check trauma inhibition before executing
+                {
+                    let trauma = self.trauma.lock().await;
+                    if trauma.is_inhibited(
+                        core_rust::sentinel::modes::SentinelMode::Berserk,
+                        tool_name,
+                        now_ms,
+                    ) {
+                        execution_errors.push(json!({
+                            "tool": tool_name,
+                            "error": "trauma_inhibited",
+                            "reason": "Recent failure pattern detected, skipping tool"
+                        }));
+                        continue;
+                    }
+                }
+
                 let tool_params = json!({
                     "query": input,
                     "pattern": input,
@@ -189,6 +213,16 @@ impl EidolonMcpServer {
                         "tool": tool_name,
                         "error": result["error"]
                     }));
+                    // Phase 1C: Record trauma on tool failure
+                    {
+                        let mut trauma = self.trauma.lock().await;
+                        trauma.record_trauma(
+                            core_rust::sentinel::modes::SentinelMode::Berserk,
+                            tool_name,
+                            3.0,
+                            now_ms,
+                        );
+                    }
                 } else if include_raw_results {
                     tool_results.push(json!({
                         "tool": tool_name,
@@ -199,6 +233,36 @@ impl EidolonMcpServer {
                             .and_then(|t| t["relevance_score"].as_f64())
                             .unwrap_or(0.5)
                     }));
+                }
+            }
+
+            // Phase 4B: Record tool chain as memory for future learning
+            if !executed_tools.is_empty() {
+                let chain_str = executed_tools.join("→");
+                let success_count = executed_tools.len() - execution_errors.len();
+                let chain_content = format!(
+                    "chain:{}|success:{}|errors:{}|intent:{:?}|confidence:{:.3}",
+                    chain_str, success_count, execution_errors.len(), intent, confidence
+                );
+                let (chain_embed, _) = self.embed_text_with_fallback(&chain_content);
+                let mut mems = self.memories.lock().await;
+                mems.push(crate::types::MemoryEntry {
+                    timestamp: chrono::Utc::now().timestamp_millis(),
+                    category: "tool_chain".to_string(),
+                    content: chain_content,
+                    embedding: chain_embed,
+                });
+                drop(mems);
+                self.save_memories_to_disk().await;
+
+                // Record causal edge: intent type → tool success
+                if success_count > 0 {
+                    let mut brain = self.causal_brain.lock().await;
+                    brain.learn(
+                        core_rust::sentinel::variables::SentinelVariable::Sentiment,
+                        core_rust::sentinel::variables::SentinelVariable::PriceDelta,
+                        true, // positive outcome
+                    );
                 }
             }
         }

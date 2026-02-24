@@ -4,7 +4,6 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { AppendOnlyAdapter } from '@clawkit/core';
 // Mock dependencies
-import { vi } from 'vitest';
 vi.mock('fs/promises', () => {
     return {
         stat: vi.fn(),
@@ -18,7 +17,7 @@ vi.mock('fs/promises', () => {
     };
 });
 vi.mock('@aws-sdk/client-s3');
-import * as fs from 'fs/promises';
+
 
 describe('Memory Cortex Atomic Upgrades', () => {
 

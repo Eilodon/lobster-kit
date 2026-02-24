@@ -6,7 +6,6 @@ import { PythAdapter } from '@clawkit/soul';
 import axios from 'axios';
 
 // Mock dependencies
-import axios from 'axios';
 vi.mock('axios', () => {
     return {
         default: {

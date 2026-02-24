@@ -90,6 +90,16 @@ impl TraumaRegistry {
         0
     }
 
+    /// Exposes raw severity for Direct Logit Trauma scaling
+    pub fn get_trauma_severity(&self, mode: SentinelMode, action_name: &str) -> f32 {
+        let key = Self::hash_context(mode, action_name);
+        if let Some(hit) = self.records.get(&key) {
+            hit.sev_eff
+        } else {
+            0.0
+        }
+    }
+
     /// Remove trauma record (heal)
     pub fn heal(&mut self, mode: SentinelMode, action_name: &str) {
         let key = Self::hash_context(mode, action_name);
