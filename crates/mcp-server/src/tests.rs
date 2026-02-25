@@ -605,10 +605,13 @@ async fn test_subbrain_auto_records_route_gate_audit_and_telemetry() {
         .is_some());
 
     let db_path = (*server.telemetry_db_path).clone();
-    let route_row =
-        EidolonMcpServer::load_tool_performance_row_sync(&db_path, "eidolon_route_action")
-            .expect("tool_performance query should succeed")
-            .expect("route_action telemetry row should exist");
+    let route_row = EidolonMcpServer::load_tool_performance_row_sync(
+        &db_path,
+        "default",
+        "eidolon_route_action",
+    )
+    .expect("tool_performance query should succeed")
+    .expect("route_action telemetry row should exist");
     assert!(route_row.call_count >= 1);
 
     let audit_rows = EidolonMcpServer::load_generated_tool_audit_rows_sync(&db_path, 200)
@@ -762,9 +765,13 @@ async fn test_record_tool_metric_tracks_sub_ms_and_tail_percentiles() {
         .await;
 
     let db_path = (*server.telemetry_db_path).clone();
-    let row = EidolonMcpServer::load_tool_performance_row_sync(&db_path, "eidolon_precision_probe")
-        .expect("tool_performance query should succeed")
-        .expect("tool row should exist");
+    let row = EidolonMcpServer::load_tool_performance_row_sync(
+        &db_path,
+        "default_tenant",
+        "eidolon_precision_probe",
+    )
+    .expect("tool_performance query should succeed")
+    .expect("tool row should exist");
 
     assert!(row.avg_latency_ms > 0.0);
     assert!(row.avg_latency_ms < 4.0);
@@ -772,6 +779,31 @@ async fn test_record_tool_metric_tracks_sub_ms_and_tail_percentiles() {
     assert!(row.latency_p90_ms >= row.latency_p50_ms);
     assert!(row.latency_p99_ms >= row.latency_p95_ms);
     assert!(row.latency_sample_count >= 3);
+}
+
+#[tokio::test]
+async fn test_tool_performance_query_is_tenant_scoped() {
+    let server = setup_server();
+    let tool_name = "eidolon_tenant_metric_scope";
+    server
+        .record_tool_metric("tenant_a", tool_name, false, 1_000, false)
+        .await;
+    server
+        .record_tool_metric("tenant_b", tool_name, true, 4_000, true)
+        .await;
+
+    let db_path = (*server.telemetry_db_path).clone();
+    let row_a = EidolonMcpServer::load_tool_performance_row_sync(&db_path, "tenant_a", tool_name)
+        .expect("tenant_a query should succeed")
+        .expect("tenant_a row should exist");
+    let row_b = EidolonMcpServer::load_tool_performance_row_sync(&db_path, "tenant_b", tool_name)
+        .expect("tenant_b query should succeed")
+        .expect("tenant_b row should exist");
+
+    assert_eq!(row_a.tenant_id, "tenant_a");
+    assert_eq!(row_b.tenant_id, "tenant_b");
+    assert_ne!(row_a.error_count, row_b.error_count);
+    assert_ne!(row_a.fallback_count, row_b.fallback_count);
 }
 
 #[tokio::test]

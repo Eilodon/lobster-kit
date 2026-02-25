@@ -415,6 +415,7 @@ impl EidolonMcpServer {
 
     pub(crate) fn load_tool_performance_row_sync(
         path: &Path,
+        tenant_id: &str,
         tool_name: &str,
     ) -> Result<Option<PersistedToolPerformanceRow>, String> {
         Self::ensure_telemetry_storage_sync(path)?;
@@ -441,13 +442,16 @@ impl EidolonMcpServer {
                     latency_sample_count,
                     last_called
                 FROM tool_performance
-                WHERE tool_name = ?1
+                WHERE tenant_id = ?1
+                  AND tool_name = ?2
                 LIMIT 1
                 "#,
             )
             .map_err(|err| err.to_string())?;
 
-        let mut rows = stmt.query([tool_name]).map_err(|err| err.to_string())?;
+        let mut rows = stmt
+            .query([tenant_id, tool_name])
+            .map_err(|err| err.to_string())?;
         let Some(row) = rows.next().map_err(|err| err.to_string())? else {
             return Ok(None);
         };

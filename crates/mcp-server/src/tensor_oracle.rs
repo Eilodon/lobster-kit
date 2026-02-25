@@ -20,6 +20,7 @@ use hf_hub::api::sync::Api;
 
 /// Token event emitted during streaming generation.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum StreamToken {
     /// A single generated token ID.
     Token(u32),
@@ -407,6 +408,7 @@ impl TensorOracle {
     /// Streaming variant of generate_with_thermodynamics.
     /// Emits each token via mpsc channel as soon as it is decoded.
     /// Caller receives Receiver and can collect or process incrementally.
+    #[allow(dead_code)]
     pub async fn generate_streaming(
         &self,
         prompt: &str,

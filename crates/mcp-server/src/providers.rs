@@ -28,6 +28,7 @@ pub trait LlmProvider: Send + Sync {
         is_action: bool,
     ) -> InferenceResult;
 
+    #[allow(dead_code)]
     fn provider_name(&self) -> &'static str;
 }
 
@@ -36,10 +37,12 @@ pub trait LlmProvider: Send + Sync {
 // ============================================
 
 /// Wrap `TensorOracle` thành `LlmProvider`.
+#[allow(dead_code)]
 pub struct TensorOracleAdapter {
     oracle: std::sync::Arc<crate::tensor_oracle::TensorOracle>,
 }
 
+#[allow(dead_code)]
 impl TensorOracleAdapter {
     pub fn new(oracle: std::sync::Arc<crate::tensor_oracle::TensorOracle>) -> Self {
         Self { oracle }
@@ -262,6 +265,7 @@ pub fn provider_name_from_decision(decision: &crate::routing::RoutingDecision) -
 }
 
 /// Map InferenceResult sang Provider để record circuit breaker state.
+#[allow(dead_code)]
 pub fn routing_provider_from_decision(
     decision: &crate::routing::RoutingDecision,
 ) -> Option<Provider> {

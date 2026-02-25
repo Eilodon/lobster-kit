@@ -267,9 +267,11 @@ impl EidolonMcpServer {
                                                 let db_path =
                                                     (*server_clone.telemetry_db_path).clone();
                                                 let tool_for_promo = tool_name.clone();
+                                                let tenant_for_promo = tenant_id.clone();
                                                 let perf_row = tokio::task::spawn_blocking(move || {
                                                     EidolonMcpServer::load_tool_performance_row_sync(
                                                         &db_path,
+                                                        &tenant_for_promo,
                                                         &tool_for_promo,
                                                     )
                                                 })

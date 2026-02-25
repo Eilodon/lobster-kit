@@ -21,6 +21,7 @@ pub struct RoutingContext {
     /// Khi > 3.0, hệ thống ở Guardian mode → chỉ Local.
     pub trauma_severity: f32,
     /// SLO latency budget từ caller (ms).
+    #[allow(dead_code)]
     pub latency_budget_ms: u64,
     /// true = dữ liệu nhạy cảm → không được gửi ra External dù entropy cao.
     pub privacy_sensitive: bool,

@@ -14,6 +14,7 @@ pub struct CriticVerdict {
     /// Danh sách violations tìm được.
     pub violations: Vec<CriticViolation>,
     /// Provider đã sinh output (cho logging).
+    #[allow(dead_code)]
     pub provider: String,
 }
 

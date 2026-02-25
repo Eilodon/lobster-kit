@@ -33,13 +33,22 @@ Platform-agnostic WASM core with hot-path safety and deterministic runtime behav
 * **Memory Subsystems:** `LiquidBrain` and Hyper Memory.
 * **Runtime Bridge:** Shared primitives consumed by MCP runtime.
 
-### 2. `mcp-server`: The Interface Layer (Máy Chủ Tương Tác)
-The host envelope that interacts with the OS and the outside world without polluting the core logic.
-* **MCP Protocol:** Standard JSON-RPC interface for seamless integration with AI clients.
+### 2. `mcp-server`: The Native MCP Interface
+The host envelope that interacts with the OS and the outside world via **JSON-RPC over STDIO**.
+* **MCP Protocol:** Standard JSON-RPC interface for seamless integration with AI clients (Cursor, Claude Desktop).
 * **The Epistemic Core:** Integrates ONNX Embedding Engines and Local Tensor Oracles.
 * **Async & I/O:** Powered by `Tokio` for multi-threaded agent orchestration, SQLite for telemetric persistence.
 
-### 3. `trading-domain`: Reference Vertical Package
+### 3. `eidolon-gateway`: Standalone HTTP Gateway Layer (New in V4)
+A high-performance Cloud-Native HTTP Gateway powering the cognitive layer beyond local CLI tools.
+* **Axum API Server:** Exposes full OpenAI-compatible endpoints (`/v1/chat/completions`).
+* **Adaptive Routing Engine:** 7 policy rules (Privacy, Action, Trauma, Entropy) to smartly route between Local TensorOracle, Local Ollama, and External APIs.
+* **Heuristic Output Guard:** Real-time semantic validation blocking toxic content, NaN/Infinity, and invalid JSON with automatic safe fallback.
+* **Multi-Tenant State Isolation:** 100% strict isolation of profiles and memory between API users.
+* **Quota & Rate Limiting:** JWT/Bearer Auth integrated with Token Bucket rate limits and daily quotas.
+* **Streaming SSE:** Token-by-token continuous streaming for lowest TTFB.
+
+### 4. `trading-domain`: Reference Vertical Package
 Domain-specific trading primitives, kept separate from cognitive core:
 * Order book and matching primitives
 * Risk/margin calculations
@@ -73,17 +82,15 @@ Legacy DeFi bridge tools are compatibility-only and disabled by default (`LEGACY
 
 **Prerequisites:** Rust toolchain (`cargo`).
 
+### Option A: Local MCP Server (For Cursor/Claude Desktop)
+
 ```bash
 # 1. Clone & Build the Release binary
 git clone https://github.com/Eilodon/lobster-kit.git
 cd lobster-kit/crates/mcp-server
 cargo build --release
 
-# 1.5 Download local TensorOracle assets (GGUF + tokenizer)
-cd ..
-./scripts/download-qwen3-gguf.sh
-
-# 2. Add to your MCP Client Configuration (e.g., Cursor/Claude Desktop)
+# 2. Add to your MCP Client Configuration
 {
   "mcpServers": {
     "eidolon-v4": {
@@ -98,6 +105,41 @@ cd ..
     }
   }
 }
+```
+
+### Option B: High-Performance Standalone API Gateway
+
+```bash
+# 1. Build the HTTP Gateway
+cd lobster-kit/crates/eidolon-gateway
+cargo build --release
+
+# 2. Run the server with Gateway configurations
+export EIDOLON_GATEWAY_BIND="0.0.0.0:8787"
+export OUTPUT_CRITIC_ENABLED=true
+export EIDOLON_GATEWAY_EXTERNAL_ENABLED=true
+export EIDOLON_GATEWAY_EXTERNAL_API_KEY="sk-..."
+export EIDOLON_GATEWAY_EXTERNAL_CIRCUIT_FAILURE_THRESHOLD=3
+export EIDOLON_GATEWAY_EXTERNAL_CIRCUIT_OPEN_SECS=30
+export EIDOLON_GATEWAY_KEYS="my-secret-token:tenant_alpha"
+
+./target/release/eidolon-gateway
+
+# 3. Test the OpenAI-compatible endpoint
+curl -X POST http://localhost:8787/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer my-secret-token" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "tenant_id": "tenant_alpha",
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Simulate a quantum trading scenario."
+      }
+    ]
+  }'
 ```
 
 ---

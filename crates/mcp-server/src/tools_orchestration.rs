@@ -501,8 +501,13 @@ impl EidolonMcpServer {
             "promote" => {
                 let db_path = (*self.telemetry_db_path).clone();
                 let lookup_tool_name = tool_name.clone();
+                let lookup_tenant_id = tenant_id.clone();
                 let perf_row = tokio::task::spawn_blocking(move || {
-                    EidolonMcpServer::load_tool_performance_row_sync(&db_path, &lookup_tool_name)
+                    EidolonMcpServer::load_tool_performance_row_sync(
+                        &db_path,
+                        &lookup_tenant_id,
+                        &lookup_tool_name,
+                    )
                 })
                 .await
                 .ok()
