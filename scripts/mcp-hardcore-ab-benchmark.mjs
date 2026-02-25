@@ -12,7 +12,7 @@ const repoRoot = path.resolve(__dirname, '..');
 
 function parseArgs(argv) {
   const out = {
-    bin: path.resolve(repoRoot, 'packages/mcp-rust/target/release/mcp-rust'),
+    bin: path.resolve(repoRoot, 'crates/mcp-server/target/release/mcp-rust'),
     out: path.resolve(repoRoot, 'data/memory/hardcore-ab-benchmark.report.json'),
     timeoutMs: 9000,
     firstEval: path.resolve(repoRoot, 'data/memory/cognitive-tool-eval.report.json'),
@@ -210,7 +210,6 @@ async function run() {
 
   const baseEnv = {
     ...process.env,
-    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || 'test_key',
     EIDOLON_DB_PATH: dbPath,
   };
 
@@ -550,23 +549,23 @@ async function run() {
       current_eval_path: path.relative(repoRoot, args.currentEval),
       first_eval: firstEval
         ? {
-            generated_at: firstEval.generated_at || null,
-            total_scenarios: Number(firstEval.total_scenarios || 0),
-            failed_scenarios: Number(firstEval.failed_scenarios || 0),
-          }
+          generated_at: firstEval.generated_at || null,
+          total_scenarios: Number(firstEval.total_scenarios || 0),
+          failed_scenarios: Number(firstEval.failed_scenarios || 0),
+        }
         : null,
       current_eval: currentEval
         ? {
-            generated_at: currentEval.generated_at || null,
-            total_scenarios: Number(currentEval.total_scenarios || 0),
-            failed_scenarios: Number(currentEval.failed_scenarios || 0),
-          }
+          generated_at: currentEval.generated_at || null,
+          total_scenarios: Number(currentEval.total_scenarios || 0),
+          failed_scenarios: Number(currentEval.failed_scenarios || 0),
+        }
         : null,
       delta: firstEval && currentEval
         ? {
-            scenario_coverage_increase: Number(currentEval.total_scenarios || 0) - Number(firstEval.total_scenarios || 0),
-            failed_delta: Number(currentEval.failed_scenarios || 0) - Number(firstEval.failed_scenarios || 0),
-          }
+          scenario_coverage_increase: Number(currentEval.total_scenarios || 0) - Number(firstEval.total_scenarios || 0),
+          failed_delta: Number(currentEval.failed_scenarios || 0) - Number(firstEval.failed_scenarios || 0),
+        }
         : null,
     },
   };

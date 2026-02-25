@@ -3,8 +3,8 @@
 // Uses impl-block extension pattern:
 // EidolonMcpServer methods live here, struct definition remains in main.rs.
 
-use crate::EidolonMcpServer;
 use crate::types::MemoryEntry;
+use crate::EidolonMcpServer;
 use std::path::Path;
 
 impl EidolonMcpServer {

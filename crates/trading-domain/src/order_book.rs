@@ -29,9 +29,9 @@ pub enum OrderStatus {
 #[derive(Clone, Debug)]
 pub struct Order {
     pub id: u32,
-    pub price: i64,      // Fixed-point price (8 decimals)
-    pub quantity: i64,   // Fixed-point quantity
-    pub filled: i64,     // Amount already filled
+    pub price: i64,    // Fixed-point price (8 decimals)
+    pub quantity: i64, // Fixed-point quantity
+    pub filled: i64,   // Amount already filled
     pub side: OrderSide,
     pub owner_id: u32,
     pub timestamp: u64,
@@ -73,7 +73,7 @@ const CAPACITY: usize = 65536;
 pub struct OrderBook {
     orders: Vec<Order>,
     free_list: Vec<usize>,
-    
+
     // Ordered indices
     // Bids: Sorted by Price ASC, then Timestamp DESC
     // (So the highest price, oldest timestamp is at the END for fast pop)
@@ -92,7 +92,7 @@ impl OrderBook {
     pub fn new() -> OrderBook {
         let mut orders = Vec::with_capacity(CAPACITY);
         let mut free_list = Vec::with_capacity(CAPACITY);
-        
+
         for i in 0..CAPACITY {
             orders.push(Order {
                 id: 0,
@@ -153,7 +153,9 @@ impl OrderBook {
             let _fills = self.match_loop(slab_idx);
 
             // Add to book if remaining
-            if !self.orders[slab_idx].is_filled() && self.orders[slab_idx].status == OrderStatus::Open {
+            if !self.orders[slab_idx].is_filled()
+                && self.orders[slab_idx].status == OrderStatus::Open
+            {
                 self.add_to_book(slab_idx);
             } else {
                 // Return to free pool
@@ -189,12 +191,18 @@ impl OrderBook {
 
     pub fn best_bid(&mut self) -> i64 {
         self.clean_bids();
-        self.bids.last().map(|&idx| self.orders[idx].price).unwrap_or(0)
+        self.bids
+            .last()
+            .map(|&idx| self.orders[idx].price)
+            .unwrap_or(0)
     }
 
     pub fn best_ask(&mut self) -> i64 {
         self.clean_asks();
-        self.asks.last().map(|&idx| self.orders[idx].price).unwrap_or(i64::MAX)
+        self.asks
+            .last()
+            .map(|&idx| self.orders[idx].price)
+            .unwrap_or(i64::MAX)
     }
 
     pub fn spread(&mut self) -> i64 {
@@ -262,7 +270,7 @@ impl OrderBook {
     fn match_loop(&mut self, taker_idx: usize) -> Vec<Fill> {
         let mut fills = Vec::new();
         let side = self.orders[taker_idx].side;
-        
+
         // Use a loop so we can appease the borrow checker during mutation
         loop {
             let opposite_book = match side {
@@ -284,7 +292,7 @@ impl OrderBook {
             }
 
             let taker = &self.orders[taker_idx];
-            
+
             // Uncross check
             let can_match = match side {
                 OrderSide::Buy => maker.price <= taker.price,
@@ -296,11 +304,14 @@ impl OrderBook {
             }
 
             // Calculate fill quantity
-            let fill_qty = std::cmp::min(self.orders[taker_idx].remaining(), self.orders[maker_idx].remaining());
-            
+            let fill_qty = std::cmp::min(
+                self.orders[taker_idx].remaining(),
+                self.orders[maker_idx].remaining(),
+            );
+
             if fill_qty > 0 {
                 let trade_price = self.orders[maker_idx].price;
-                
+
                 fills.push(Fill {
                     maker_id: self.orders[maker_idx].id,
                     taker_id: self.orders[taker_idx].id,
@@ -310,7 +321,7 @@ impl OrderBook {
 
                 self.orders[maker_idx].filled += fill_qty;
                 self.orders[taker_idx].filled += fill_qty;
-                
+
                 if self.orders[maker_idx].is_filled() {
                     self.orders[maker_idx].status = OrderStatus::Filled;
                     // Need to borrow book again because it's mutable
@@ -321,7 +332,7 @@ impl OrderBook {
                     book.pop();
                     self.free_list.push(maker_idx);
                 }
-                
+
                 if self.orders[taker_idx].is_filled() {
                     break;
                 }
@@ -360,17 +371,28 @@ impl OrderBook {
         let order = &self.orders[slab_idx];
         match order.side {
             OrderSide::Buy => {
-                let pos = self.bids.binary_search_by(|&idx| {
-                    let o = &self.orders[idx];
-                    o.price.cmp(&order.price).then_with(|| order.timestamp.cmp(&o.timestamp))
-                }).unwrap_or_else(|e| e);
+                let pos = self
+                    .bids
+                    .binary_search_by(|&idx| {
+                        let o = &self.orders[idx];
+                        o.price
+                            .cmp(&order.price)
+                            .then_with(|| order.timestamp.cmp(&o.timestamp))
+                    })
+                    .unwrap_or_else(|e| e);
                 self.bids.insert(pos, slab_idx);
             }
             OrderSide::Sell => {
-                let pos = self.asks.binary_search_by(|&idx| {
-                    let o = &self.orders[idx];
-                    order.price.cmp(&o.price).then_with(|| order.timestamp.cmp(&o.timestamp))
-                }).unwrap_or_else(|e| e);
+                let pos = self
+                    .asks
+                    .binary_search_by(|&idx| {
+                        let o = &self.orders[idx];
+                        order
+                            .price
+                            .cmp(&o.price)
+                            .then_with(|| order.timestamp.cmp(&o.timestamp))
+                    })
+                    .unwrap_or_else(|e| e);
                 self.asks.insert(pos, slab_idx);
             }
         }

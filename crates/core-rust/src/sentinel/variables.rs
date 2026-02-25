@@ -5,30 +5,30 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub enum SentinelVariable {
     // --- Basic Financial Vars ---
-    PriceDelta,     // Price change (normalized)
-    VolumeSpike,    // Volume increase factor
-    Volatility,     // ATR / StdDev
-    Momentum,       // RSI / MACD Signal
-    
+    PriceDelta,  // Price change (normalized)
+    VolumeSpike, // Volume increase factor
+    Volatility,  // ATR / StdDev
+    Momentum,    // RSI / MACD Signal
+
     // --- Eidolon Sentinel Specific ---
     GasPriceGwei,       // Network congestion cost
     MempoolPendingCnt,  // Pending tx count (pressure)
     WhaleNetFlow,       // Net flow of tracked whale wallets
     LiquidityImbalance, // Bid/Ask depth ratio
     SmartMoneyActivity, // Activity from "Smart Money" labels
-    
+
     // --- Internal/System Vars ---
-    PortfolioRisk,      // Current drawdown / exposure
-    UserAction,         // The action taken (for causal analysis)
-    
+    PortfolioRisk, // Current drawdown / exposure
+    UserAction,    // The action taken (for causal analysis)
+
     // --- Legacy / Macro ---
-    Sentiment,          // Social sentiment / News
-    MacroFactor,        // Interest rates / Global events
+    Sentiment,   // Social sentiment / News
+    MacroFactor, // Interest rates / Global events
 }
 
 impl SentinelVariable {
     pub const COUNT: usize = 13;
-    
+
     pub const ALL: [SentinelVariable; 13] = [
         SentinelVariable::PriceDelta,
         SentinelVariable::VolumeSpike,
@@ -52,9 +52,9 @@ impl SentinelVariable {
     pub fn from_index(idx: usize) -> Option<Self> {
         Self::ALL.get(idx).copied()
     }
-    
+
     pub fn name(&self) -> &'static str {
-         match self {
+        match self {
             SentinelVariable::PriceDelta => "PriceDelta",
             SentinelVariable::VolumeSpike => "VolumeSpike",
             SentinelVariable::Volatility => "Volatility",
@@ -70,7 +70,7 @@ impl SentinelVariable {
             SentinelVariable::MacroFactor => "MacroFactor",
         }
     }
-    
+
     pub fn all() -> &'static [Self] {
         &Self::ALL
     }

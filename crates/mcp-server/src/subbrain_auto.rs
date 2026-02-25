@@ -1,5 +1,5 @@
 // subbrain_auto.rs — Sub-Brain Automatic Orchestration Layer
-// 
+//
 // This module implements the optimal integration solution:
 // Single entry point that automatically orchestrates the entire pre-processing flow
 // before LLM analysis. Acts as a "Sub-Brain" that handles intent classification,
@@ -17,6 +17,7 @@ pub enum IntentCategory {
     CreateFeature,
     SecurityScan,
     MemoryQuery,
+    GetValidation,
     GeneralQuery,
 }
 
@@ -25,16 +26,44 @@ impl IntentCategory {
         let lower = text.to_lowercase();
         if lower.contains("audit") || lower.contains("kiểm tra") || lower.contains("review") {
             IntentCategory::CodeAudit
-        } else if lower.contains("bug") || lower.contains("lỗi") || lower.contains("fix") || lower.contains("crash") {
+        } else if lower.contains("bug")
+            || lower.contains("lỗi")
+            || lower.contains("fix")
+            || lower.contains("crash")
+        {
             IntentCategory::DebugIssue
-        } else if lower.contains("giải thích") || lower.contains("explain") || lower.contains("how") || lower.contains("tại sao") {
+        } else if lower.contains("giải thích")
+            || lower.contains("explain")
+            || lower.contains("how")
+            || lower.contains("tại sao")
+        {
             IntentCategory::ExplainCode
-        } else if lower.contains("tạo") || lower.contains("thêm") || lower.contains("implement") || lower.contains("create") {
+        } else if lower.contains("tạo")
+            || lower.contains("thêm")
+            || lower.contains("implement")
+            || lower.contains("create")
+        {
             IntentCategory::CreateFeature
-        } else if lower.contains("security") || lower.contains("bảo mật") || lower.contains("exploit") {
+        } else if lower.contains("security")
+            || lower.contains("bảo mật")
+            || lower.contains("exploit")
+        {
             IntentCategory::SecurityScan
-        } else if lower.contains("nhớ") || lower.contains("recall") || lower.contains("memory") || lower.contains("context") {
+        } else if lower.contains("nhớ")
+            || lower.contains("recall")
+            || lower.contains("memory")
+            || lower.contains("context")
+        {
             IntentCategory::MemoryQuery
+        } else if lower.contains("validate")
+            || lower.contains("evaluate")
+            || lower.contains("đánh giá")
+            || lower.contains("tốt không")
+            || lower.contains("hợp lý không")
+            || lower.contains("strategy")
+            || lower.contains("chiến lược")
+        {
+            IntentCategory::GetValidation
         } else {
             IntentCategory::GeneralQuery
         }
@@ -42,13 +71,46 @@ impl IntentCategory {
 
     fn suggested_tools(&self) -> Vec<&str> {
         match self {
-            IntentCategory::CodeAudit => vec!["eidolon_check_pattern", "eidolon_reason_chain", "eidolon_orchestrate"],
-            IntentCategory::DebugIssue => vec!["eidolon_recall_similar", "eidolon_memory_query", "eidolon_sense_intent"],
-            IntentCategory::ExplainCode => vec!["eidolon_sense_intent", "eidolon_memory_query", "eidolon_reason_chain"],
-            IntentCategory::CreateFeature => vec!["eidolon_tool_recommend", "eidolon_reason_chain", "eidolon_orchestrate"],
-            IntentCategory::SecurityScan => vec!["eidolon_check_pattern", "eidolon_security_scan", "eidolon_orchestrate"],
-            IntentCategory::MemoryQuery => vec!["eidolon_recall_user", "eidolon_memory_query", "eidolon_recall_similar"],
-            IntentCategory::GeneralQuery => vec!["eidolon_sense_intent", "eidolon_reason_chain", "eidolon_tool_recommend"],
+            IntentCategory::CodeAudit => vec![
+                "eidolon_check_pattern",
+                "eidolon_reason_chain",
+                "eidolon_orchestrate",
+            ],
+            IntentCategory::DebugIssue => vec![
+                "eidolon_recall_similar",
+                "eidolon_memory_query",
+                "eidolon_sense_intent",
+            ],
+            IntentCategory::ExplainCode => vec![
+                "eidolon_sense_intent",
+                "eidolon_memory_query",
+                "eidolon_reason_chain",
+            ],
+            IntentCategory::CreateFeature => vec![
+                "eidolon_tool_recommend",
+                "eidolon_reason_chain",
+                "eidolon_orchestrate",
+            ],
+            IntentCategory::SecurityScan => vec![
+                "eidolon_check_pattern",
+                "eidolon_reason_chain",
+                "eidolon_orchestrate",
+            ],
+            IntentCategory::MemoryQuery => vec![
+                "eidolon_recall_user",
+                "eidolon_memory_query",
+                "eidolon_recall_similar",
+            ],
+            IntentCategory::GetValidation => vec![
+                "eidolon_simulate_response",
+                "eidolon_reason_chain",
+                "eidolon_sense_intent",
+            ],
+            IntentCategory::GeneralQuery => vec![
+                "eidolon_sense_intent",
+                "eidolon_reason_chain",
+                "eidolon_tool_recommend",
+            ],
         }
     }
 }
@@ -66,7 +128,7 @@ pub enum AutoRoutingStrategy {
 
 impl EidolonMcpServer {
     /// Sub-Brain Auto-Orchestration Entry Point
-    /// 
+    ///
     /// This is the OPTIMAL integration solution. Single tool call that:
     /// 1. Classifies user intent
     /// 2. Recommends appropriate tools
@@ -82,7 +144,10 @@ impl EidolonMcpServer {
     ///
     /// # Returns
     /// Enriched context with tool results, ready for LLM analysis
-    pub(crate) async fn handle_subbrain_auto(&self, params: serde_json::Value) -> serde_json::Value {
+    pub(crate) async fn handle_subbrain_auto(
+        &self,
+        params: serde_json::Value,
+    ) -> serde_json::Value {
         let input = params["input"].as_str().unwrap_or("");
         let user_id = params["user_id"].as_str().unwrap_or("default");
         let auto_execute = params["auto_execute"].as_bool().unwrap_or(true);
@@ -161,7 +226,13 @@ impl EidolonMcpServer {
                         .filter_map(|t| t["tool"].as_str().map(|s| s.to_string()))
                         .collect()
                 })
-                .unwrap_or_else(|| suggested_tools.iter().take(max_tools).map(|s| s.to_string()).collect());
+                .unwrap_or_else(|| {
+                    suggested_tools
+                        .iter()
+                        .take(max_tools)
+                        .map(|s| s.to_string())
+                        .collect()
+                });
 
             // Execute each tool
             let now_ms = chrono::Utc::now().timestamp_millis();
@@ -203,7 +274,7 @@ impl EidolonMcpServer {
                         });
                         self.handle_orchestrate(orch_params).await
                     }
-                    _ => json!({"status": "skipped", "reason": "tool_not_in_auto_list"})
+                    _ => json!({"status": "skipped", "reason": "tool_not_in_auto_list"}),
                 };
 
                 executed_tools.push(tool_name.clone());
@@ -242,7 +313,11 @@ impl EidolonMcpServer {
                 let success_count = executed_tools.len() - execution_errors.len();
                 let chain_content = format!(
                     "chain:{}|success:{}|errors:{}|intent:{:?}|confidence:{:.3}",
-                    chain_str, success_count, execution_errors.len(), intent, confidence
+                    chain_str,
+                    success_count,
+                    execution_errors.len(),
+                    intent,
+                    confidence
                 );
                 let (chain_embed, _) = self.embed_text_with_fallback(&chain_content);
                 let mut mems = self.memories.lock().await;
@@ -270,16 +345,18 @@ impl EidolonMcpServer {
         // ─────────────────────────────────────────────────────────────────
         // LAYER 5: CONTEXT ENRICHMENT
         // ─────────────────────────────────────────────────────────────────
-        let enriched_context = self.enrich_context(
-            input,
-            &intent,
-            &intent_analysis,
-            &tool_recommendations,
-            &strategy,
-            &executed_tools,
-            &tool_results,
-            confidence
-        ).await;
+        let enriched_context = self
+            .enrich_context(
+                input,
+                &intent,
+                &intent_analysis,
+                &tool_recommendations,
+                &strategy,
+                &executed_tools,
+                &tool_results,
+                confidence,
+            )
+            .await;
 
         // ─────────────────────────────────────────────────────────────────
         // RETURN: Complete Sub-Brain Analysis
@@ -320,7 +397,7 @@ impl EidolonMcpServer {
         strategy: &AutoRoutingStrategy,
         executed_tools: &[String],
         tool_results: &[serde_json::Value],
-        confidence: f64
+        confidence: f64,
     ) -> serde_json::Value {
         // Aggregate key findings from tool results
         let mut key_findings = vec![];
@@ -372,9 +449,14 @@ impl EidolonMcpServer {
     }
 
     /// Suggest approach based on intent and strategy
-    fn suggest_approach(&self, intent: &IntentCategory, strategy: &AutoRoutingStrategy, confidence: f64) -> String {
+    fn suggest_approach(
+        &self,
+        intent: &IntentCategory,
+        strategy: &AutoRoutingStrategy,
+        confidence: f64,
+    ) -> String {
         match (intent, strategy) {
-            (IntentCategory::CodeAudit, AutoRoutingStrategy::AutoExecute) => 
+            (IntentCategory::CodeAudit, AutoRoutingStrategy::AutoExecute) =>
                 format!("Audit results ready (confidence: {:.0}%). Review findings and provide actionable recommendations.", confidence * 100.0),
             (IntentCategory::DebugIssue, AutoRoutingStrategy::AutoExecute) =>
                 format!("Similar issues recalled and patterns checked (confidence: {:.0}%). Analyze root cause and suggest fixes.", confidence * 100.0),
@@ -394,29 +476,35 @@ impl EidolonMcpServer {
             IntentCategory::CodeAudit => vec![
                 "security_issues".to_string(),
                 "performance_bottlenecks".to_string(),
-                "maintainability_concerns".to_string()
+                "maintainability_concerns".to_string(),
             ],
             IntentCategory::DebugIssue => vec![
                 "root_cause_analysis".to_string(),
                 "similar_past_issues".to_string(),
-                "proposed_fixes".to_string()
+                "proposed_fixes".to_string(),
             ],
             IntentCategory::ExplainCode => vec![
                 "architecture_overview".to_string(),
                 "key_components".to_string(),
-                "usage_examples".to_string()
+                "usage_examples".to_string(),
             ],
             IntentCategory::CreateFeature => vec![
                 "implementation_approach".to_string(),
                 "integration_points".to_string(),
-                "testing_strategy".to_string()
+                "testing_strategy".to_string(),
             ],
             IntentCategory::SecurityScan => vec![
                 "vulnerabilities_found".to_string(),
                 "risk_assessment".to_string(),
-                "remediation_steps".to_string()
+                "remediation_steps".to_string(),
             ],
-            _ => vec!["comprehensive_analysis".to_string()]
+            IntentCategory::GetValidation => vec![
+                "falsification_pass".to_string(),
+                "pre_mortem_analysis".to_string(),
+                "identify_critical_weaknesses".to_string(),
+                "assume_complete_failure_and_explain_why".to_string(),
+            ],
+            _ => vec!["comprehensive_analysis".to_string()],
         }
     }
 }

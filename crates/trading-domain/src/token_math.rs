@@ -10,9 +10,7 @@ pub use q64_96::Q64_96;
 
 /// Decimals constant for most crypto tokens (18 decimals)
 
-
 /// Decimals for stablecoins (6 decimals - USDC/USDT)
-
 
 // ============================================
 // Fixed-Point Token Amount (128-bit)
@@ -50,7 +48,7 @@ pub fn convert_decimals(amount: u64, from_decimals: u32, to_decimals: u32) -> u6
     if from_decimals == to_decimals {
         return amount;
     }
-    
+
     if from_decimals > to_decimals {
         let diff = from_decimals - to_decimals;
         amount / 10u64.pow(diff)
@@ -82,13 +80,16 @@ pub fn calculate_lp_value(
     lp_tokens: u64,
 ) -> LpValue {
     if total_supply == 0 {
-        return LpValue { amount_a: 0, amount_b: 0 };
+        return LpValue {
+            amount_a: 0,
+            amount_b: 0,
+        };
     }
-    
+
     let share = (lp_tokens as u128 * 1_000_000) / total_supply as u128;
     let amount_a = ((reserve_a as u128 * share) / 1_000_000) as u64;
     let amount_b = ((reserve_b as u128 * share) / 1_000_000) as u64;
-    
+
     LpValue { amount_a, amount_b }
 }
 
@@ -104,46 +105,42 @@ pub fn calculate_swap_output(
     if reserve_in == 0 || reserve_out == 0 {
         return 0;
     }
-    
+
     // Apply fee
     let amount_in_with_fee = amount_in as u128 * (10000 - fee_bps as u128) / 10000;
-    
+
     // x * y = k
     // (x + dx) * (y - dy) = k
     // dy = y * dx / (x + dx)
     let numerator = amount_in_with_fee * reserve_out as u128;
     let denominator = reserve_in as u128 + amount_in_with_fee;
-    
+
     (numerator / denominator) as u64
 }
 
 /// Calculate price impact for a swap
 /// Returns impact in basis points (100 = 1%)
 #[wasm_bindgen]
-pub fn calculate_price_impact(
-    amount_in: u64,
-    reserve_in: u64,
-    reserve_out: u64,
-) -> u32 {
+pub fn calculate_price_impact(amount_in: u64, reserve_in: u64, reserve_out: u64) -> u32 {
     if reserve_in == 0 || reserve_out == 0 {
         return 10000; // 100% impact
     }
-    
+
     // Spot price before swap
     let spot_price = (reserve_out as u128 * 1_000_000) / reserve_in as u128;
-    
+
     // Execution price
     let amount_out = calculate_swap_output(amount_in, reserve_in, reserve_out, 0);
     if amount_out == 0 {
         return 10000;
     }
     let exec_price = (amount_out as u128 * 1_000_000) / amount_in as u128;
-    
+
     // Price impact
     if exec_price >= spot_price {
         return 0;
     }
-    
+
     (((spot_price - exec_price) * 10000) / spot_price) as u32
 }
 
@@ -176,7 +173,7 @@ mod tests {
         let reserve_eth = 1000_000_000u64; // 1000 with 6 decimals
         let reserve_usdc = 2_000_000_000_000u64; // 2,000,000 with 6 decimals
         let amount_in = 1_000_000u64; // 1 ETH
-        
+
         let out = calculate_swap_output(amount_in, reserve_eth, reserve_usdc, 30);
         // Should be approximately 1994 USDC (with slippage + fee)
         assert!(out > 1_990_000_000 && out < 2_000_000_000);

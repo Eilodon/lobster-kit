@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/trading-domain",
   "crates/core-rust",
   "crates/mcp-server",
 ]
@@ -20,4 +21,3 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
-

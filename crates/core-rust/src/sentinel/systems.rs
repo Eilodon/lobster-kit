@@ -1,6 +1,6 @@
-use crate::sentinel::variables::SentinelVariable;
-use crate::sentinel::modes::SentinelMode;
 use crate::sentinel::causal::CausalGraph;
+use crate::sentinel::modes::SentinelMode;
+use crate::sentinel::variables::SentinelVariable;
 
 // Define types that can be exposed if needed, or keep them internal.
 #[derive(Debug, Clone)]
@@ -39,12 +39,12 @@ impl SentinelActor {
 
     fn handle_observation(&mut self, data: Vec<(SentinelVariable, f32)>) {
         let mut max_risk = 0.0;
-        
+
         for (var, val) in data {
             if var == SentinelVariable::GasPriceGwei && val > 0.8 {
                 let risk = self.graph.get_causal_effect(
-                    SentinelVariable::GasPriceGwei, 
-                    SentinelVariable::Volatility
+                    SentinelVariable::GasPriceGwei,
+                    SentinelVariable::Volatility,
                 );
                 if risk > max_risk {
                     max_risk = risk;

@@ -3,11 +3,11 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 #[derive(Debug, Clone, Copy)]
 pub struct ConversationDomainConfig {
-    pub intrusiveness_threshold: f32,   // above → requires_simulation()
-    pub trust_decay_rate: f32,          // per interaction without rapport
-    pub trauma_severity_scale: f32,     // scale user frustration → trauma
-    pub dagma_trigger_episodes: u32,    // episodes needed before DAGMA run
-    pub thermo_dt: f32,                 // conversation time step
+    pub intrusiveness_threshold: f32, // above → requires_simulation()
+    pub trust_decay_rate: f32,        // per interaction without rapport
+    pub trauma_severity_scale: f32,   // scale user frustration → trauma
+    pub dagma_trigger_episodes: u32,  // episodes needed before DAGMA run
+    pub thermo_dt: f32,               // conversation time step
 }
 
 #[wasm_bindgen]
@@ -29,7 +29,7 @@ impl ConversationDomainConfig {
         }
     }
 
-    pub fn peer() -> Self { 
+    pub fn peer() -> Self {
         Self {
             intrusiveness_threshold: 0.3,
             trust_decay_rate: 0.05,
@@ -39,22 +39,22 @@ impl ConversationDomainConfig {
         }
     }
 
-    pub fn advisory() -> Self { 
+    pub fn advisory() -> Self {
         Self {
             intrusiveness_threshold: 0.6,
-            trust_decay_rate: 0.02, // Trust decays slowly
-            trauma_severity_scale: 1.5, // High stakes
+            trust_decay_rate: 0.02,      // Trust decays slowly
+            trauma_severity_scale: 1.5,  // High stakes
             dagma_trigger_episodes: 100, // More data needed
             thermo_dt: 0.1,
         }
     }
 
-    pub fn discovery() -> Self { 
+    pub fn discovery() -> Self {
         Self {
             intrusiveness_threshold: 0.2, // Very low barrier
-            trust_decay_rate: 0.1, // Volatile
-            trauma_severity_scale: 0.5, // Low stakes
-            dagma_trigger_episodes: 20, // Fast learning
+            trust_decay_rate: 0.1,        // Volatile
+            trauma_severity_scale: 0.5,   // Low stakes
+            dagma_trigger_episodes: 20,   // Fast learning
             thermo_dt: 0.2,
         }
     }

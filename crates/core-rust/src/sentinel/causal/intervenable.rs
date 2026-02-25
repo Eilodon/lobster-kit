@@ -1,6 +1,6 @@
-use wasm_bindgen::prelude::*;
 use crate::sentinel::causal::CausalGraph;
 use crate::sentinel::variables::SentinelVariable;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 #[derive(Debug, Clone, Copy)]
@@ -27,10 +27,10 @@ impl Intervenable {
     /// Since our predict() is a linear combination, observing X=1 is similar to do(X=1) IF we ignore back-door paths (confounders).
     /// In our simplified CausalGraph, we treat all parents as direct causes.
     /// To strictly implement do(X), we need to ensure X's value is fixed regardless of its parents.
-    /// 
+    ///
     /// However, our predict() function takes `observations` list. If X is in observations, it is effectively "clamped".
     /// The difference between observation `P(Y|X)` and intervention `P(Y|do(X))` matters if X has parents that also affect Y (Confounders).
-    /// 
+    ///
     /// For this version, we will perform "Mutilated Graph" intervention:
     /// 1. Clone graph (conceptually - we just ignore incoming edges to X).
     /// 2. But `predict` logic already sums over *provided* observations.
@@ -40,7 +40,7 @@ impl Intervenable {
     ///    It assumes observations are the *only* active causes or the *known* state of causes.
     ///    It does NOT recursivley calculate unobserved causes.
     ///    So in our specific implementation, `predict(Y, [X=x])` IS effectively `P(Y|do(X=x))` because we don't back-propagate to confounders.
-    /// 
+    ///
     /// So we can wrap `predict` but with explicit semantic meaning.
     pub fn do_intervention(
         &self,
@@ -68,7 +68,7 @@ impl Intervenable {
     ) -> Result<CounterfactualResult, JsValue> {
         let p_actual = self.do_intervention(graph, actual_var, 1.0, query_var)?;
         let p_hypo = self.do_intervention(graph, hypothetical_var, 1.0, query_var)?;
-        
+
         Ok(CounterfactualResult {
             actual_prob: p_actual,
             hypothetical_prob: p_hypo,

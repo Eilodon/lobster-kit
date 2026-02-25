@@ -20,10 +20,14 @@ fn u256_from_bytes_be(bytes: &[u8]) -> U256 {
     let len = bytes.len().min(32);
     let mut padded = [0u8; 32];
     padded[32 - len..].copy_from_slice(&bytes[..len]);
-    let mut buf0 = [0u8; 8]; buf0.copy_from_slice(&padded[24..32]);
-    let mut buf1 = [0u8; 8]; buf1.copy_from_slice(&padded[16..24]);
-    let mut buf2 = [0u8; 8]; buf2.copy_from_slice(&padded[8..16]);
-    let mut buf3 = [0u8; 8]; buf3.copy_from_slice(&padded[0..8]);
+    let mut buf0 = [0u8; 8];
+    buf0.copy_from_slice(&padded[24..32]);
+    let mut buf1 = [0u8; 8];
+    buf1.copy_from_slice(&padded[16..24]);
+    let mut buf2 = [0u8; 8];
+    buf2.copy_from_slice(&padded[8..16]);
+    let mut buf3 = [0u8; 8];
+    buf3.copy_from_slice(&padded[0..8]);
 
     [
         u64::from_be_bytes(buf0),
@@ -44,8 +48,6 @@ fn u256_to_bytes_be(v: U256) -> Vec<u8> {
     out[first..].to_vec()
 }
 
-
-
 #[inline]
 fn u256_is_zero(v: U256) -> bool {
     v[0] == 0 && v[1] == 0 && v[2] == 0 && v[3] == 0
@@ -58,9 +60,7 @@ fn u256_mul_wide(a: U256, b: U256) -> U512 {
         let mut carry = 0u128;
         for (j, &bj) in b.iter().enumerate() {
             let pos = i + j;
-            let prod = a[i] as u128 * bj as u128
-                + result[pos] as u128
-                + carry;
+            let prod = a[i] as u128 * bj as u128 + result[pos] as u128 + carry;
             result[pos] = prod as u64;
             carry = prod >> 64;
         }
@@ -83,8 +83,12 @@ fn u512_mul_u64(a: U512, scalar: u64) -> U512 {
 
 /// Right-shift U512 by n bits (logical)
 fn u512_shr(v: U512, n: usize) -> U512 {
-    if n == 0 { return v; }
-    if n >= 512 { return [0u64; 8]; }
+    if n == 0 {
+        return v;
+    }
+    if n >= 512 {
+        return [0u64; 8];
+    }
     let limb_shift = n / 64;
     let bit_shift = n % 64;
     let mut result = [0u64; 8];
@@ -101,8 +105,12 @@ fn u512_shr(v: U512, n: usize) -> U512 {
 
 /// Left-shift U512 by n bits
 fn u512_shl(v: U512, n: usize) -> U512 {
-    if n == 0 { return v; }
-    if n >= 512 { return [0u64; 8]; }
+    if n == 0 {
+        return v;
+    }
+    if n >= 512 {
+        return [0u64; 8];
+    }
     let limb_shift = n / 64;
     let bit_shift = n % 64;
     let mut result = [0u64; 8];
@@ -120,7 +128,9 @@ fn u512_shl(v: U512, n: usize) -> U512 {
 /// Compare: a < b for U512
 fn u512_lt(a: U512, b: U512) -> bool {
     for i in (0..8).rev() {
-        if a[i] != b[i] { return a[i] < b[i]; }
+        if a[i] != b[i] {
+            return a[i] < b[i];
+        }
     }
     false
 }
@@ -184,8 +194,8 @@ fn u512_low_to_bytes_be(v: U512) -> Vec<u8> {
 pub fn q64_96_mul(a_bytes: &[u8], b_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
     let a = u256_from_bytes_be(a_bytes);
     let b = u256_from_bytes_be(b_bytes);
-    let product = u256_mul_wide(a, b);        // U512
-    let shifted = u512_shr(product, 96);      // >> 96
+    let product = u256_mul_wide(a, b); // U512
+    let shifted = u512_shr(product, 96); // >> 96
     Ok(u512_low_to_bytes_be(shifted))
 }
 
@@ -226,14 +236,16 @@ pub fn sqrt_price_x96_to_price_wad(
     // Apply decimal adjustment: ×10^(d0-d1) or ÷10^(d1-d0)
     let adjusted = if token0_decimals >= token1_decimals {
         let diff = (token0_decimals - token1_decimals) as u32;
-        let factor = 10u64.checked_pow(diff)
-            .ok_or_else(|| JsValue::from_str("sqrt_price_x96_to_price_wad: decimal diff overflow"))?;
+        let factor = 10u64.checked_pow(diff).ok_or_else(|| {
+            JsValue::from_str("sqrt_price_x96_to_price_wad: decimal diff overflow")
+        })?;
         u512_mul_u64(with_wad, factor)
     } else {
         // Divide numerator by 10^(d1-d0) to avoid inflating with a large U512 denominator
         let diff = (token1_decimals - token0_decimals) as u32;
-        let factor = 10u64.checked_pow(diff)
-            .ok_or_else(|| JsValue::from_str("sqrt_price_x96_to_price_wad: decimal diff overflow"))?;
+        let factor = 10u64.checked_pow(diff).ok_or_else(|| {
+            JsValue::from_str("sqrt_price_x96_to_price_wad: decimal diff overflow")
+        })?;
         // Simple U512 / u64 division
         let mut result = [0u64; 8];
         let mut rem = 0u128;

@@ -19,6 +19,7 @@ Compatibility rules:
 - `eidolon_*` tools remain stable during dual-stack window.
 - `eidolon_*` tools canary-gated and auto-rollback capable.
 - Gateway accepts both modern and legacy call payload shape.
+- Legacy DeFi bridge tools run in compatibility mode only and are disabled by default unless `LEGACY_DEFI_COMPAT_ENABLED=true`.
 
 Promotion rule:
 - A phase is promoted only after previous phase SLOs are green for 7 consecutive days.

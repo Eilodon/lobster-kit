@@ -1,37 +1,32 @@
-mod security;
-#[path = "q64_96.rs"]
-mod q64_96_wasm;
+pub mod cognitive;
 mod hyper_memory;
 pub mod liquid_brain;
-
-// New Eidolon Engine modules
-mod order_book;
-mod risk;
-mod token_math;
+#[path = "q64_96.rs"]
+mod q64_96_wasm;
 mod utils;
-pub mod cognitive;
 
 pub mod sentinel;
 
-// Legacy Exports (Maintain backward compatibility using new modules)
-pub use security::{ValueInvariant, AntiRug, InvariantCheckResult, SecurityScore, InvariantConfig, VolatileSecret, BatchApprovalScanner};
+// Domain exports are sourced from the dedicated trading-domain crate.
+pub use trading_domain::{
+    AntiRug, BatchApprovalScanner, InvariantCheckResult, InvariantConfig, SecurityScore,
+    ValueInvariant, VolatileSecret,
+};
 // Re-export specific structs from sentinel to match legacy API
 pub use sentinel::causal::CausalGraph;
-pub use sentinel::trauma::TraumaRegistry;
-pub use sentinel::causal::{Intervenable, CounterfactualResult};
+pub use sentinel::causal::{CounterfactualResult, Intervenable};
 pub use sentinel::conversation_config::ConversationDomainConfig;
+pub use sentinel::trauma::TraumaRegistry;
 
 // Keep these as they are unique
-pub use q64_96_wasm::{q64_96_mul, q64_96_div, sqrt_price_x96_to_price_wad};
 pub use hyper_memory::HyperMemory;
 pub use liquid_brain::LiquidBrain;
+pub use q64_96_wasm::{q64_96_div, q64_96_mul, sqrt_price_x96_to_price_wad};
 
-// New Exports (Eidolon Engine)
-pub use order_book::*;
-pub use risk::*;
-pub use token_math::*;
-pub use sentinel::Sentinel;
+// Trading vertical exports remain available via re-export for compatibility.
 pub use cognitive::approx_vector_index::{SearchResultWasm, WasmApproxVectorIndex};
+pub use sentinel::Sentinel;
+pub use trading_domain::*;
 
 use wasm_bindgen::prelude::*;
 

@@ -4,20 +4,25 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const mcpBinary = path.join(__dirname, 'target', 'release', 'mcp-rust');
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'dummy_key';
+const BASELINE_LLM_API_KEY = process.env.BASELINE_LLM_API_KEY || '';
+const BASELINE_LLM_URL = process.env.BASELINE_LLM_URL || 'http://localhost:11434/v1/chat/completions';
+const BASELINE_LLM_MODEL = process.env.BASELINE_LLM_MODEL || 'qwen3:1.7b';
 
 // =============== 1. MOCK BASELINE LLM ===============
 async function fetchBaselineLLM(prompt, systemContext = "You are a helpful AI.") {
     const startTime = Date.now();
     try {
-        const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        const headers = {
+            "Content-Type": "application/json",
+        };
+        if (BASELINE_LLM_API_KEY) {
+            headers.Authorization = `Bearer ${BASELINE_LLM_API_KEY}`;
+        }
+        const response = await fetch(BASELINE_LLM_URL, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
-            },
+            headers,
             body: JSON.stringify({
-                model: "deepseek-chat",
+                model: BASELINE_LLM_MODEL,
                 messages: [
                     { role: "system", content: systemContext },
                     { role: "user", content: prompt }

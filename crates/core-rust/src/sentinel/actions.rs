@@ -10,22 +10,22 @@ pub enum SentinelAction {
         amount_in: [u64; 4], // Fixed size U256 representation without external allocator
         slippage_tol: f32,
     },
-    
+
     // --- Advanced Actions ---
     Hedge {
         ratio: f32,
     },
     Rebalance,
-    
+
     // --- God-Tier Actions ---
     BundleAttack {
         target_block: u64,
         // Raw txs would be passed as generic bytes or simpler rep for now
-        tx_count: u8, 
+        tx_count: u8,
     },
     Liquidation {
         target_account: [u8; 20],
-    }
+    },
 }
 
 impl SentinelAction {

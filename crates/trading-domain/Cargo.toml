@@ -1,0 +1,15 @@
+[package]
+name = "trading-domain"
+version = "0.1.0"
+edition = "2021"
+description = "Trading and market-domain primitives for Eidolon (order book, risk, token math, security)"
+license = "MIT"
+
+[dependencies]
+wasm-bindgen = "0.2.99"
+js-sys = "0.3"
+serde = { workspace = true }
+serde-wasm-bindgen = "0.6"
+blake3 = "1.5"
+hex = "0.4"
+ethnum = "1.5"

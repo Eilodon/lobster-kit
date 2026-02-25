@@ -31,7 +31,7 @@ pub struct ThermodynamicEngine {
     poisson_l: DMatrix<f32>,
     friction_m: DMatrix<f32>,
     config: ThermoConfig,
-    
+
     // Pre-allocated buffers for zero-allocation step
     grad_h_buffer: DVector<f32>,
     grad_s_buffer: DVector<f32>,
@@ -43,13 +43,13 @@ impl ThermodynamicEngine {
     pub fn new(config: ThermoConfig) -> Self {
         let dim = config.dim;
         let mut poisson_l = DMatrix::zeros(dim, dim);
-        
+
         // Volatility (0) <-> Momentum (4) coupling
         if dim >= 5 {
             poisson_l[(0, 4)] = 1.0;
             poisson_l[(4, 0)] = -1.0;
         }
-        
+
         // Trend (1) <-> Volatility (0) coupling
         if dim >= 2 {
             poisson_l[(0, 1)] = 0.3;
@@ -60,10 +60,10 @@ impl ThermodynamicEngine {
         for i in 0..dim {
             friction_m[(i, i)] = 0.1;
         }
-        
+
         // Momentum damping
         if dim >= 5 {
-            friction_m[(4, 4)] = 0.3; 
+            friction_m[(4, 4)] = 0.3;
         }
 
         Self {
@@ -76,7 +76,7 @@ impl ThermodynamicEngine {
             entropy_override: None,
         }
     }
-    
+
     /// Compute entropy S = -Σ p_i log(p_i)
     pub fn entropy(&mut self, state: &DVector<f32>) -> f32 {
         if let Some((target_entropy, expiration)) = self.entropy_override {
@@ -87,7 +87,7 @@ impl ThermodynamicEngine {
                 self.entropy_override = None;
             }
         }
-        
+
         let eps = self.config.epsilon;
         let mut s = 0.0;
 
@@ -106,7 +106,7 @@ impl ThermodynamicEngine {
         // Calculate grad_h (Energy gradient) and grad_s (Entropy gradient)
         for i in 0..dim {
             self.grad_h_buffer[i] = state[i] - target[i];
-            
+
             let p = state[i].clamp(eps, 1.0 - eps);
             self.grad_s_buffer[i] = -p.ln() * self.config.temperature;
         }
@@ -116,15 +116,15 @@ impl ThermodynamicEngine {
         for i in 0..dim {
             let mut rev = 0.0;
             let mut irrev = 0.0;
-            
+
             for j in 0..dim {
                 rev += self.poisson_l[(i, j)] * self.grad_h_buffer[j];
                 irrev += self.friction_m[(i, j)] * self.grad_s_buffer[j];
             }
-            
+
             self.dz_buffer[i] = rev * self.config.energy_scale + irrev * self.config.entropy_scale;
         }
-        
+
         // Update state in place
         for i in 0..dim {
             let next_val = state[i] + self.dz_buffer[i] * self.config.dt;

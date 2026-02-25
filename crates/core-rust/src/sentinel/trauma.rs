@@ -38,33 +38,34 @@ impl TraumaRegistry {
     ) {
         let now_ts_us = now_ts_ms * 1000;
         let key = Self::hash_context(mode, action_name);
-        
-        let (new_count, new_sev, inhibit_duration_us) = if let Some(existing) = self.records.get(&key) {
-             let new_count = existing.count.saturating_add(1);
-             // Exponential Backoff: 1h, 2h, 4h... cap at 24h
-             let base_hours: i64 = 1;
-             let hours = (base_hours * (1 << (new_count.min(10) - 1))).min(24);
-             let duration = hours * 3600 * 1_000_000;
-             
-             let alpha = 0.3;
-             let new_sev = existing.sev_eff * (1.0 - alpha) + severity * alpha;
-             
-             (new_count, new_sev, duration)
-        } else {
-             // First offence: 1 hour inhibit
-             (1, severity, 3600 * 1_000_000)
-        };
-        
+
+        let (new_count, new_sev, inhibit_duration_us) =
+            if let Some(existing) = self.records.get(&key) {
+                let new_count = existing.count.saturating_add(1);
+                // Exponential Backoff: 1h, 2h, 4h... cap at 24h
+                let base_hours: i64 = 1;
+                let hours = (base_hours * (1 << (new_count.min(10) - 1))).min(24);
+                let duration = hours * 3600 * 1_000_000;
+
+                let alpha = 0.3;
+                let new_sev = existing.sev_eff * (1.0 - alpha) + severity * alpha;
+
+                (new_count, new_sev, duration)
+            } else {
+                // First offence: 1 hour inhibit
+                (1, severity, 3600 * 1_000_000)
+            };
+
         let hit = TraumaHit {
             sev_eff: new_sev.clamp(0.0, 5.0),
             count: new_count,
             inhibit_until_ts_us: now_ts_us + inhibit_duration_us,
             last_ts_us: now_ts_us,
         };
-        
+
         self.records.insert(key, hit);
     }
-    
+
     /// Check if action is inhibited
     pub fn is_inhibited(&self, mode: SentinelMode, action_name: &str, now_ts_ms: i64) -> bool {
         let key = Self::hash_context(mode, action_name);
@@ -121,13 +122,17 @@ impl TraumaRegistry {
             .map_err(|e| JsValue::from_str(&format!("import_records: invalid payload: {}", e)))?;
 
         for (hex_key, hit) in dump {
-            let key_vec = hex::decode(&hex_key)
-                .map_err(|e| JsValue::from_str(&format!("import_records: bad hex key '{}': {}", hex_key, e)))?;
-            
+            let key_vec = hex::decode(&hex_key).map_err(|e| {
+                JsValue::from_str(&format!("import_records: bad hex key '{}': {}", hex_key, e))
+            })?;
+
             if key_vec.len() != 32 {
-                return Err(JsValue::from_str(&format!("import_records: invalid key length for '{}', expected 32", hex_key)));
+                return Err(JsValue::from_str(&format!(
+                    "import_records: invalid key length for '{}', expected 32",
+                    hex_key
+                )));
             }
-            
+
             let mut key = [0u8; 32];
             key.copy_from_slice(&key_vec);
             self.records.insert(key, hit);
@@ -137,7 +142,7 @@ impl TraumaRegistry {
 
     fn hash_context(mode: SentinelMode, action_name: &str) -> [u8; 32] {
         let mut hasher = Hasher::new();
-        hasher.update(&[mode as u8]); 
+        hasher.update(&[mode as u8]);
         hasher.update(action_name.as_bytes());
         *hasher.finalize().as_bytes()
     }

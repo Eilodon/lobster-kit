@@ -23,7 +23,7 @@ impl TradingDomainConfig {
             risk_aversion_factor: 0.5,
         }
     }
-    
+
     pub fn aggressive() -> Self {
         Self {
             max_leverage: 50,
@@ -33,7 +33,7 @@ impl TradingDomainConfig {
             risk_aversion_factor: 0.2,
         }
     }
-    
+
     pub fn conservative() -> Self {
         Self {
             max_leverage: 5,

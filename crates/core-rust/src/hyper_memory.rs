@@ -1,6 +1,6 @@
-use wasm_bindgen::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use wasm_bindgen::prelude::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct SearchResult {
@@ -71,7 +71,7 @@ impl HyperMemory {
     // ZERO-COPY SEARCH
     pub fn search(&mut self, query_vector: &[f32], k: usize) -> *const f32 {
         self.search_results.clear();
-        
+
         if query_vector.len() != self.dimension || k == 0 || self.ids.is_empty() {
             return self.search_results.as_ptr();
         }
@@ -94,10 +94,12 @@ impl HyperMemory {
 
         let take_k = k.min(self.search_scores.len());
         if take_k < self.search_scores.len() {
-            self.search_scores.select_nth_unstable_by(take_k, |a, b| b.1.total_cmp(&a.1));
+            self.search_scores
+                .select_nth_unstable_by(take_k, |a, b| b.1.total_cmp(&a.1));
             self.search_scores.truncate(take_k);
         }
-        self.search_scores.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
+        self.search_scores
+            .sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
 
         for &(idx, score) in &self.search_scores {
             self.search_results.push(idx as f32);
@@ -118,7 +120,7 @@ impl HyperMemory {
     pub fn count(&self) -> usize {
         self.ids.len()
     }
-    
+
     // Serialization for persistence (V2 flat format).
     pub fn export_data(&self) -> Result<JsValue, JsValue> {
         let payload = HyperMemoryExportV2 {
@@ -129,7 +131,7 @@ impl HyperMemory {
         };
         Ok(serde_wasm_bindgen::to_value(&payload)?)
     }
-    
+
     pub fn import_data(&mut self, data: JsValue) -> Result<(), JsValue> {
         // V2 format.
         if let Ok(imported) = serde_wasm_bindgen::from_value::<HyperMemoryExportV2>(data.clone()) {
@@ -137,7 +139,9 @@ impl HyperMemory {
                 return Err(JsValue::from_str("Imported dimension mismatch"));
             }
             if imported.ids.len() * self.dimension != imported.flat_vectors.len() {
-                return Err(JsValue::from_str("Imported flat vector payload is corrupted"));
+                return Err(JsValue::from_str(
+                    "Imported flat vector payload is corrupted",
+                ));
             }
             self.ids = imported.ids;
             self.flat_vectors = imported.flat_vectors;
@@ -151,7 +155,8 @@ impl HyperMemory {
         self.flat_vectors.clear();
         self.index_by_id.clear();
         self.ids.reserve(imported_v1.len());
-        self.flat_vectors.reserve(imported_v1.len() * self.dimension);
+        self.flat_vectors
+            .reserve(imported_v1.len() * self.dimension);
 
         for (id, vec) in imported_v1 {
             if vec.len() != self.dimension {

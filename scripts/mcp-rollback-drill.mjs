@@ -11,9 +11,9 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 
 const PROFILE_TO_FILE = {
-  development: 'packages/mcp-rust/env/mcp.development.env.example',
-  staging: 'packages/mcp-rust/env/mcp.staging.env.example',
-  production: 'packages/mcp-rust/env/mcp.production.env.example',
+  development: 'crates/mcp-server/env/mcp.development.env.example',
+  staging: 'crates/mcp-server/env/mcp.staging.env.example',
+  production: 'crates/mcp-server/env/mcp.production.env.example',
 };
 
 function parseArgs(argv) {
@@ -116,8 +116,8 @@ function main() {
   checks.push(check('runtime_is_rust', runtime === 'rust', `MCP_PRIMARY_RUNTIME=${runtime || 'missing'}`));
   checks.push(check('rollback_thresholds_present',
     values.COGNITIVE_AUTO_ROLLBACK_ERROR_RATE !== undefined &&
-      values.COGNITIVE_AUTO_ROLLBACK_P95_MS !== undefined &&
-      values.COGNITIVE_AUTO_ROLLBACK_MIN_CALLS !== undefined,
+    values.COGNITIVE_AUTO_ROLLBACK_P95_MS !== undefined &&
+    values.COGNITIVE_AUTO_ROLLBACK_MIN_CALLS !== undefined,
     'rollback threshold envs are defined'
   ));
   checks.push(check('canary_config_present', Number.isFinite(originalCanary), `COGNITIVE_CANARY_PERCENT=${originalCanary}`));

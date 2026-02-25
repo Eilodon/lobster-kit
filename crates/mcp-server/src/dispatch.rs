@@ -30,23 +30,89 @@ impl EidolonMcpServer {
             "eidolon_tool_recommend" => self.handle_tool_recommend(params).await,
             "eidolon_subbrain_auto" => self.handle_subbrain_auto(params).await,
             "eidolon_generated_tool_decision" => self.handle_generated_tool_decision(params).await,
-            "eidolon_oracle_sense" => self.handle_oracle_sense(params).await,
-            "eidolon_defi_quote" => self.handle_defi_quote(params).await,
-            "eidolon_security_scan" => self.handle_security_scan(params).await,
-            "eidolon_get_portfolio" => self.handle_get_portfolio(params).await,
-            "eidolon_execute_swap" => self.handle_execute_swap(params).await,
-            "eidolon_panic_button" => self.handle_panic_button(params).await,
+            "eidolon_oracle_sense" => {
+                if Self::legacy_defi_compat_enabled() {
+                    self.handle_oracle_sense(params).await
+                } else {
+                    serde_json::json!({
+                        "error": "legacy_compat_disabled",
+                        "tool": "eidolon_oracle_sense",
+                        "hint": "Enable LEGACY_DEFI_COMPAT_ENABLED=true for compatibility-mode legacy tools."
+                    })
+                }
+            }
+            "eidolon_defi_quote" => {
+                if Self::legacy_defi_compat_enabled() {
+                    self.handle_defi_quote(params).await
+                } else {
+                    serde_json::json!({
+                        "error": "legacy_compat_disabled",
+                        "tool": "eidolon_defi_quote",
+                        "hint": "Enable LEGACY_DEFI_COMPAT_ENABLED=true for compatibility-mode legacy tools."
+                    })
+                }
+            }
+            "eidolon_security_scan" => {
+                if Self::legacy_defi_compat_enabled() {
+                    self.handle_security_scan(params).await
+                } else {
+                    serde_json::json!({
+                        "error": "legacy_compat_disabled",
+                        "tool": "eidolon_security_scan",
+                        "hint": "Enable LEGACY_DEFI_COMPAT_ENABLED=true for compatibility-mode legacy tools."
+                    })
+                }
+            }
+            "eidolon_get_portfolio" => {
+                if Self::legacy_defi_compat_enabled() {
+                    self.handle_get_portfolio(params).await
+                } else {
+                    serde_json::json!({
+                        "error": "legacy_compat_disabled",
+                        "tool": "eidolon_get_portfolio",
+                        "hint": "Enable LEGACY_DEFI_COMPAT_ENABLED=true for compatibility-mode legacy tools."
+                    })
+                }
+            }
+            "eidolon_execute_swap" => {
+                if Self::legacy_defi_compat_enabled() {
+                    self.handle_execute_swap(params).await
+                } else {
+                    serde_json::json!({
+                        "error": "legacy_compat_disabled",
+                        "tool": "eidolon_execute_swap",
+                        "hint": "Enable LEGACY_DEFI_COMPAT_ENABLED=true for compatibility-mode legacy tools."
+                    })
+                }
+            }
+            "eidolon_panic_button" => {
+                if Self::legacy_defi_compat_enabled() {
+                    self.handle_panic_button(params).await
+                } else {
+                    serde_json::json!({
+                        "error": "legacy_compat_disabled",
+                        "tool": "eidolon_panic_button",
+                        "hint": "Enable LEGACY_DEFI_COMPAT_ENABLED=true for compatibility-mode legacy tools."
+                    })
+                }
+            }
             "eidolon_forge_tool" => self.handle_forge_tool(params).await,
             "eidolon_set_entropy" => self.handle_set_entropy(params).await,
             "eidolon_oracle_query" => self.handle_oracle_query(params).await,
             _ => {
-                let is_dynamic = { self.dynamic_tools.lock().await.contains_key(resolved_method.as_str()) };
+                let is_dynamic = {
+                    self.dynamic_tools
+                        .lock()
+                        .await
+                        .contains_key(resolved_method.as_str())
+                };
                 if is_dynamic {
-                    self.execute_dynamic_tool(resolved_method.as_str(), params).await
+                    self.execute_dynamic_tool(resolved_method.as_str(), params)
+                        .await
                 } else {
                     serde_json::json!({ "error": "Unknown tool" })
                 }
-            },
+            }
         }
     }
     pub async fn run_stdio(&self) {
@@ -72,8 +138,11 @@ impl EidolonMcpServer {
                         let id = req["id"].clone();
                         let method_owned = method.to_string();
                         // Track last input ms for Continuous Background Dreaming
-                        self.last_input_ms.store(chrono::Utc::now().timestamp_millis() as u64, std::sync::atomic::Ordering::Relaxed);
-                        
+                        self.last_input_ms.store(
+                            chrono::Utc::now().timestamp_millis() as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+
                         let params = req.get("params").cloned().unwrap_or(serde_json::json!({}));
 
                         let server_clone = self.clone();
@@ -190,7 +259,8 @@ impl EidolonMcpServer {
 
                                             // Phase 4: Auto-promotion governance check
                                             {
-                                                let db_path = (*server_clone.telemetry_db_path).clone();
+                                                let db_path =
+                                                    (*server_clone.telemetry_db_path).clone();
                                                 let tool_for_promo = tool_name.clone();
                                                 let perf_row = tokio::task::spawn_blocking(move || {
                                                     EidolonMcpServer::load_tool_performance_row_sync(
@@ -206,7 +276,10 @@ impl EidolonMcpServer {
                                                 if let Some(row) = perf_row {
                                                     let thresholds = Self::promotion_thresholds();
                                                     let (eligible, failures) =
-                                                        Self::evaluate_tool_promotion(&row, &thresholds);
+                                                        Self::evaluate_tool_promotion(
+                                                            &row,
+                                                            &thresholds,
+                                                        );
                                                     if eligible {
                                                         eprintln!(
                                                             "[Eidolon] 🏆 Tool '{}' promotion-eligible (calls:{}, err:{:.3}%, p95:{:.1}ms)",
@@ -214,7 +287,8 @@ impl EidolonMcpServer {
                                                             (1.0 - row.success_rate) * 100.0,
                                                             row.latency_p95_ms
                                                         );
-                                                    } else if row.call_count >= thresholds.min_calls {
+                                                    } else if row.call_count >= thresholds.min_calls
+                                                    {
                                                         // Only log failures after min_calls met (avoid noise)
                                                         eprintln!(
                                                             "[Eidolon] ⚠️  Tool '{}' promotion blocked: {:?}",

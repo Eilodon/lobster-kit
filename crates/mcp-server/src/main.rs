@@ -21,7 +21,6 @@ mod tools_reasoning;
 mod types;
 
 use crate::embedding::EmbeddingEngine;
-use crate::oracle::DeepSeekOracle;
 use crate::types::*;
 
 use core_rust::sentinel::causal::CausalGraph;
@@ -47,6 +46,8 @@ const DEFAULT_TOOL_GEN_AUTOPILOT_MAX_FALLBACK_RATE: f64 = 0.35;
 const DEFAULT_TOOL_GEN_AUTOPILOT_MAX_P95_MS: f64 = 2200.0;
 const DEFAULT_TOOL_GEN_AUTOPILOT_MAX_P99_P50_RATIO: f64 = 3.0;
 const DEFAULT_TOOL_GEN_AUTOPILOT_MIN_SAMPLE_COUNT: u64 = 30;
+const DEFAULT_LEGACY_DEFI_COMPAT_ENABLED: bool = false;
+const DEFAULT_LEGACY_DEFI_COMPAT_ALLOWED_ENVS: &str = "development";
 
 pub(crate) const DEFAULT_COGNITIVE_TOOL_CATALOG: [&str; 16] = [
     "eidolon_recall_user",
@@ -69,7 +70,6 @@ pub(crate) const DEFAULT_COGNITIVE_TOOL_CATALOG: [&str; 16] = [
 
 #[derive(Clone)]
 pub struct EidolonMcpServer {
-    oracle: Arc<DeepSeekOracle>,
     causal_brain: Arc<Mutex<CausalGraph>>,
     thermo: Arc<Mutex<ThermodynamicEngine>>,
     trauma: Arc<Mutex<core_rust::sentinel::trauma::TraumaRegistry>>,
@@ -94,14 +94,13 @@ pub struct EidolonMcpServer {
 }
 
 impl EidolonMcpServer {
-    pub fn new(oracle: DeepSeekOracle) -> Self {
+    pub fn new() -> Self {
         let users_file_path = Self::resolve_users_file_path();
         let telemetry_db_path = Self::telemetry_db_path();
-        Self::with_storage_paths(oracle, users_file_path, telemetry_db_path)
+        Self::with_storage_paths(users_file_path, telemetry_db_path)
     }
 
     fn with_storage_paths(
-        oracle: DeepSeekOracle,
         users_file_path: PathBuf,
         telemetry_db_path: PathBuf,
     ) -> Self {
@@ -157,7 +156,6 @@ impl EidolonMcpServer {
         let memories = Self::load_memories_from_disk_sync(&memories_file_path);
 
         Self {
-            oracle: Arc::new(oracle),
             causal_brain: Arc::new(Mutex::new(CausalGraph::new())),
             thermo: Arc::new(Mutex::new(ThermodynamicEngine::new(
                 core_rust::sentinel::thermo::ThermoConfig::default(),
@@ -172,46 +170,24 @@ impl EidolonMcpServer {
             users_file_path: Arc::new(users_file_path),
             memories: Arc::new(Mutex::new(memories)),
             memories_file_path: Arc::new(memories_file_path),
-            last_input_ms: Arc::new(std::sync::atomic::AtomicU64::new(chrono::Utc::now().timestamp_millis() as u64)),
+            last_input_ms: Arc::new(std::sync::atomic::AtomicU64::new(
+                chrono::Utc::now().timestamp_millis() as u64,
+            )),
             dynamic_tools: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             tool_metrics: Arc::new(Mutex::new(loaded_tool_metrics)),
             telemetry_db_path: Arc::new(telemetry_db_path),
             embedding_engine: Arc::new(embedding_engine),
             // Phase 6: LiquidBrain — 64 input (pseudo_embed dim), 16 hidden neurons
-            liquid_brain: Arc::new(Mutex::new(
-                core_rust::liquid_brain::LiquidBrain::new(64, 16),
-            )),
+            liquid_brain: Arc::new(Mutex::new(core_rust::liquid_brain::LiquidBrain::new(
+                64, 16,
+            ))),
             // Phase 6: The Epistemic Core
             tensor_oracle: Arc::new(crate::tensor_oracle::TensorOracle::new()),
         }
     }
 
-    fn ort_dylib_path() -> PathBuf {
-        if let Ok(explicit) = std::env::var("ORT_DYLIB_PATH") {
-            let trimmed = explicit.trim();
-            if !trimmed.is_empty() {
-                return PathBuf::from(trimmed);
-            }
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            PathBuf::from("onnxruntime.dll")
-        }
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        {
-            PathBuf::from("libonnxruntime.so")
-        }
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            PathBuf::from("libonnxruntime.dylib")
-        }
-    }
-
     fn prepare_ort_runtime_for_embedding() -> Result<(), String> {
-        let dylib_path = Self::ort_dylib_path();
-        let builder = ort::init_from(&dylib_path)
-            .map_err(|err| format!("{} ({})", err, dylib_path.display()))?;
+        let builder = ort::init().with_name("eidolon-embedding");
         let _ = builder.commit();
         Ok(())
     }
@@ -233,10 +209,7 @@ impl EidolonMcpServer {
 
 #[tokio::main]
 async fn main() {
-    let oracle = DeepSeekOracle::new(
-        std::env::var("DEEPSEEK_API_KEY").unwrap_or_else(|_| "dummy_key".to_string()),
-    );
-    let server = EidolonMcpServer::new(oracle);
+    let server = EidolonMcpServer::new();
 
     // Initializing Phase 6: The Epistemic Core
     eprintln!("[Eidolon TensorOracle] Booting internal LLM Engine...");
@@ -245,7 +218,11 @@ async fn main() {
     } else {
         eprintln!("[Eidolon TensorOracle] Precomputing Epistemic Pre-Hook (Zero-Allocation Memory Profile)");
         let user_profile = "Eidolon-V Operating Context. Core Directives: Ruthless efficiency. Optimization is paramount. Maximize Thermodynamic Entropy in exploration.";
-        if let Err(e) = server.tensor_oracle.precompute_epistemic_hook(user_profile).await {
+        if let Err(e) = server
+            .tensor_oracle
+            .precompute_epistemic_hook(user_profile)
+            .await
+        {
             eprintln!("[Eidolon] Failed to preload Epistemic Pre-Hook: {}", e);
         }
     }
@@ -255,13 +232,17 @@ async fn main() {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
             let now = chrono::Utc::now().timestamp_millis() as u64;
-            let last_input = server_dream_clone.last_input_ms.load(std::sync::atomic::Ordering::Relaxed);
-            
+            let last_input = server_dream_clone
+                .last_input_ms
+                .load(std::sync::atomic::Ordering::Relaxed);
+
             // Dynamic threshold based on system state
             let base_threshold = 300_000; // 5 minutes standard
-            
+
             if now > last_input + base_threshold {
-                eprintln!("[Eidolon-V] Dream Sequence Initiated. Processing historical memories...");
+                eprintln!(
+                    "[Eidolon-V] Dream Sequence Initiated. Processing historical memories..."
+                );
                 server_dream_clone.trigger_dream_sequence().await;
             }
         }
@@ -271,6 +252,5 @@ async fn main() {
 }
 
 #[cfg(test)]
-
 #[cfg(test)]
 mod tests;

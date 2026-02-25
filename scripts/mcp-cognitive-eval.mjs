@@ -9,13 +9,13 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-const defaultOnnxModelDir = path.resolve(repoRoot, 'packages/mcp-rust/data/models/minilm');
+const defaultOnnxModelDir = path.resolve(repoRoot, 'crates/mcp-server/data/models/minilm');
 const defaultOnnxVenvDir = path.resolve(repoRoot, '.venv-onnx');
 let lastSession = null;
 
 function parseArgs(argv) {
   const out = {
-    bin: path.resolve(repoRoot, 'packages/mcp-rust/target/release/mcp-rust'),
+    bin: path.resolve(repoRoot, 'target/release/mcp-server'),
     out: path.resolve(repoRoot, 'data/memory/cognitive-tool-eval.report.json'),
     timeoutMs: 8000,
     requireOnnx: true,
@@ -333,7 +333,6 @@ async function run() {
 
   const baseEnv = {
     ...process.env,
-    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || 'test_key',
     EIDOLON_DB_PATH: dbPath,
   };
   if (args.ortDylibPath) {
@@ -416,8 +415,8 @@ async function run() {
       checks: [
         check(
           !args.requireOnnx
-            || (safe.payload?.inference_backend === 'onnx_minilm'
-                && attack.payload?.inference_backend === 'onnx_minilm'),
+          || (safe.payload?.inference_backend === 'onnx_minilm'
+            && attack.payload?.inference_backend === 'onnx_minilm'),
           'safe_attack_backend_onnx_when_required',
           {
             require_onnx: args.requireOnnx,

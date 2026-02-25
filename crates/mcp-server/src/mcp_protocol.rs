@@ -159,15 +159,15 @@ impl EidolonMcpServer {
             serde_json::json!({ "name": "eidolon_forge_tool", "description": "Forge a WASM tool", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "code": { "type": "string" } }, "required": ["name", "code"] } }),
             serde_json::json!({ "name": "eidolon_set_entropy", "description": "Force entropy state", "inputSchema": { "type": "object", "properties": { "target_entropy": { "type": "number" }, "duration_ms": { "type": "number" } }, "required": ["target_entropy", "duration_ms"] } }),
             // Legacy aliases
-            serde_json::json!({ "name": "eidolon_oracle_sense", "description": "Legacy Oracle market sensing", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_defi_quote", "description": "Legacy DeFi quote bridge", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
-            serde_json::json!({ "name": "eidolon_security_scan", "description": "Legacy contract security scan bridge", "inputSchema": { "type": "object", "properties": { "contract": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_get_portfolio", "description": "Legacy portfolio snapshot bridge", "inputSchema": { "type": "object", "properties": { "owner": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_execute_swap", "description": "Legacy execute swap bridge", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
-            serde_json::json!({ "name": "eidolon_panic_button", "description": "Legacy emergency mode bridge", "inputSchema": { "type": "object", "properties": { "wallet": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_oracle_sense", "description": "Legacy Oracle market sensing (compat mode only)", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_defi_quote", "description": "Legacy DeFi quote bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
+            serde_json::json!({ "name": "eidolon_security_scan", "description": "Legacy contract security scan bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "contract": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_get_portfolio", "description": "Legacy portfolio snapshot bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "owner": { "type": "string" } } } }),
+            serde_json::json!({ "name": "eidolon_execute_swap", "description": "Legacy execute swap bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
+            serde_json::json!({ "name": "eidolon_panic_button", "description": "Legacy emergency mode bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "wallet": { "type": "string" } } } }),
             serde_json::json!({ "name": "eidolon_recall", "description": "Legacy user recall alias", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" }, "wallet": { "type": "string" }, "address": { "type": "string" } } } }),
             serde_json::json!({ "name": "eidolon_intuition", "description": "Legacy intent sensing alias", "inputSchema": { "type": "object", "properties": {} } }),
-            serde_json::json!({ "name": "eidolon_dream", "description": "Legacy dream replay alias", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" }, "cycles": { "type": "number" } } } })
+            serde_json::json!({ "name": "eidolon_dream", "description": "Legacy dream replay alias", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" }, "cycles": { "type": "number" } } } }),
         ];
 
         let dynamic_tools = self.dynamic_tools.lock().await;
@@ -180,6 +180,24 @@ impl EidolonMcpServer {
                     "properties": { "input": { "type": "number" } }
                 }
             }));
+        }
+
+        if !Self::legacy_defi_compat_enabled() {
+            let legacy_defi_tools = [
+                "eidolon_oracle_sense",
+                "eidolon_defi_quote",
+                "eidolon_security_scan",
+                "eidolon_get_portfolio",
+                "eidolon_execute_swap",
+                "eidolon_panic_button",
+            ];
+            tools.retain(|tool| {
+                let name = tool
+                    .get("name")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                !legacy_defi_tools.contains(&name)
+            });
         }
 
         serde_json::json!({ "tools": tools })

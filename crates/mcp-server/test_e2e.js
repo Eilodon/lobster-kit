@@ -6,7 +6,7 @@ const mcpBinary = path.join(__dirname, 'target', 'release', 'mcp-rust');
 
 console.log(`Starting MCP Server: ${mcpBinary}`);
 const child = spawn(mcpBinary, [], {
-    env: { ...process.env, DEEPSEEK_API_KEY: 'test_key' }
+    env: { ...process.env }
 });
 
 const rl = readline.createInterface({

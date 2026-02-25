@@ -15,7 +15,7 @@ nalgebra = { workspace = true }
 futures = "0.3.32"
 rusqlite = { version = "0.32", features = ["bundled"] }
 lazy_static = "1.4"
-ort = { version = "2.0.0-rc.9", features = ["load-dynamic"] }
+ort = { version = "2.0.0-rc.9", features = ["download-binaries"] }
 ndarray = "0.16"
 tokenizers = { version = "0.20", default-features = false, features = ["progressbar", "esaxx_fast", "onig"] }
 wasmtime = "40.0.3"

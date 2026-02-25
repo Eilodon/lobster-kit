@@ -12,6 +12,23 @@ use std::hash::{Hash, Hasher};
 
 // ── Environment config helpers ──────────────────────────────────────
 impl EidolonMcpServer {
+    pub(crate) fn normalize_env_label(raw: &str) -> String {
+        let normalized = raw.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "dev" => "development".to_string(),
+            "prod" => "production".to_string(),
+            "stage" => "staging".to_string(),
+            _ => normalized,
+        }
+    }
+
+    pub(crate) fn parse_allowed_envs(raw: &str) -> Vec<String> {
+        raw.split(',')
+            .map(Self::normalize_env_label)
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<String>>()
+    }
+
     pub(crate) fn env_flag(name: &str, default: bool) -> bool {
         let Ok(raw) = std::env::var(name) else {
             return default;
@@ -52,28 +69,13 @@ impl EidolonMcpServer {
             .or_else(|_| std::env::var("RUNTIME_ENV"))
             .or_else(|_| std::env::var("NODE_ENV"))
             .unwrap_or_else(|_| "development".to_string());
-        let normalized = raw.trim().to_ascii_lowercase();
-        match normalized.as_str() {
-            "dev" => "development".to_string(),
-            "prod" => "production".to_string(),
-            "stage" => "staging".to_string(),
-            _ => normalized,
-        }
+        Self::normalize_env_label(&raw)
     }
 
     pub(crate) fn allowed_tool_gen_profiles() -> Vec<String> {
         let raw = std::env::var("TOOL_GEN_ALLOWED_ENVS")
             .unwrap_or_else(|_| super::DEFAULT_TOOL_GEN_ALLOWED_ENVS.to_string());
-        raw.split(',')
-            .map(|item| item.trim().to_ascii_lowercase())
-            .map(|item| match item.as_str() {
-                "dev" => "development".to_string(),
-                "prod" => "production".to_string(),
-                "stage" => "staging".to_string(),
-                _ => item,
-            })
-            .filter(|item| !item.is_empty())
-            .collect::<Vec<String>>()
+        Self::parse_allowed_envs(&raw)
     }
 
     pub(crate) fn is_tool_gen_enabled_in_runtime() -> (bool, String, Vec<String>) {
@@ -86,6 +88,24 @@ impl EidolonMcpServer {
             profile,
             allowed_profiles,
         )
+    }
+
+    pub(crate) fn legacy_defi_compat_enabled() -> bool {
+        let compat_requested = Self::env_flag(
+            "LEGACY_DEFI_COMPAT_ENABLED",
+            super::DEFAULT_LEGACY_DEFI_COMPAT_ENABLED,
+        );
+        if !compat_requested {
+            return false;
+        }
+
+        let profile = Self::normalized_runtime_profile();
+        let allowed_profiles = std::env::var("LEGACY_DEFI_COMPAT_ALLOWED_ENVS")
+            .map(|value| Self::parse_allowed_envs(&value))
+            .unwrap_or_else(|_| {
+                Self::parse_allowed_envs(super::DEFAULT_LEGACY_DEFI_COMPAT_ALLOWED_ENVS)
+            });
+        allowed_profiles.iter().any(|entry| entry == &profile)
     }
 }
 

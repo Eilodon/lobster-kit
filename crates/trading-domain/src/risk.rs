@@ -24,10 +24,10 @@ pub enum RiskLevel {
 #[wasm_bindgen]
 #[derive(Clone, Debug)]
 pub struct RiskConfig {
-    pub liquidation_level: f32,  // Margin level that triggers liquidation (e.g., 50%)
-    pub warning_level: f32,      // Margin level that triggers warning (e.g., 100%)
-    pub max_leverage: u16,       // Maximum allowed leverage (e.g., 125x)
-    pub max_positions: u16,      // Maximum positions per account
+    pub liquidation_level: f32, // Margin level that triggers liquidation (e.g., 50%)
+    pub warning_level: f32,     // Margin level that triggers warning (e.g., 100%)
+    pub max_leverage: u16,      // Maximum allowed leverage (e.g., 125x)
+    pub max_positions: u16,     // Maximum positions per account
 }
 
 #[wasm_bindgen]
@@ -96,12 +96,7 @@ impl RiskCalculator {
     }
 
     /// Calculate required margin for a position
-    pub fn calculate_margin_required(
-        &self,
-        quantity: f32,
-        price: f32,
-        leverage: u16,
-    ) -> f32 {
+    pub fn calculate_margin_required(&self, quantity: f32, price: f32, leverage: u16) -> f32 {
         (quantity * price) / leverage as f32
     }
 
@@ -146,13 +141,13 @@ impl RiskCalculator {
     /// Calculate stop loss price for given max loss
     pub fn calculate_stop_loss(
         &self,
-        side: u8,  // 0 = LONG, 1 = SHORT
+        side: u8, // 0 = LONG, 1 = SHORT
         entry_price: f32,
         quantity: f32,
         max_loss: f32,
     ) -> f32 {
         let price_delta = max_loss / quantity;
-        
+
         if side == 0 {
             // LONG: stop loss is below entry
             entry_price - price_delta
@@ -165,7 +160,7 @@ impl RiskCalculator {
     /// Calculate liquidation price
     pub fn calculate_liquidation_price(
         &self,
-        side: u8,  // 0 = LONG, 1 = SHORT
+        side: u8, // 0 = LONG, 1 = SHORT
         entry_price: f32,
         leverage: u16,
         maintenance_margin_rate: f32,
@@ -173,7 +168,7 @@ impl RiskCalculator {
         // Simplified liquidation price calculation
         // Real formula depends on exchange specifics
         let margin_diff = 1.0 / leverage as f32 - maintenance_margin_rate;
-        
+
         if side == 0 {
             // LONG: liquidation when price drops
             entry_price * (1.0 - margin_diff)
@@ -191,10 +186,7 @@ impl RiskCalculator {
 /// Batch check accounts for liquidation
 /// Returns indices of accounts that need liquidation
 #[wasm_bindgen]
-pub fn batch_check_liquidation(
-    margin_levels: &[f32],
-    liquidation_threshold: f32,
-) -> Vec<u32> {
+pub fn batch_check_liquidation(margin_levels: &[f32], liquidation_threshold: f32) -> Vec<u32> {
     margin_levels
         .iter()
         .enumerate()
@@ -246,7 +238,7 @@ mod tests {
     #[test]
     fn test_margin_level() {
         let calc = RiskCalculator::new(RiskConfig::new());
-        
+
         // 10000 equity, 5000 margin = 200% margin level
         let level = calc.calculate_margin_level(10000.0, 5000.0);
         assert!((level - 200.0).abs() < 0.001);
@@ -255,7 +247,7 @@ mod tests {
     #[test]
     fn test_risk_levels() {
         let calc = RiskCalculator::new(RiskConfig::new());
-        
+
         assert_eq!(calc.determine_risk_level(40.0), RiskLevel::Liquidation);
         assert_eq!(calc.determine_risk_level(80.0), RiskLevel::High);
         assert_eq!(calc.determine_risk_level(150.0), RiskLevel::Medium);
@@ -266,7 +258,7 @@ mod tests {
     fn test_batch_liquidation_check() {
         let levels = [300.0f32, 40.0, 150.0, 30.0, 200.0];
         let to_liquidate = batch_check_liquidation(&levels, 50.0);
-        
+
         assert_eq!(to_liquidate.len(), 2);
         assert!(to_liquidate.contains(&1));
         assert!(to_liquidate.contains(&3));

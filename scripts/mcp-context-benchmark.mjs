@@ -101,9 +101,9 @@ function isMcpBinaryFresh(binPath) {
   if (!fs.existsSync(binPath)) return false;
   const binMtime = fs.statSync(binPath).mtimeMs;
   const watchedInputs = [
-    path.resolve(repoRoot, 'packages/mcp-rust/src/main.rs'),
-    path.resolve(repoRoot, 'packages/mcp-rust/Cargo.toml'),
-    path.resolve(repoRoot, 'packages/mcp-rust/Cargo.lock'),
+    path.resolve(repoRoot, 'crates/mcp-server/src/main.rs'),
+    path.resolve(repoRoot, 'crates/mcp-server/Cargo.toml'),
+    path.resolve(repoRoot, 'crates/mcp-server/Cargo.lock'),
   ];
   return watchedInputs.every((entry) => !fs.existsSync(entry) || fs.statSync(entry).mtimeMs <= binMtime);
 }
@@ -113,19 +113,19 @@ function resolveMcpCommand(args) {
     return { cmd: args.mcpBin, cmdArgs: [] };
   }
 
-  const debugBin = path.resolve(repoRoot, 'packages/mcp-rust/target/debug/mcp-rust');
+  const debugBin = path.resolve(repoRoot, 'crates/mcp-server/target/debug/mcp-server');
   if (isMcpBinaryFresh(debugBin)) {
     return { cmd: debugBin, cmdArgs: [] };
   }
 
-  const releaseBin = path.resolve(repoRoot, 'packages/mcp-rust/target/release/mcp-rust');
+  const releaseBin = path.resolve(repoRoot, 'crates/mcp-server/target/release/mcp-server');
   if (isMcpBinaryFresh(releaseBin)) {
     return { cmd: releaseBin, cmdArgs: [] };
   }
 
   return {
     cmd: 'cargo',
-    cmdArgs: ['run', '--manifest-path', 'packages/mcp-rust/Cargo.toml', '--quiet'],
+    cmdArgs: ['run', '--manifest-path', 'crates/mcp-server/Cargo.toml', '--quiet'],
   };
 }
 

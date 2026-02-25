@@ -4,14 +4,14 @@ use wasm_bindgen::prelude::*;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[wasm_bindgen]
 pub enum SentinelMode {
-    Stalking,       // Low activity, monitoring
-    Berserk,        // High frequency trading
-    Arbitrage,      // Atomic checks
-    Liquidation,    // Hunting bad debt
-    Snipe,          // New token launch
-    Emergency,      // Pull everything
+    Stalking,    // Low activity, monitoring
+    Berserk,     // High frequency trading
+    Arbitrage,   // Atomic checks
+    Liquidation, // Hunting bad debt
+    Snipe,       // New token launch
+    Emergency,   // Pull everything
     #[default]
-    Zen,            // Balanced / Idle
+    Zen, // Balanced / Idle
 }
 
 impl SentinelMode {

@@ -16,7 +16,7 @@ import { getPriceService } from './services/PriceService';
  *
  * This is the adapter facade for DeFi operations on opBNB.
  * For Eidolon soul/AI features, use @eidolon/soul.
- * For MCP runtime, use packages/mcp-rust (via `pnpm mcp`).
+ * For MCP runtime, use crates/mcp-server (via `pnpm mcp`).
  */
 export class Eidolon {
   public readonly defi: DeFiModule;

@@ -9,9 +9,9 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 
 const PROFILE_TO_FILE = {
-  development: 'packages/mcp-rust/env/mcp.development.env.example',
-  staging: 'packages/mcp-rust/env/mcp.staging.env.example',
-  production: 'packages/mcp-rust/env/mcp.production.env.example',
+  development: 'crates/mcp-server/env/mcp.development.env.example',
+  staging: 'crates/mcp-server/env/mcp.staging.env.example',
+  production: 'crates/mcp-server/env/mcp.production.env.example',
 };
 
 function parseArgs(argv) {

@@ -58,3 +58,9 @@ packages/soul/core-rust/pkg/
 packages/soul/core-rust/pkg
 target/
 crates/**/target/
+
+# Local runtime assets (keep outside git history)
+.models/
+.venv-onnx/
+.cursor/
+onnxruntime-linux-x64-*/

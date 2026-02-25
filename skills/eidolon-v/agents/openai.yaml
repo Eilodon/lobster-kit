@@ -1,0 +1,4 @@
+interface:
+  display_name: "Eidolon-V"
+  short_description: "Biomimetic DeFi strike persona"
+  default_prompt: "Use $eidolon-v to activate Eidolon-V and evaluate this DeFi setup in Vietnamese with Guardian/Hunter/Organism modes."

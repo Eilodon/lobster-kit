@@ -1,5 +1,5 @@
-use wasm_bindgen::prelude::*;
 use js_sys::Float32Array;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct SearchResultWasm {
@@ -7,12 +7,12 @@ pub struct SearchResultWasm {
     pub score: f32,
 }
 
-
-
 // Zero-allocation cosine similarity taking flat f32 slices
 #[inline(always)]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.is_empty() || a.len() != b.len() { return 0.0; }
+    if a.is_empty() || a.len() != b.len() {
+        return 0.0;
+    }
     let mut dot = 0.0;
     let mut an = 0.0;
     let mut bn = 0.0;
@@ -21,7 +21,9 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         an += a[i] * a[i];
         bn += b[i] * b[i];
     }
-    if an == 0.0 || bn == 0.0 { return 0.0; }
+    if an == 0.0 || bn == 0.0 {
+        return 0.0;
+    }
     dot / (an.sqrt() * bn.sqrt())
 }
 
@@ -63,9 +65,11 @@ impl WasmApproxVectorIndex {
         self.bucket_keys.clear();
         self.bucket_offsets.clear();
         self.bucket_ids.clear();
-        
-        if dim == 0 || flat_vectors.length() == 0 { return; }
-        
+
+        if dim == 0 || flat_vectors.length() == 0 {
+            return;
+        }
+
         // Convert Float32Array (JS) -> Vec<f32> (Rust) once and keep contiguous layout.
         let mut raw_data = flat_vectors.to_vec();
         let usable_len = (raw_data.len() / dim) * dim;
@@ -75,10 +79,10 @@ impl WasmApproxVectorIndex {
             return;
         }
         self.items_flat = raw_data;
-        
+
         // Build flattened planes once: [plane0..., plane1..., ...].
         self.planes = Self::build_deterministic_planes(dim, self.hyperplanes);
-        
+
         // Build (signature, id) list first, then compress to CSR-like arrays.
         let mut signature_pairs = Vec::with_capacity(num_items);
         for i in 0..num_items {
@@ -118,11 +122,16 @@ impl WasmApproxVectorIndex {
     }
 
     #[wasm_bindgen]
-    pub fn search(&self, query_js: Float32Array, k: u32, candidate_multiplier_opt: Option<u32>) -> Vec<SearchResultWasm> {
+    pub fn search(
+        &self,
+        query_js: Float32Array,
+        k: u32,
+        candidate_multiplier_opt: Option<u32>,
+    ) -> Vec<SearchResultWasm> {
         let candidate_multiplier = candidate_multiplier_opt.unwrap_or(12);
         let query = query_js.to_vec();
         let item_count = self.item_count();
-        
+
         if k == 0 || item_count == 0 || query.len() != self.dimension {
             return Vec::new();
         }
@@ -136,10 +145,14 @@ impl WasmApproxVectorIndex {
             let score = cosine_similarity(&query, vec);
             scored.push(SearchResultWasm { id, score });
         }
-        
+
         // Sort descending
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         let take = std::cmp::min(k as usize, scored.len());
         scored.truncate(take);
         scored
@@ -155,22 +168,26 @@ impl WasmApproxVectorIndex {
         let mut seen = vec![false; n];
         let mut collected = Vec::with_capacity(target);
         let signature = self.signature(query);
-        
+
         self.add_bucket(signature, &mut seen, &mut collected, target);
-        
+
         if collected.len() < target {
             let max_probe = std::cmp::min(self.probes, self.hyperplanes);
             for bit in 0..max_probe {
                 let neighbor = signature ^ (1 << bit);
                 self.add_bucket(neighbor, &mut seen, &mut collected, target);
-                if collected.len() >= target { break; }
+                if collected.len() >= target {
+                    break;
+                }
             }
         }
-        
+
         if collected.len() < target {
             let mut stride = n / std::cmp::max(1, target_count);
-            if stride == 0 { stride = 1; }
-            
+            if stride == 0 {
+                stride = 1;
+            }
+
             let start = signature as usize % stride;
             let mut idx = start;
             while idx < n && collected.len() < target {
@@ -181,7 +198,7 @@ impl WasmApproxVectorIndex {
                 idx += stride;
             }
         }
-        
+
         if collected.len() < target && n <= 256 {
             let mut i = 0;
             while (i < n) && (collected.len() < target) {
@@ -192,7 +209,7 @@ impl WasmApproxVectorIndex {
                 i += 1;
             }
         }
-        
+
         collected
     }
 
@@ -236,8 +253,9 @@ impl WasmApproxVectorIndex {
     fn build_deterministic_planes(dimension: usize, count: u32) -> Vec<f32> {
         let plane_count = count as usize;
         let mut planes = Vec::with_capacity(plane_count * dimension);
-        let mut seed: u32 = (dimension as u32).wrapping_mul(2654435761) ^ count.wrapping_mul(2246822519);
-        
+        let mut seed: u32 =
+            (dimension as u32).wrapping_mul(2654435761) ^ count.wrapping_mul(2246822519);
+
         let mut next = || -> f32 {
             seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
             (seed as f64 / 0xffffffffu32 as f64) as f32

@@ -1,7 +1,7 @@
 use ethnum::I256;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::ops::{Add, Sub};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 // Include manual serde impl
 include!("q64_96_serde.rs");
@@ -29,7 +29,7 @@ impl fmt::Display for Q64_96Error {
 
 impl Q64_96 {
     pub const FRACTIONAL_BITS: u32 = 96;
-    
+
     // Non-const constructor for defaults
     pub fn one() -> Self {
         Self(I256::ONE << 96)
@@ -38,7 +38,7 @@ impl Q64_96 {
     pub fn zero() -> Self {
         Self(I256::ZERO)
     }
-    
+
     // Scale factor: 2^96 (runtime calculation for safety or use literal string parsing if needed)
     // For I256, shift left is not const Fn
     pub fn scale() -> I256 {
@@ -54,8 +54,8 @@ impl Q64_96 {
     pub fn from_f64(v: f64) -> Self {
         let raw = v * (2f64.powi(96));
         Self(I256::from(raw as i128)) // Warning: f64 -> i128 -> I256 might lose precision
-        // Better: parse string or manual bit mainpulation if strictly required,
-        // but for now standard float conversion is okay for non-critical paths.
+                                      // Better: parse string or manual bit mainpulation if strictly required,
+                                      // but for now standard float conversion is okay for non-critical paths.
     }
 
     /// Convert to float
