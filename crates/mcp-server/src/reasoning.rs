@@ -33,7 +33,7 @@ impl EidolonMcpServer {
         let critical_action_signals_present = has_critical_action_signals(context);
 
         let historical_pressure = {
-            let metrics = self.tool_metrics.write().await;
+            let metrics = self.tool_metrics.read().await;
             metrics
                 .get("eidolon_reason_chain")
                 .map(|metric| metric.latency_p95_ms)
@@ -97,7 +97,7 @@ impl EidolonMcpServer {
     ) -> crate::routing::RoutingContext {
         // Snapshot trauma severity (non-blocking read, drop lock immediately)
         let trauma_severity = {
-            let trauma = self.trauma.write().await;
+            let trauma = self.trauma.read().await;
             trauma.get_trauma_severity(trauma_mode, trauma_context_key) as f32
         };
         crate::routing::RoutingContext {
@@ -118,7 +118,28 @@ impl EidolonMcpServer {
         ctx: &crate::routing::RoutingContext,
         prompt: &str,
     ) -> Result<String, String> {
+        let started = std::time::Instant::now();
         let decision = self.routing_engine.decide(ctx);
+        let provider = crate::providers::provider_name_from_decision(&decision).to_string();
+        let mut reason = match &decision {
+            crate::routing::RoutingDecision::LocalTensorOracle => {
+                "policy_local_tensor_oracle".to_string()
+            }
+            crate::routing::RoutingDecision::LocalOllama => {
+                "policy_local_ollama_fallback".to_string()
+            }
+            crate::routing::RoutingDecision::External { .. } => {
+                "policy_external_high_entropy".to_string()
+            }
+            crate::routing::RoutingDecision::Unavailable { reason } => {
+                format!("policy_unavailable:{}", reason)
+            }
+        };
+        let mut fallback_used = matches!(
+            &decision,
+            crate::routing::RoutingDecision::LocalOllama
+                | crate::routing::RoutingDecision::Unavailable { .. }
+        );
 
         eprintln!(
             "[Eidolon Router] tenant={} decision={:?}",
@@ -126,7 +147,7 @@ impl EidolonMcpServer {
             crate::providers::provider_name_from_decision(&decision)
         );
 
-        match &decision {
+        let result = match &decision {
             crate::routing::RoutingDecision::LocalTensorOracle => {
                 let result = self
                     .tensor_oracle
@@ -187,9 +208,55 @@ impl EidolonMcpServer {
                     .await;
                 match result {
                     crate::providers::InferenceResult::Ok(text) => {
-                        self.routing_engine
-                            .record_success(crate::routing::Provider::External);
-                        Ok(text)
+                        // Phase 4: Critic gate for external output before returning to caller.
+                        let expect_json = prompt.contains("Return ONLY a JSON object")
+                            || prompt.contains("return ONLY a JSON object")
+                            || prompt.contains("'factual_consistency'");
+                        let critic = crate::critic::OutputCritic::from_env();
+                        let verdict = critic.evaluate(&text, expect_json, "external");
+                        if verdict.passed {
+                            self.routing_engine
+                                .record_success(crate::routing::Provider::External);
+                            Ok(text)
+                        } else {
+                            self.routing_engine
+                                .record_failure(crate::routing::Provider::External);
+                            fallback_used = true;
+                            reason = format!(
+                                "{};critic_reject:score={:.2},violations={}",
+                                reason,
+                                verdict.score,
+                                verdict.violations.len()
+                            );
+                            eprintln!(
+                                "[Eidolon Router] External output rejected by critic. Falling back to local /think."
+                            );
+                            let fallback_entropy = ctx.entropy.max(0.9);
+                            let fallback = self
+                                .tensor_oracle
+                                .generate_with_thermodynamics(
+                                    prompt,
+                                    fallback_entropy,
+                                    ctx.trauma_severity,
+                                    false,
+                                )
+                                .await;
+                            match fallback {
+                                Ok(local_text) => {
+                                    self.routing_engine
+                                        .record_success(crate::routing::Provider::TensorOracle);
+                                    Ok(local_text)
+                                }
+                                Err(e) => {
+                                    self.routing_engine
+                                        .record_failure(crate::routing::Provider::TensorOracle);
+                                    Err(format!(
+                                        "external_critic_rejected_and_local_fallback_failed: {}",
+                                        e
+                                    ))
+                                }
+                            }
+                        }
                     }
                     crate::providers::InferenceResult::Timeout => {
                         self.routing_engine
@@ -206,6 +273,26 @@ impl EidolonMcpServer {
             crate::routing::RoutingDecision::Unavailable { reason } => {
                 Err(format!("all_providers_unavailable: {}", reason))
             }
-        }
+        };
+
+        let latency_ms = started.elapsed().as_millis();
+        let status = if result.is_ok() { "ok" } else { "error" };
+        let fallback_reason = if fallback_used {
+            Some(reason.clone())
+        } else {
+            None
+        };
+        let audit = eidolon_shared::observability::RouteDecisionAudit::new(
+            ctx.tenant_id.clone(),
+            provider,
+            reason,
+            fallback_used,
+            fallback_reason,
+            latency_ms,
+            status,
+        );
+        eprintln!("[Eidolon Router Audit] {}", audit.to_json());
+
+        result
     }
 }

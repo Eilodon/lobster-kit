@@ -267,6 +267,25 @@ async fn test_contract_tools_list_platform_first_defaults() {
     }
 }
 
+#[tokio::test]
+async fn test_contract_tools_list_includes_optional_tenant_id_schema() {
+    let server = setup_server();
+    let payload = server.list_tools_payload().await;
+    let tools = payload["tools"].as_array().expect("missing tools array");
+
+    for required in CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS {
+        let tool = tools
+            .iter()
+            .find(|tool| tool.get("name").and_then(|value| value.as_str()) == Some(required))
+            .unwrap_or_else(|| panic!("missing required tool: {}", required));
+        assert_eq!(
+            tool["inputSchema"]["properties"]["tenant_id"]["type"], "string",
+            "tool {} must expose optional tenant_id schema field",
+            required
+        );
+    }
+}
+
 #[test]
 fn test_contract_missing_name_or_tool_returns_structured_mcp_error() {
     let err = EidolonMcpServer::parse_tools_call_payload(&json!({
@@ -633,16 +652,113 @@ async fn test_update_user_persists_across_server_restarts() {
 }
 
 #[tokio::test]
+async fn test_tenant_isolation_prevents_cross_tenant_profile_and_memory_leak() {
+    let server = setup_server();
+    let tenant_a = "tenant_alpha";
+    let tenant_b = "tenant_bravo";
+    let shared_user_id = "shared-user";
+    let unique_pattern = format!(
+        "tenant_alpha_only_pattern_{}",
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+
+    let update = server
+        .handle_tool_call(
+            "eidolon_update_user",
+            json!({
+                "tenant_id": tenant_a,
+                "user_id": shared_user_id,
+                "preferred_mode": "Berserk",
+                "risk_tolerance": 0.99
+            }),
+        )
+        .await;
+    assert_eq!(update["status"], "user_profile_persisted");
+
+    let recall_a = server
+        .handle_tool_call(
+            "eidolon_recall_user",
+            json!({"tenant_id": tenant_a, "user_id": shared_user_id}),
+        )
+        .await;
+    assert_eq!(recall_a["profile"]["preferred_mode"], "Berserk");
+    assert_eq!(recall_a["profile"]["risk_tolerance"], 0.99);
+
+    let recall_b = server
+        .handle_tool_call(
+            "eidolon_recall_user",
+            json!({"tenant_id": tenant_b, "user_id": shared_user_id}),
+        )
+        .await;
+    assert_ne!(recall_b["profile"]["preferred_mode"], "Berserk");
+    assert_ne!(recall_b["profile"]["risk_tolerance"], 0.99);
+
+    let record = server
+        .handle_tool_call(
+            "eidolon_record_outcome",
+            json!({
+                "tenant_id": tenant_a,
+                "pattern": unique_pattern,
+                "mode": "Peer",
+                "severity": 0.0
+            }),
+        )
+        .await;
+    assert_eq!(record["status"], "outcome_recorded");
+
+    let memory_a = server
+        .handle_tool_call(
+            "eidolon_memory_query",
+            json!({"tenant_id": tenant_a, "query": unique_pattern}),
+        )
+        .await;
+    assert!(
+        memory_a["matches"].as_u64().unwrap_or_default() > 0,
+        "tenant A should see its own memory"
+    );
+
+    let memory_b = server
+        .handle_tool_call(
+            "eidolon_memory_query",
+            json!({"tenant_id": tenant_b, "query": unique_pattern}),
+        )
+        .await;
+    assert_eq!(
+        memory_b["matches"].as_u64().unwrap_or_default(),
+        0,
+        "tenant B must not see tenant A memory"
+    );
+}
+
+#[tokio::test]
 async fn test_record_tool_metric_tracks_sub_ms_and_tail_percentiles() {
     let server = setup_server();
     server
-        .record_tool_metric("default_tenant", "eidolon_precision_probe", false, 850, false)
+        .record_tool_metric(
+            "default_tenant",
+            "eidolon_precision_probe",
+            false,
+            850,
+            false,
+        )
         .await;
     server
-        .record_tool_metric("default_tenant", "eidolon_precision_probe", false, 1_900, false)
+        .record_tool_metric(
+            "default_tenant",
+            "eidolon_precision_probe",
+            false,
+            1_900,
+            false,
+        )
         .await;
     server
-        .record_tool_metric("default_tenant", "eidolon_precision_probe", true, 3_100, true)
+        .record_tool_metric(
+            "default_tenant",
+            "eidolon_precision_probe",
+            true,
+            3_100,
+            true,
+        )
         .await;
 
     let db_path = (*server.telemetry_db_path).clone();

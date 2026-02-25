@@ -8,7 +8,6 @@ use std::collections::VecDeque;
 pub const MAX_LATENCY_SAMPLES: usize = 256;
 pub const DEFAULT_USER_SATISFACTION: f64 = 0.5;
 
-
 pub type TenantId = String;
 
 // === Stateful Memory ===

@@ -117,7 +117,9 @@ impl EidolonMcpServer {
         let user_id = params["user_id"].as_str().unwrap_or("unknown");
         {
             let mut all_users = self.users.write().await;
-            let users = all_users.entry(tenant_id.clone()).or_insert_with(std::collections::HashMap::new);
+            let users = all_users
+                .entry(tenant_id.clone())
+                .or_insert_with(std::collections::HashMap::new);
             let existing = users
                 .entry(user_id.to_string())
                 .or_insert_with(|| serde_json::json!({}));

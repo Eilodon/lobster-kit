@@ -1,4 +1,5 @@
 mod auth;
+mod critic;
 mod db;
 mod dispatch;
 mod embedding;

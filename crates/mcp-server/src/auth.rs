@@ -62,11 +62,18 @@ impl EidolonMcpServer {
         result
     }
 
-    pub(crate) fn load_users_from_disk_sync(path: &Path) -> HashMap<crate::types::TenantId, HashMap<String, serde_json::Value>> {
+    pub(crate) fn load_users_from_disk_sync(
+        path: &Path,
+    ) -> HashMap<crate::types::TenantId, HashMap<String, serde_json::Value>> {
         if let Ok(data) = std::fs::read_to_string(&path) {
-            if let Ok(users) = serde_json::from_str::<HashMap<crate::types::TenantId, HashMap<String, serde_json::Value>>>(&data) {
+            if let Ok(users) = serde_json::from_str::<
+                HashMap<crate::types::TenantId, HashMap<String, serde_json::Value>>,
+            >(&data)
+            {
                 users
-            } else if let Ok(legacy_users) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&data) {
+            } else if let Ok(legacy_users) =
+                serde_json::from_str::<HashMap<String, serde_json::Value>>(&data)
+            {
                 let mut map = HashMap::new();
                 map.insert("default".to_string(), legacy_users);
                 map

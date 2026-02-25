@@ -92,7 +92,9 @@ impl BaselineIndex {
             }
         }
 
-        if collected.len() < std::cmp::min(target_count, self.items.len()) && self.items.len() <= 256 {
+        if collected.len() < std::cmp::min(target_count, self.items.len())
+            && self.items.len() <= 256
+        {
             let mut i = 0;
             while i < self.items.len() && collected.len() < target_count {
                 collected.insert(i as u32);
@@ -273,7 +275,13 @@ impl OptimizedIndex {
         collected
     }
 
-    fn add_bucket(&self, signature: u32, seen: &mut [bool], collected: &mut Vec<u32>, target_count: usize) {
+    fn add_bucket(
+        &self,
+        signature: u32,
+        seen: &mut [bool],
+        collected: &mut Vec<u32>,
+        target_count: usize,
+    ) {
         if let Some((start, end)) = self.bucket_range(signature) {
             for idx in start..end {
                 let id = self.bucket_ids[idx] as usize;
@@ -307,7 +315,8 @@ impl AnnIndex for OptimizedIndex {
             return;
         }
 
-        self.items_flat.extend_from_slice(&flat_vectors[..usable_len]);
+        self.items_flat
+            .extend_from_slice(&flat_vectors[..usable_len]);
         self.planes = build_deterministic_planes_flat(dimension, self.hyperplanes);
 
         let mut signature_pairs = Vec::with_capacity(num_items);
@@ -363,7 +372,8 @@ impl AnnIndex for OptimizedIndex {
 
 fn build_deterministic_planes_nested(dimension: usize, count: u32) -> Vec<Vec<f32>> {
     let mut planes: Vec<Vec<f32>> = Vec::with_capacity(count as usize);
-    let mut seed: u32 = (dimension as u32).wrapping_mul(2654435761) ^ count.wrapping_mul(2246822519);
+    let mut seed: u32 =
+        (dimension as u32).wrapping_mul(2654435761) ^ count.wrapping_mul(2246822519);
 
     let mut next = || -> f32 {
         seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
@@ -383,7 +393,8 @@ fn build_deterministic_planes_nested(dimension: usize, count: u32) -> Vec<Vec<f3
 
 fn build_deterministic_planes_flat(dimension: usize, count: u32) -> Vec<f32> {
     let mut planes = Vec::with_capacity(dimension * count as usize);
-    let mut seed: u32 = (dimension as u32).wrapping_mul(2654435761) ^ count.wrapping_mul(2246822519);
+    let mut seed: u32 =
+        (dimension as u32).wrapping_mul(2654435761) ^ count.wrapping_mul(2246822519);
 
     let mut next = || -> f32 {
         seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
@@ -434,7 +445,14 @@ struct BenchResult {
     checksum: f64,
 }
 
-fn run_bench<T: AnnIndex>(mut index: T, data: &[f32], dim: usize, queries: &[Vec<f32>], k: u32, cm: u32) -> BenchResult {
+fn run_bench<T: AnnIndex>(
+    mut index: T,
+    data: &[f32],
+    dim: usize,
+    queries: &[Vec<f32>],
+    k: u32,
+    cm: u32,
+) -> BenchResult {
     let t0 = Instant::now();
     index.rebuild(data, dim);
     let rebuild = t0.elapsed();
@@ -474,9 +492,15 @@ fn main() {
     let sizes = [1_000usize, 10_000usize, 100_000usize];
 
     println!("ANN benchmark (baseline vs optimized)");
-    println!("dim={}, hyperplanes={}, probes={}, k={}, candidate_multiplier={}, queries={}", dimension, hyperplanes, probes, k, candidate_multiplier, queries_per_case);
+    println!(
+        "dim={}, hyperplanes={}, probes={}, k={}, candidate_multiplier={}, queries={}",
+        dimension, hyperplanes, probes, k, candidate_multiplier, queries_per_case
+    );
     println!();
-    println!("{:<8} {:<10} {:>12} {:>14} {:>14} {:>12}", "N", "Variant", "Rebuild(ms)", "SearchTotal(ms)", "SearchAvg(ms)", "Checksum");
+    println!(
+        "{:<8} {:<10} {:>12} {:>14} {:>14} {:>12}",
+        "N", "Variant", "Rebuild(ms)", "SearchTotal(ms)", "SearchAvg(ms)", "Checksum"
+    );
 
     for &n in &sizes {
         let data = generate_vectors(n, dimension);
@@ -524,8 +548,12 @@ fn main() {
         );
 
         let rebuild_speedup = baseline.rebuild.as_secs_f64() / optimized.rebuild.as_secs_f64();
-        let search_speedup = baseline.search_total.as_secs_f64() / optimized.search_total.as_secs_f64();
-        println!("{: <8} {: <10} rebuild x{:.2}, search x{:.2}", "", "speedup", rebuild_speedup, search_speedup);
+        let search_speedup =
+            baseline.search_total.as_secs_f64() / optimized.search_total.as_secs_f64();
+        println!(
+            "{: <8} {: <10} rebuild x{:.2}, search x{:.2}",
+            "", "speedup", rebuild_speedup, search_speedup
+        );
         println!();
     }
 }

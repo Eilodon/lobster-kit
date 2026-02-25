@@ -85,8 +85,7 @@ impl OllamaAdapter {
         Self {
             base_url: std::env::var("OLLAMA_URL")
                 .unwrap_or_else(|_| "http://localhost:11434/api/generate".to_string()),
-            model: std::env::var("OLLAMA_MODEL")
-                .unwrap_or_else(|_| "qwen3:1.7b".to_string()),
+            model: std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "qwen3:1.7b".to_string()),
         }
     }
 }
@@ -119,19 +118,17 @@ impl LlmProvider for OllamaAdapter {
         match result {
             Err(_elapsed) => InferenceResult::Timeout,
             Ok(Err(e)) => InferenceResult::Error(format!("ollama_request_error: {}", e)),
-            Ok(Ok(response)) => {
-                match response.json::<serde_json::Value>().await {
-                    Ok(json) => {
-                        let text = json
-                            .get("response")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or_default()
-                            .to_string();
-                        InferenceResult::Ok(text)
-                    }
-                    Err(e) => InferenceResult::Error(format!("ollama_parse_error: {}", e)),
+            Ok(Ok(response)) => match response.json::<serde_json::Value>().await {
+                Ok(json) => {
+                    let text = json
+                        .get("response")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    InferenceResult::Ok(text)
                 }
-            }
+                Err(e) => InferenceResult::Error(format!("ollama_parse_error: {}", e)),
+            },
         }
     }
 
@@ -154,12 +151,7 @@ pub struct ExternalLlmAdapter {
 }
 
 impl ExternalLlmAdapter {
-    pub fn new(
-        url: String,
-        api_key: Option<String>,
-        model: String,
-        timeout_secs: u64,
-    ) -> Self {
+    pub fn new(url: String, api_key: Option<String>, model: String, timeout_secs: u64) -> Self {
         Self {
             url,
             api_key,
@@ -203,7 +195,10 @@ impl LlmProvider for ExternalLlmAdapter {
 
         match tokio::time::timeout(timeout_duration, send_future).await {
             Err(_elapsed) => {
-                eprintln!("[Eidolon Router] External provider TIMEOUT ({}s)", self.timeout_secs);
+                eprintln!(
+                    "[Eidolon Router] External provider TIMEOUT ({}s)",
+                    self.timeout_secs
+                );
                 InferenceResult::Timeout
             }
             Ok(Err(e)) => {
@@ -219,7 +214,10 @@ impl LlmProvider for ExternalLlmAdapter {
                 }
                 if !status.is_success() {
                     eprintln!("[Eidolon Router] External provider HTTP error: {}", status);
-                    return InferenceResult::Error(format!("external_http_error_{}", status.as_u16()));
+                    return InferenceResult::Error(format!(
+                        "external_http_error_{}",
+                        status.as_u16()
+                    ));
                 }
                 match response.json::<serde_json::Value>().await {
                     Err(e) => {

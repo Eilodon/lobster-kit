@@ -8,13 +8,17 @@ impl EidolonMcpServer {
     pub(crate) async fn handle_recall_user(&self, params: serde_json::Value) -> serde_json::Value {
         let tenant_id = crate::helpers::extract_tenant_id(&params);
         let user_id = params["user_id"].as_str().unwrap_or("unknown");
-        let all_users = self.users.write().await;
-        let profile = all_users.get(&tenant_id).and_then(|t| t.get(user_id)).cloned().unwrap_or_else(|| {
-            serde_json::json!({
-                "preferred_mode": "Peer",
-                "sensory_context": { "technical_literacy": 0.5, "risk_tolerance": 0.5 }
-            })
-        });
+        let all_users = self.users.read().await;
+        let profile = all_users
+            .get(&tenant_id)
+            .and_then(|t| t.get(user_id))
+            .cloned()
+            .unwrap_or_else(|| {
+                serde_json::json!({
+                    "preferred_mode": "Peer",
+                    "sensory_context": { "technical_literacy": 0.5, "risk_tolerance": 0.5 }
+                })
+            });
         serde_json::json!({
             "user_id": user_id,
             "profile": profile,
@@ -35,7 +39,7 @@ impl EidolonMcpServer {
         };
 
         let trauma_safety = {
-            let trauma = self.trauma.write().await;
+            let trauma = self.trauma.read().await;
             let now = chrono::Utc::now().timestamp_millis();
             if trauma.is_inhibited(
                 core_rust::sentinel::modes::SentinelMode::Zen,
@@ -49,22 +53,24 @@ impl EidolonMcpServer {
         };
 
         let policy_score = {
-            let metrics = self.tool_metrics.write().await;
-            metrics.get(&format!("{}:{}", tenant_id, suggested_tool)).map_or(0.5f32, |m| {
-                if m.calls < 5 {
-                    0.6f32
-                } else {
-                    let calls = m.calls as f32;
-                    let success_rate = 1.0f32 - (m.errors as f32 / calls);
-                    let fallback_rate = m.fallback_count as f32 / calls;
-                    let latency_penalty =
-                        (m.latency_p95_ms as f32 / 2000.0f32).clamp(0.0f32, 0.6f32);
-                    (success_rate * 0.75f32
-                        + (1.0f32 - fallback_rate).clamp(0.0f32, 1.0f32) * 0.2f32
-                        + (1.0f32 - latency_penalty) * 0.05f32)
-                        .clamp(0.0f32, 1.0f32)
-                }
-            })
+            let metrics = self.tool_metrics.read().await;
+            metrics
+                .get(&format!("{}:{}", tenant_id, suggested_tool))
+                .map_or(0.5f32, |m| {
+                    if m.calls < 5 {
+                        0.6f32
+                    } else {
+                        let calls = m.calls as f32;
+                        let success_rate = 1.0f32 - (m.errors as f32 / calls);
+                        let fallback_rate = m.fallback_count as f32 / calls;
+                        let latency_penalty =
+                            (m.latency_p95_ms as f32 / 2000.0f32).clamp(0.0f32, 0.6f32);
+                        (success_rate * 0.75f32
+                            + (1.0f32 - fallback_rate).clamp(0.0f32, 1.0f32) * 0.2f32
+                            + (1.0f32 - latency_penalty) * 0.05f32)
+                            .clamp(0.0f32, 1.0f32)
+                    }
+                })
         };
 
         let composite_confidence = (intent_confidence * 0.50f32
@@ -108,7 +114,7 @@ impl EidolonMcpServer {
         let query = params["query"].as_str().unwrap_or("");
         let user_id = params["user_id"].as_str().unwrap_or("default");
         let user_risk_tolerance = {
-            let all_users = self.users.write().await;
+            let all_users = self.users.read().await;
             all_users
                 .get(&tenant_id)
                 .and_then(|t| t.get(user_id))
@@ -335,7 +341,7 @@ Query: "{}" → "#,
             _ => core_rust::sentinel::modes::SentinelMode::Zen,
         };
 
-        let trauma = self.trauma.write().await;
+        let trauma = self.trauma.read().await;
         let now = chrono::Utc::now().timestamp_millis();
         let salted_pattern = format!("{}:{}", tenant_id, pattern);
         let is_inhibited = trauma.is_inhibited(mode, &salted_pattern, now);
@@ -356,7 +362,7 @@ Query: "{}" → "#,
         let action = params["action"].as_str().unwrap_or("default");
         let user_id = params["user_id"].as_str().unwrap_or("default");
         let user_risk_tolerance = {
-            let all_users = self.users.write().await;
+            let all_users = self.users.read().await;
             all_users
                 .get(&tenant_id)
                 .and_then(|t| t.get(user_id))
@@ -368,7 +374,7 @@ Query: "{}" → "#,
         let disable_stop_loss_signal = disable_stop_loss_signal_score(action);
         let critical_action_signal = critical_action_signal_score(action);
 
-        let trauma = self.trauma.write().await;
+        let trauma = self.trauma.read().await;
         let now = chrono::Utc::now().timestamp_millis();
 
         let modes = vec![
@@ -546,7 +552,7 @@ Query: "{}" → "#,
     }
 
     pub(crate) async fn trigger_dream_sequence(&self) {
-        let mems = self.memories.write().await;
+        let mems = self.memories.read().await;
         let mut keys_to_process = Vec::new();
         for (tenant_id, tenant_mems) in mems.iter() {
             if tenant_mems.len() < 2 {

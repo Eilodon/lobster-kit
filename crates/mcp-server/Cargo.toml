@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 core-rust = { path = "../core-rust" }
+eidolon-shared = { path = "../eidolon-shared" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

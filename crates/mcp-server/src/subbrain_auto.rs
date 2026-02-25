@@ -429,7 +429,8 @@ impl EidolonMcpServer {
                 let gate_allows_execute =
                     gate_strategy == "AUTO" || (gate_strategy == "PROPOSE" && force_execute);
                 if !gate_allows_execute {
-                    self.record_tool_metric(&tenant_id, tool_name, true, 0, false).await;
+                    self.record_tool_metric(&tenant_id, tool_name, true, 0, false)
+                        .await;
                     self.record_generated_tool_audit(
                         &tenant_id,
                         tool_name,
@@ -461,7 +462,8 @@ impl EidolonMcpServer {
                         &format!("{}:{}", tenant_id, tool_name),
                         now_ms,
                     ) {
-                        self.record_tool_metric(&tenant_id, tool_name, true, 0, false).await;
+                        self.record_tool_metric(&tenant_id, tool_name, true, 0, false)
+                            .await;
                         self.record_generated_tool_audit(
                             &tenant_id,
                             tool_name,
@@ -492,7 +494,8 @@ impl EidolonMcpServer {
                     &intent_analysis,
                     confidence,
                 ) else {
-                    self.record_tool_metric(&tenant_id, tool_name, true, 0, false).await;
+                    self.record_tool_metric(&tenant_id, tool_name, true, 0, false)
+                        .await;
                     self.record_generated_tool_audit(
                         &tenant_id,
                         tool_name,

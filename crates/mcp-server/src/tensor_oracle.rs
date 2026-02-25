@@ -158,8 +158,13 @@ impl TensorOracle {
     /// Processes the User Profile string into a permanent Key-Value Cache snapshot
     /// for true O(1) Epistemic Pre-Hook injection.
     pub async fn precompute_epistemic_hook(&self, user_metadata: &str) -> Result<(), String> {
-        let tokenizer_guard = self.tokenizer.lock().await;
-        let tokenizer = tokenizer_guard.as_ref().ok_or("Tokenizer not booted")?;
+        let tokenizer = {
+            let tokenizer_guard = self.tokenizer.lock().await;
+            tokenizer_guard
+                .as_ref()
+                .cloned()
+                .ok_or("Tokenizer not booted")?
+        };
 
         // Embody the system persona and append the specific user metadata
         let system_prompt = format!(
@@ -199,8 +204,13 @@ impl TensorOracle {
         trauma_severity: f32,
         is_action: bool,
     ) -> Result<String, String> {
-        let tokenizer_guard = self.tokenizer.lock().await;
-        let tokenizer = tokenizer_guard.as_ref().ok_or("Tokenizer not booted")?;
+        let tokenizer = {
+            let tokenizer_guard = self.tokenizer.lock().await;
+            tokenizer_guard
+                .as_ref()
+                .cloned()
+                .ok_or("Tokenizer not booted")?
+        };
         let use_prefill_prefix = std::env::var("TENSOR_ORACLE_USE_PREFILL_PREFIX")
             .ok()
             .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
@@ -405,26 +415,43 @@ impl TensorOracle {
         is_action: bool,
     ) -> Result<tokio::sync::mpsc::Receiver<StreamToken>, String> {
         // Reuse setup logic from generate_with_thermodynamics
-        let tokenizer_guard = self.tokenizer.lock().await;
-        let tokenizer = tokenizer_guard.as_ref().ok_or("Tokenizer not booted")?;
+        let tokenizer = {
+            let tokenizer_guard = self.tokenizer.lock().await;
+            tokenizer_guard
+                .as_ref()
+                .cloned()
+                .ok_or("Tokenizer not booted")?
+        };
 
         let use_prefill_prefix = std::env::var("TENSOR_ORACLE_USE_PREFILL_PREFIX")
             .ok()
             .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
             .unwrap_or(false);
         let kv_prefix = if use_prefill_prefix {
-            self.kv_cache_snapshot.lock().await.clone().unwrap_or_default()
+            self.kv_cache_snapshot
+                .lock()
+                .await
+                .clone()
+                .unwrap_or_default()
         } else {
             Vec::new()
         };
 
         let final_entropy = if trauma_severity > 0.8 {
-            if is_action { 0.1 } else { 0.9 }
+            if is_action {
+                0.1
+            } else {
+                0.9
+            }
         } else {
             base_entropy
         };
 
-        let think_tag = if final_entropy >= 0.5 { "/think" } else { "/no_think" };
+        let think_tag = if final_entropy >= 0.5 {
+            "/think"
+        } else {
+            "/no_think"
+        };
         let mode_injection = format!(
             "<|im_start|>user\n{}\n{}<|im_end|>\n<|im_start|>assistant\n",
             think_tag, prompt
@@ -443,7 +470,8 @@ impl TensorOracle {
             .filter(|v| *v >= 64)
             .unwrap_or(4096);
         if input_tokens.len() > max_input_tokens {
-            input_tokens = input_tokens[input_tokens.len().saturating_sub(max_input_tokens)..].to_vec();
+            input_tokens =
+                input_tokens[input_tokens.len().saturating_sub(max_input_tokens)..].to_vec();
         }
         if input_tokens.is_empty() {
             return Err("Prompt encoding produced no tokens".to_string());
@@ -476,4 +504,128 @@ impl TensorOracle {
             .unwrap_or(if final_entropy >= 0.5 { 0.72 } else { 0.25 });
 
         let mut stop_tokens: Vec<u32> = Vec::new();
-        for stop in ["<|im_end|>", "
+        for stop in ["<|im_end|>", "<|endoftext|>", "<|eot_id|>", "</s>"] {
+            if let Some(id) = tokenizer.token_to_id(stop) {
+                stop_tokens.push(id);
+            }
+        }
+        stop_tokens.sort_unstable();
+        stop_tokens.dedup();
+
+        let channel_capacity = std::env::var("TENSOR_ORACLE_STREAM_CHANNEL_CAPACITY")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(64);
+        let stream_timeout_ms = std::env::var("TENSOR_ORACLE_STREAM_TIMEOUT_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(30_000);
+
+        let (tx, rx) = tokio::sync::mpsc::channel::<StreamToken>(channel_capacity);
+        let model = self.model.clone();
+        let device = self.device.clone();
+
+        tokio::spawn(async move {
+            let mut model_guard = model.clone().lock_owned().await;
+            let generated = tokio::time::timeout(
+                std::time::Duration::from_millis(stream_timeout_ms),
+                tokio::task::spawn_blocking(move || -> Result<Vec<u32>, String> {
+                    let model = model_guard.as_mut().ok_or("Model not booted")?;
+                    model.clear_kv_cache();
+
+                    let mut logits = model
+                        .forward(
+                            &Tensor::new(input_tokens.as_slice(), &device)
+                                .map_err(|e| e.to_string())?
+                                .unsqueeze(0)
+                                .map_err(|e| e.to_string())?,
+                            0,
+                        )
+                        .map_err(|e| e.to_string())?;
+
+                    let seed = std::env::var("TENSOR_ORACLE_SEED")
+                        .ok()
+                        .and_then(|v| v.parse::<u64>().ok())
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp_micros() as u64);
+                    let mut logits_processor =
+                        LogitsProcessor::new(seed, Some(temperature), Some(top_p));
+
+                    let mut generated: Vec<u32> = Vec::new();
+                    let mut all_tokens = input_tokens.clone();
+                    let mut offset = all_tokens.len();
+
+                    for _ in 0..max_new_tokens {
+                        let mut step_logits = logits.squeeze(0).map_err(|e| e.to_string())?;
+                        if repeat_penalty > 1.0 && !all_tokens.is_empty() {
+                            let start = all_tokens.len().saturating_sub(repeat_last_n);
+                            step_logits = apply_repeat_penalty(
+                                &step_logits,
+                                repeat_penalty,
+                                &all_tokens[start..],
+                            )
+                            .map_err(|e| e.to_string())?;
+                        }
+
+                        let next_token = logits_processor
+                            .sample(&step_logits)
+                            .map_err(|e| e.to_string())?;
+
+                        if stop_tokens.contains(&next_token) && !generated.is_empty() {
+                            break;
+                        }
+                        if stop_tokens.contains(&next_token) {
+                            continue;
+                        }
+
+                        generated.push(next_token);
+                        all_tokens.push(next_token);
+
+                        let step_input = Tensor::new(&[next_token], &device)
+                            .map_err(|e| e.to_string())?
+                            .unsqueeze(0)
+                            .map_err(|e| e.to_string())?;
+                        logits = model
+                            .forward(&step_input, offset)
+                            .map_err(|e| e.to_string())?;
+                        offset += 1;
+                    }
+
+                    if generated.is_empty() {
+                        return Err("TensorOracle generated zero tokens".to_string());
+                    }
+
+                    Ok(generated)
+                }),
+            )
+            .await
+            .map_err(|_| {
+                format!(
+                    "TensorOracle streaming timeout after {}ms",
+                    stream_timeout_ms
+                )
+            })
+            .and_then(|join| {
+                join.map_err(|e| format!("TensorOracle streaming spawn_blocking failed: {}", e))
+            })
+            .and_then(|r| r);
+
+            match generated {
+                Ok(tokens) => {
+                    for token in tokens {
+                        if tx.send(StreamToken::Token(token)).await.is_err() {
+                            return;
+                        }
+                    }
+                    let _ = tx.send(StreamToken::Done).await;
+                }
+                Err(err) => {
+                    let _ = tx.send(StreamToken::Error(err)).await;
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+}

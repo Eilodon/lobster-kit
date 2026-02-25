@@ -20,7 +20,7 @@ impl EidolonMcpServer {
             .await;
 
         let trauma_severity = {
-            let trauma = self.trauma.write().await;
+            let trauma = self.trauma.read().await;
             trauma.get_trauma_severity(
                 core_rust::sentinel::modes::SentinelMode::Zen,
                 "reason_chain",
@@ -43,7 +43,11 @@ impl EidolonMcpServer {
             );
 
         // Mode "deep" -> high entropy (thinking), otherwise reflex (low entropy)
-        let expected_entropy = if mode_selected == "deep" { 0.8_f32 } else { 0.2_f32 };
+        let expected_entropy = if mode_selected == "deep" {
+            0.8_f32
+        } else {
+            0.2_f32
+        };
 
         // Phase 3: Build routing context snapshot TRƯỚC KHI acquire bất kỳ lock nào.
         // Trauma severity sẽ được snapshot trong build_routing_context (drop lock ngay).
@@ -143,7 +147,7 @@ impl EidolonMcpServer {
             .collect();
 
         let memories_snapshot = {
-            let mems = self.memories.write().await;
+            let mems = self.memories.read().await;
             mems.get(&tenant_id).cloned().unwrap_or_default()
         };
         if !memories_snapshot.is_empty() {
@@ -340,7 +344,7 @@ impl EidolonMcpServer {
         let context = params["context"].as_str().unwrap_or("");
         let k = params["k"].as_u64().unwrap_or(5) as usize;
         let mems_snapshot = {
-            let mems = self.memories.write().await;
+            let mems = self.memories.read().await;
             mems.get(&tenant_id).cloned().unwrap_or_default()
         };
 
@@ -407,7 +411,7 @@ impl EidolonMcpServer {
         let limit = params["k"].as_u64().unwrap_or(10).clamp(1, 50) as usize;
         let route_candidates = memory_route_candidates(query);
         let memories_snapshot = {
-            let mems = self.memories.write().await;
+            let mems = self.memories.read().await;
             mems.get(&tenant_id).cloned().unwrap_or_default()
         };
 
@@ -607,7 +611,7 @@ impl EidolonMcpServer {
         let (source_text, source, fallback_used) = if context.trim().is_empty() {
             let mut summary = String::new();
             {
-                let mems = self.memories.write().await;
+                let mems = self.memories.read().await;
                 if let Some(tenant_mems) = mems.get(&tenant_id) {
                     if !tenant_mems.is_empty() {
                         summary = tenant_mems

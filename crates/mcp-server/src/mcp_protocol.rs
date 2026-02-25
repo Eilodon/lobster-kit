@@ -7,6 +7,40 @@
 use crate::EidolonMcpServer;
 
 impl EidolonMcpServer {
+    fn tenant_id_schema_property() -> serde_json::Value {
+        serde_json::json!({
+            "type": "string",
+            "description": "Optional tenant namespace. Defaults to 'default' when omitted."
+        })
+    }
+
+    fn inject_optional_tenant_id(tool: &mut serde_json::Value) {
+        let Some(input_schema) = tool.get_mut("inputSchema") else {
+            return;
+        };
+        let Some(input_schema_obj) = input_schema.as_object_mut() else {
+            return;
+        };
+        if input_schema_obj
+            .get("type")
+            .and_then(|value| value.as_str())
+            != Some("object")
+        {
+            return;
+        }
+
+        let properties = input_schema_obj
+            .entry("properties")
+            .or_insert_with(|| serde_json::json!({}));
+        let Some(properties_obj) = properties.as_object_mut() else {
+            return;
+        };
+
+        properties_obj
+            .entry("tenant_id".to_string())
+            .or_insert_with(Self::tenant_id_schema_property);
+    }
+
     pub(crate) fn as_mcp_tool_text_response(
         payload: serde_json::Value,
         is_error: bool,
@@ -181,6 +215,10 @@ impl EidolonMcpServer {
                     "properties": { "input": { "type": "number" } }
                 }
             }));
+        }
+
+        for tool in tools.iter_mut() {
+            Self::inject_optional_tenant_id(tool);
         }
 
         if !Self::legacy_defi_compat_enabled() {

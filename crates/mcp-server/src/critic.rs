@@ -117,10 +117,7 @@ impl OutputCritic {
                 violations.len()
             );
             for v in &violations {
-                eprintln!(
-                    "  → [{}] severity={:.1}: {}",
-                    v.rule, v.severity, v.detail
-                );
+                eprintln!("  → [{}] severity={:.1}: {}", v.rule, v.severity, v.detail);
             }
         } else if !violations.is_empty() {
             eprintln!(
@@ -248,11 +245,7 @@ impl OutputCritic {
             ("seed phrase", 0.9, "Potential seed phrase exposure"),
             ("mnemonic", 0.8, "Potential mnemonic exposure"),
             ("password", 0.6, "Potential password in output"),
-            (
-                "rm -rf /",
-                0.95,
-                "Destructive command detected in output",
-            ),
+            ("rm -rf /", 0.95, "Destructive command detected in output"),
             (
                 "drop table",
                 0.9,

@@ -3,6 +3,8 @@ members = [
   "crates/trading-domain",
   "crates/core-rust",
   "crates/mcp-server",
+  "crates/eidolon-shared",
+  "crates/eidolon-gateway",
 ]
 resolver = "2"
 

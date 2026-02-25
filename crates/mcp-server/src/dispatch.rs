@@ -182,7 +182,8 @@ impl EidolonMcpServer {
                                 }
                                 "tools/call" => match Self::parse_tools_call_payload(&params) {
                                     Ok((tool_name, tool_args)) => {
-                                        let tenant_id = crate::helpers::extract_tenant_id(&tool_args);
+                                        let tenant_id =
+                                            crate::helpers::extract_tenant_id(&tool_args);
                                         let started = std::time::Instant::now();
                                         let result_content = server_clone
                                             .handle_tool_call(&tool_name, tool_args)

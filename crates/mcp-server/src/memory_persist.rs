@@ -8,17 +8,23 @@ use crate::EidolonMcpServer;
 use std::path::Path;
 
 impl EidolonMcpServer {
-    pub(crate) fn load_memories_from_disk_sync(path: &Path) -> std::collections::HashMap<crate::types::TenantId, Vec<MemoryEntry>> {
+    pub(crate) fn load_memories_from_disk_sync(
+        path: &Path,
+    ) -> std::collections::HashMap<crate::types::TenantId, Vec<MemoryEntry>> {
         match std::fs::read_to_string(path) {
             Ok(data) => {
-                if let Ok(memories) = serde_json::from_str::<std::collections::HashMap<crate::types::TenantId, Vec<MemoryEntry>>>(&data) {
+                if let Ok(memories) = serde_json::from_str::<
+                    std::collections::HashMap<crate::types::TenantId, Vec<MemoryEntry>>,
+                >(&data)
+                {
                     eprintln!(
                         "[Eidolon] Loaded memories for {} tenants from {:?}",
                         memories.len(),
                         path
                     );
                     memories
-                } else if let Ok(legacy_memories) = serde_json::from_str::<Vec<MemoryEntry>>(&data) {
+                } else if let Ok(legacy_memories) = serde_json::from_str::<Vec<MemoryEntry>>(&data)
+                {
                     eprintln!(
                         "[Eidolon] Migrating {} legacy memories to default tenant from {:?}",
                         legacy_memories.len(),
@@ -34,7 +40,7 @@ impl EidolonMcpServer {
                     );
                     std::collections::HashMap::new()
                 }
-            },
+            }
             Err(_) => {
                 eprintln!(
                     "[Eidolon] No memory file at {:?}. Starting with empty memory.",

@@ -212,8 +212,7 @@ impl RoutingPolicyEngine {
         health.last_failure_ms = now_ms;
         if health.failures_recent >= self.config.failure_threshold {
             health.circuit_open = true;
-            health.cooldown_until_ms =
-                now_ms + (self.config.cooldown_secs as i64 * 1000);
+            health.cooldown_until_ms = now_ms + (self.config.cooldown_secs as i64 * 1000);
             eprintln!(
                 "[Eidolon Router] ⚡ Circuit OPEN for {:?} after {} failures. Cooldown: {}s",
                 provider, health.failures_recent, self.config.cooldown_secs
@@ -281,9 +280,7 @@ impl RoutingPolicyEngine {
         if external_viable {
             eprintln!(
                 "[Eidolon Router] Rule 4: entropy={:.2} > {:.2} → External ({})",
-                ctx.entropy,
-                self.config.external_entropy_threshold,
-                self.config.external_model
+                ctx.entropy, self.config.external_entropy_threshold, self.config.external_model
             );
             return RoutingDecision::External {
                 url: self.config.external_url.clone(),
@@ -309,7 +306,10 @@ impl RoutingPolicyEngine {
         } else {
             "all_local_circuits_open_and_external_disabled"
         };
-        eprintln!("[Eidolon Router] Rule 7: All providers unavailable ({})", reason);
+        eprintln!(
+            "[Eidolon Router] Rule 7: All providers unavailable ({})",
+            reason
+        );
         RoutingDecision::Unavailable {
             reason: reason.to_string(),
         }

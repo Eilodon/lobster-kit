@@ -16,7 +16,7 @@ impl EidolonMcpServer {
             return 0.0;
         }
 
-        let memories = self.memories.write().await;
+        let memories = self.memories.read().await;
         let tenant_mems_opt = memories.get(tenant_id);
         if tenant_mems_opt.is_none() {
             return 0.0;
@@ -191,7 +191,7 @@ impl EidolonMcpServer {
 
         let mut scored_edges: Vec<(f64, SentinelVariable, f64, f64)> = Vec::new();
         {
-            let brain = self.causal_brain.write().await;
+            let brain = self.causal_brain.read().await;
             for cause in SentinelVariable::all().iter().copied() {
                 if cause == target {
                     continue;
