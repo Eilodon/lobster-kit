@@ -204,12 +204,13 @@ fn test_contract_accepts_tool_and_input_fields() {
     assert_eq!(parsed.1["task"], "check intent");
 }
 
-const CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS: [&str; 5] = [
+const CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS: [&str; 6] = [
     "eidolon_recall_user",
     "eidolon_sense_intent",
     "eidolon_reason_chain",
     "eidolon_memory_query",
     "eidolon_compress_context",
+    "eidolon_oracle_query",
 ];
 
 const LEGACY_ALIAS_TOOL_CATALOG: [&str; 3] =
@@ -319,6 +320,7 @@ async fn test_generated_tool_audit_records_entries() {
     );
     server
         .record_generated_tool_audit(
+            "default_tenant",
             "eidolon_sense_intent",
             "eidolon_sense_intent",
             "accepted",
@@ -345,6 +347,7 @@ async fn test_generated_tool_audit_adds_provenance_metadata() {
     );
     server
         .record_generated_tool_audit(
+            "default_tenant",
             "eidolon_reason_chain",
             "tool_generator_review",
             "accepted",
@@ -378,6 +381,7 @@ async fn test_generated_tool_audit_is_immutable() {
     );
     server
         .record_generated_tool_audit(
+            "default_tenant",
             "eidolon_memory_query",
             "tool_generator_review",
             "rejected",
@@ -411,6 +415,7 @@ fn test_evaluate_tool_promotion_thresholds() {
         min_satisfaction: 0.7,
     };
     let passing = PersistedToolPerformanceRow {
+        tenant_id: "default_tenant".to_string(),
         tool_name: "tool_a".to_string(),
         call_count: 40,
         error_count: 2,
@@ -432,6 +437,7 @@ fn test_evaluate_tool_promotion_thresholds() {
     assert!(pass_reasons.is_empty());
 
     let failing = PersistedToolPerformanceRow {
+        tenant_id: "default_tenant".to_string(),
         tool_name: "tool_b".to_string(),
         call_count: 10,
         error_count: 6,
@@ -464,6 +470,7 @@ fn test_evaluate_tool_autopilot_guardrails() {
     };
 
     let healthy = PersistedToolPerformanceRow {
+        tenant_id: "default_tenant".to_string(),
         tool_name: "tool_ok".to_string(),
         call_count: 60,
         error_count: 4,
@@ -486,6 +493,7 @@ fn test_evaluate_tool_autopilot_guardrails() {
     assert!(healthy_failures.is_empty());
 
     let unstable = PersistedToolPerformanceRow {
+        tenant_id: "default_tenant".to_string(),
         tool_name: "tool_bad".to_string(),
         call_count: 60,
         error_count: 24,
@@ -512,9 +520,9 @@ fn test_evaluate_tool_autopilot_guardrails() {
 async fn test_route_action_reaches_auto_with_high_confidence_and_policy() {
     let server = setup_server();
     {
-        let mut metrics = server.tool_metrics.lock().await;
+        let mut metrics = server.tool_metrics.write().await;
         metrics.insert(
-            "eidolon_reason_chain".to_string(),
+            "default:eidolon_reason_chain".to_string(),
             ToolTelemetry {
                 calls: 60,
                 errors: 1,
@@ -557,6 +565,43 @@ async fn test_route_action_low_confidence_does_not_auto() {
 }
 
 #[tokio::test]
+async fn test_subbrain_auto_records_route_gate_audit_and_telemetry() {
+    let server = setup_server();
+    let res = server
+        .handle_tool_call(
+            "eidolon_subbrain_auto",
+            json!({
+                "input": "review code for security issues",
+                "user_id": "test-user",
+                "auto_execute": true,
+                "force_execute": true,
+                "max_tools": 2,
+                "include_raw_results": false
+            }),
+        )
+        .await;
+
+    assert!(res["subbrain_analysis"]["routing_gate"]["strategy"]
+        .as_str()
+        .is_some());
+
+    let db_path = (*server.telemetry_db_path).clone();
+    let route_row =
+        EidolonMcpServer::load_tool_performance_row_sync(&db_path, "eidolon_route_action")
+            .expect("tool_performance query should succeed")
+            .expect("route_action telemetry row should exist");
+    assert!(route_row.call_count >= 1);
+
+    let audit_rows = EidolonMcpServer::load_generated_tool_audit_rows_sync(&db_path, 200)
+        .expect("generated audit query should succeed");
+    assert!(audit_rows.iter().any(|row| {
+        row.tool_name == "eidolon_route_action"
+            && row.need == "eidolon_subbrain_auto.route_gate"
+            && row.status == "accepted"
+    }));
+}
+
+#[tokio::test]
 async fn test_update_user_persists_across_server_restarts() {
     let users_path = unique_test_path("eidolon-users-restart", "json");
     let db_path = unique_test_path("eidolon-telemetry-restart", "db");
@@ -591,13 +636,13 @@ async fn test_update_user_persists_across_server_restarts() {
 async fn test_record_tool_metric_tracks_sub_ms_and_tail_percentiles() {
     let server = setup_server();
     server
-        .record_tool_metric("eidolon_precision_probe", false, 850, false)
+        .record_tool_metric("default_tenant", "eidolon_precision_probe", false, 850, false)
         .await;
     server
-        .record_tool_metric("eidolon_precision_probe", false, 1_900, false)
+        .record_tool_metric("default_tenant", "eidolon_precision_probe", false, 1_900, false)
         .await;
     server
-        .record_tool_metric("eidolon_precision_probe", true, 3_100, true)
+        .record_tool_metric("default_tenant", "eidolon_precision_probe", true, 3_100, true)
         .await;
 
     let db_path = (*server.telemetry_db_path).clone();

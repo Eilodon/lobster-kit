@@ -158,6 +158,7 @@ impl EidolonMcpServer {
             serde_json::json!({ "name": "eidolon_generated_tool_decision", "description": "Generated tool governance decision", "inputSchema": { "type": "object", "properties": { "tool_name": { "type": "string" }, "action": { "type": "string", "enum": ["accept", "reject", "promote"] }, "need": { "type": "string" }, "reason": { "type": "string" } } } }),
             serde_json::json!({ "name": "eidolon_forge_tool", "description": "Forge a WASM tool", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "code": { "type": "string" } }, "required": ["name", "code"] } }),
             serde_json::json!({ "name": "eidolon_set_entropy", "description": "Force entropy state", "inputSchema": { "type": "object", "properties": { "target_entropy": { "type": "number" }, "duration_ms": { "type": "number" } }, "required": ["target_entropy", "duration_ms"] } }),
+            serde_json::json!({ "name": "eidolon_oracle_query", "description": "TensorOracle local inference query", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] } }),
             // Legacy aliases
             serde_json::json!({ "name": "eidolon_oracle_sense", "description": "Legacy Oracle market sensing (compat mode only)", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } } } }),
             serde_json::json!({ "name": "eidolon_defi_quote", "description": "Legacy DeFi quote bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
@@ -170,7 +171,7 @@ impl EidolonMcpServer {
             serde_json::json!({ "name": "eidolon_dream", "description": "Legacy dream replay alias", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" }, "cycles": { "type": "number" } } } }),
         ];
 
-        let dynamic_tools = self.dynamic_tools.lock().await;
+        let dynamic_tools = self.dynamic_tools.write().await;
         for (name, tool) in dynamic_tools.iter() {
             tools.push(serde_json::json!({
                 "name": name,

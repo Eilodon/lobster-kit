@@ -8,24 +8,31 @@ use crate::EidolonMcpServer;
 use std::path::Path;
 
 impl EidolonMcpServer {
-    /// Load memories from disk synchronously (used at startup).
-    pub(crate) fn load_memories_from_disk_sync(path: &Path) -> Vec<MemoryEntry> {
+    pub(crate) fn load_memories_from_disk_sync(path: &Path) -> std::collections::HashMap<crate::types::TenantId, Vec<MemoryEntry>> {
         match std::fs::read_to_string(path) {
-            Ok(data) => match serde_json::from_str::<Vec<MemoryEntry>>(&data) {
-                Ok(memories) => {
+            Ok(data) => {
+                if let Ok(memories) = serde_json::from_str::<std::collections::HashMap<crate::types::TenantId, Vec<MemoryEntry>>>(&data) {
                     eprintln!(
-                        "[Eidolon] Loaded {} memories from {:?}",
+                        "[Eidolon] Loaded memories for {} tenants from {:?}",
                         memories.len(),
                         path
                     );
                     memories
-                }
-                Err(e) => {
+                } else if let Ok(legacy_memories) = serde_json::from_str::<Vec<MemoryEntry>>(&data) {
                     eprintln!(
-                        "[Eidolon] Failed to parse memories from {:?}: {}. Starting fresh.",
-                        path, e
+                        "[Eidolon] Migrating {} legacy memories to default tenant from {:?}",
+                        legacy_memories.len(),
+                        path
                     );
-                    Vec::new()
+                    let mut map = std::collections::HashMap::new();
+                    map.insert("default".to_string(), legacy_memories);
+                    map
+                } else {
+                    eprintln!(
+                        "[Eidolon] Failed to parse memories from {:?}. Starting fresh.",
+                        path
+                    );
+                    std::collections::HashMap::new()
                 }
             },
             Err(_) => {
@@ -33,7 +40,7 @@ impl EidolonMcpServer {
                     "[Eidolon] No memory file at {:?}. Starting with empty memory.",
                     path
                 );
-                Vec::new()
+                std::collections::HashMap::new()
             }
         }
     }
@@ -43,7 +50,7 @@ impl EidolonMcpServer {
     /// async I/O to avoid blocking concurrent memory pushes.
     pub(crate) async fn save_memories_to_disk(&self) {
         let serialized = {
-            let mems = self.memories.lock().await;
+            let mems = self.memories.write().await;
             serde_json::to_string(&*mems).ok()
         };
         // Lock is dropped here — other tasks can push to memories

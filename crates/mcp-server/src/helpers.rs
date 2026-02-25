@@ -15,6 +15,14 @@ pub fn clamp01(value: f64) -> f64 {
     value.clamp(0.0, 1.0)
 }
 
+pub fn extract_tenant_id(params: &serde_json::Value) -> crate::types::TenantId {
+    params
+        .get("tenant_id")
+        .and_then(|t| t.as_str())
+        .unwrap_or("default")
+        .to_string()
+}
+
 pub fn latency_score(avg_latency_ms: f64) -> f64 {
     if avg_latency_ms <= 0.0 {
         0.0

@@ -90,7 +90,7 @@ crate-type = ["cdylib"]
                     let engine = Default::default();
                     match Module::new(&engine, &wasm_bytes) {
                         Ok(_) => {
-                            let mut tools = self.dynamic_tools.lock().await;
+                            let mut tools = self.dynamic_tools.write().await;
                             tools.insert(
                                 tool_name.clone(),
                                 WasmTool {
@@ -134,7 +134,7 @@ crate-type = ["cdylib"]
         tool_name: &str,
         params: serde_json::Value,
     ) -> serde_json::Value {
-        let tools = self.dynamic_tools.lock().await;
+        let tools = self.dynamic_tools.write().await;
         if let Some(tool) = tools.get(tool_name) {
             let wasm_bytes = tool.wasm_bytes.clone();
             drop(tools);

@@ -10,14 +10,19 @@ use core_rust::sentinel::variables::SentinelVariable;
 use std::collections::HashMap;
 
 impl EidolonMcpServer {
-    pub(crate) async fn estimate_historical_risk_prior(&self, query: &str) -> f64 {
+    pub(crate) async fn estimate_historical_risk_prior(&self, tenant_id: &str, query: &str) -> f64 {
         let tokens = sentence_token_set(query);
         if tokens.is_empty() {
             return 0.0;
         }
 
-        let memories = self.memories.lock().await;
-        if memories.is_empty() {
+        let memories = self.memories.write().await;
+        let tenant_mems_opt = memories.get(tenant_id);
+        if tenant_mems_opt.is_none() {
+            return 0.0;
+        }
+        let tenant_mems = tenant_mems_opt.unwrap();
+        if tenant_mems.is_empty() {
             return 0.0;
         }
 
@@ -25,7 +30,7 @@ impl EidolonMcpServer {
         let mut weighted_sum = 0.0;
         let mut total_weight = 0.0;
 
-        for memory in memories.iter().rev().take(250) {
+        for memory in tenant_mems.iter().rev().take(250) {
             let content_tokens = sentence_token_set(&memory.content);
             if content_tokens.is_empty() {
                 continue;
@@ -186,7 +191,7 @@ impl EidolonMcpServer {
 
         let mut scored_edges: Vec<(f64, SentinelVariable, f64, f64)> = Vec::new();
         {
-            let brain = self.causal_brain.lock().await;
+            let brain = self.causal_brain.write().await;
             for cause in SentinelVariable::all().iter().copied() {
                 if cause == target {
                     continue;

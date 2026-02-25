@@ -7,8 +7,10 @@ mod mcp_protocol;
 mod memory;
 mod memory_persist;
 mod oracle;
+mod providers;
 mod reasoning;
 mod resources;
+mod routing;
 mod subbrain_auto;
 mod telemetry;
 mod tensor_oracle;
@@ -28,7 +30,7 @@ use core_rust::sentinel::thermo::ThermodynamicEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 pub(crate) const DEFAULT_TELEMETRY_DB_RELATIVE_PATH: &str = "data/memory/eidolon_learning.db";
 const DEFAULT_RECOMMENDER_PRIMARY_MODEL: &str = "v2";
@@ -70,27 +72,29 @@ pub(crate) const DEFAULT_COGNITIVE_TOOL_CATALOG: [&str; 16] = [
 
 #[derive(Clone)]
 pub struct EidolonMcpServer {
-    causal_brain: Arc<Mutex<CausalGraph>>,
-    thermo: Arc<Mutex<ThermodynamicEngine>>,
-    trauma: Arc<Mutex<core_rust::sentinel::trauma::TraumaRegistry>>,
-    actor: Arc<Mutex<core_rust::sentinel::systems::SentinelActor>>,
+    causal_brain: Arc<RwLock<CausalGraph>>,
+    thermo: Arc<RwLock<ThermodynamicEngine>>,
+    trauma: Arc<RwLock<core_rust::sentinel::trauma::TraumaRegistry>>,
+    actor: Arc<RwLock<core_rust::sentinel::systems::SentinelActor>>,
     // Upgrade 1: Persistent User Profiles
-    users: Arc<Mutex<HashMap<String, serde_json::Value>>>,
+    users: Arc<RwLock<HashMap<TenantId, HashMap<String, serde_json::Value>>>>,
     users_file_path: Arc<PathBuf>,
     // Upgrade 3: Stateful Memory
-    memories: Arc<Mutex<Vec<MemoryEntry>>>,
+    memories: Arc<RwLock<HashMap<TenantId, Vec<MemoryEntry>>>>,
     memories_file_path: Arc<PathBuf>,
     pub(crate) last_input_ms: Arc<std::sync::atomic::AtomicU64>,
-    pub dynamic_tools: Arc<tokio::sync::Mutex<HashMap<String, tool_forge::WasmTool>>>,
+    pub dynamic_tools: Arc<tokio::sync::RwLock<HashMap<String, tool_forge::WasmTool>>>,
     // Lightweight telemetry for MCP resources.
-    tool_metrics: Arc<Mutex<HashMap<String, ToolTelemetry>>>,
+    tool_metrics: Arc<RwLock<HashMap<String, ToolTelemetry>>>,
     telemetry_db_path: Arc<PathBuf>,
     // Phase 5: ONNX Embedding Engine for sense_intent
     embedding_engine: Arc<Option<EmbeddingEngine>>,
     // Phase 6: LiquidBrain adaptive neural classifier
-    liquid_brain: Arc<Mutex<core_rust::liquid_brain::LiquidBrain>>,
+    liquid_brain: Arc<RwLock<core_rust::liquid_brain::LiquidBrain>>,
     // Phase 6: The Epistemic Core (Candle Tensor Engine)
     tensor_oracle: Arc<crate::tensor_oracle::TensorOracle>,
+    // Phase 3: Adaptive Routing Policy Engine
+    pub(crate) routing_engine: Arc<crate::routing::RoutingPolicyEngine>,
 }
 
 impl EidolonMcpServer {
@@ -100,10 +104,7 @@ impl EidolonMcpServer {
         Self::with_storage_paths(users_file_path, telemetry_db_path)
     }
 
-    fn with_storage_paths(
-        users_file_path: PathBuf,
-        telemetry_db_path: PathBuf,
-    ) -> Self {
+    fn with_storage_paths(users_file_path: PathBuf, telemetry_db_path: PathBuf) -> Self {
         // Load user profiles from disk if available
         let users = Self::load_users_from_disk_sync(&users_file_path);
         let _ = Self::ensure_telemetry_storage_sync(&telemetry_db_path);
@@ -156,33 +157,37 @@ impl EidolonMcpServer {
         let memories = Self::load_memories_from_disk_sync(&memories_file_path);
 
         Self {
-            causal_brain: Arc::new(Mutex::new(CausalGraph::new())),
-            thermo: Arc::new(Mutex::new(ThermodynamicEngine::new(
+            causal_brain: Arc::new(RwLock::new(CausalGraph::new())),
+            thermo: Arc::new(RwLock::new(ThermodynamicEngine::new(
                 core_rust::sentinel::thermo::ThermoConfig::default(),
             ))),
-            trauma: Arc::new(Mutex::new(
+            trauma: Arc::new(RwLock::new(
                 core_rust::sentinel::trauma::TraumaRegistry::new(),
             )),
-            actor: Arc::new(Mutex::new(
+            actor: Arc::new(RwLock::new(
                 core_rust::sentinel::systems::SentinelActor::new(),
             )),
-            users: Arc::new(Mutex::new(users)),
+            users: Arc::new(RwLock::new(users)),
             users_file_path: Arc::new(users_file_path),
-            memories: Arc::new(Mutex::new(memories)),
+            memories: Arc::new(RwLock::new(memories)),
             memories_file_path: Arc::new(memories_file_path),
             last_input_ms: Arc::new(std::sync::atomic::AtomicU64::new(
                 chrono::Utc::now().timestamp_millis() as u64,
             )),
-            dynamic_tools: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
-            tool_metrics: Arc::new(Mutex::new(loaded_tool_metrics)),
+            dynamic_tools: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            tool_metrics: Arc::new(RwLock::new(loaded_tool_metrics)),
             telemetry_db_path: Arc::new(telemetry_db_path),
             embedding_engine: Arc::new(embedding_engine),
             // Phase 6: LiquidBrain — 64 input (pseudo_embed dim), 16 hidden neurons
-            liquid_brain: Arc::new(Mutex::new(core_rust::liquid_brain::LiquidBrain::new(
+            liquid_brain: Arc::new(RwLock::new(core_rust::liquid_brain::LiquidBrain::new(
                 64, 16,
             ))),
             // Phase 6: The Epistemic Core
             tensor_oracle: Arc::new(crate::tensor_oracle::TensorOracle::new()),
+            // Phase 3: Adaptive Routing Engine
+            routing_engine: Arc::new(crate::routing::RoutingPolicyEngine::new(
+                crate::routing::CircuitBreakerConfig::from_env(),
+            )),
         }
     }
 

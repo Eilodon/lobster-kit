@@ -18,6 +18,17 @@ use candle_transformers::models::quantized_qwen3::ModelWeights;
 use candle_transformers::utils::apply_repeat_penalty;
 use hf_hub::api::sync::Api;
 
+/// Token event emitted during streaming generation.
+#[derive(Debug)]
+pub enum StreamToken {
+    /// A single generated token ID.
+    Token(u32),
+    /// Generation complete.
+    Done,
+    /// An error occurred during generation.
+    Error(String),
+}
+
 pub struct TensorOracle {
     model: Arc<Mutex<Option<ModelWeights>>>,
     tokenizer: Arc<Mutex<Option<Tokenizer>>>,
@@ -62,7 +73,12 @@ impl TensorOracle {
 
         let allow_hf_download = std::env::var("TENSOR_ORACLE_ALLOW_HF_DOWNLOAD")
             .ok()
-            .map(|raw| matches!(raw.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .map(|raw| {
+                matches!(
+                    raw.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes"
+                )
+            })
             .unwrap_or(false);
 
         let model_missing = !configured_model.exists();
@@ -241,7 +257,8 @@ impl TensorOracle {
             .filter(|v| *v >= 64)
             .unwrap_or(4096);
         if input_tokens.len() > max_input_tokens {
-            input_tokens = input_tokens[input_tokens.len().saturating_sub(max_input_tokens)..].to_vec();
+            input_tokens =
+                input_tokens[input_tokens.len().saturating_sub(max_input_tokens)..].to_vec();
         }
         if input_tokens.is_empty() {
             return Err("Prompt encoding produced no tokens".to_string());
@@ -282,67 +299,75 @@ impl TensorOracle {
         stop_tokens.sort_unstable();
         stop_tokens.dedup();
 
-        let mut model_guard = self.model.lock().await;
-        let model = model_guard.as_mut().ok_or("Model not booted")?;
-        model.clear_kv_cache();
+        let mut model_guard = self.model.clone().lock_owned().await;
+        let device = self.device.clone();
 
-        let mut logits = model
-            .forward(
-                &Tensor::new(input_tokens.as_slice(), &self.device)
+        let generated = tokio::task::spawn_blocking(move || -> Result<Vec<u32>, String> {
+            let model = model_guard.as_mut().ok_or("Model not booted")?;
+            model.clear_kv_cache();
+
+            let mut logits = model
+                .forward(
+                    &Tensor::new(input_tokens.as_slice(), &device)
+                        .map_err(|e| e.to_string())?
+                        .unsqueeze(0)
+                        .map_err(|e| e.to_string())?,
+                    0,
+                )
+                .map_err(|e| e.to_string())?;
+
+            let seed = std::env::var("TENSOR_ORACLE_SEED")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or_else(|| chrono::Utc::now().timestamp_micros() as u64);
+            let mut logits_processor = LogitsProcessor::new(seed, Some(temperature), Some(top_p));
+
+            let mut generated: Vec<u32> = Vec::new();
+            let mut all_tokens = input_tokens.clone();
+            let mut offset = all_tokens.len();
+
+            for _ in 0..max_new_tokens {
+                let mut step_logits = logits.squeeze(0).map_err(|e| e.to_string())?;
+                if repeat_penalty > 1.0 && !all_tokens.is_empty() {
+                    let start = all_tokens.len().saturating_sub(repeat_last_n);
+                    step_logits =
+                        apply_repeat_penalty(&step_logits, repeat_penalty, &all_tokens[start..])
+                            .map_err(|e| e.to_string())?;
+                }
+
+                let next_token = logits_processor
+                    .sample(&step_logits)
+                    .map_err(|e| e.to_string())?;
+
+                // Avoid immediate empty responses by requiring at least one generated token.
+                if stop_tokens.contains(&next_token) && !generated.is_empty() {
+                    break;
+                }
+                if stop_tokens.contains(&next_token) {
+                    continue;
+                }
+
+                generated.push(next_token);
+                all_tokens.push(next_token);
+
+                let step_input = Tensor::new(&[next_token], &device)
                     .map_err(|e| e.to_string())?
                     .unsqueeze(0)
-                    .map_err(|e| e.to_string())?,
-                0,
-            )
-            .map_err(|e| e.to_string())?;
-
-        let seed = std::env::var("TENSOR_ORACLE_SEED")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or_else(|| chrono::Utc::now().timestamp_micros() as u64);
-        let mut logits_processor = LogitsProcessor::new(seed, Some(temperature), Some(top_p));
-
-        let mut generated: Vec<u32> = Vec::new();
-        let mut all_tokens = input_tokens.clone();
-        let mut offset = all_tokens.len();
-
-        for _ in 0..max_new_tokens {
-            let mut step_logits = logits.squeeze(0).map_err(|e| e.to_string())?;
-            if repeat_penalty > 1.0 && !all_tokens.is_empty() {
-                let start = all_tokens.len().saturating_sub(repeat_last_n);
-                step_logits =
-                    apply_repeat_penalty(&step_logits, repeat_penalty, &all_tokens[start..])
-                        .map_err(|e| e.to_string())?;
+                    .map_err(|e| e.to_string())?;
+                logits = model
+                    .forward(&step_input, offset)
+                    .map_err(|e| e.to_string())?;
+                offset += 1;
             }
 
-            let next_token = logits_processor
-                .sample(&step_logits)
-                .map_err(|e| e.to_string())?;
-
-            // Avoid immediate empty responses by requiring at least one generated token.
-            if stop_tokens.contains(&next_token) && !generated.is_empty() {
-                break;
-            }
-            if stop_tokens.contains(&next_token) {
-                continue;
+            if generated.is_empty() {
+                return Err("TensorOracle generated zero tokens".to_string());
             }
 
-            generated.push(next_token);
-            all_tokens.push(next_token);
-
-            let step_input = Tensor::new(&[next_token], &self.device)
-                .map_err(|e| e.to_string())?
-                .unsqueeze(0)
-                .map_err(|e| e.to_string())?;
-            logits = model
-                .forward(&step_input, offset)
-                .map_err(|e| e.to_string())?;
-            offset += 1;
-        }
-
-        if generated.is_empty() {
-            return Err("TensorOracle generated zero tokens".to_string());
-        }
+            Ok(generated)
+        })
+        .await
+        .map_err(|e| format!("TensorOracle spawn_blocking failed: {}", e))??;
 
         let decoded = tokenizer
             .decode(generated.as_slice(), true)
@@ -368,4 +393,87 @@ impl TensorOracle {
 
         Ok(normalized)
     }
-}
+
+    /// Streaming variant of generate_with_thermodynamics.
+    /// Emits each token via mpsc channel as soon as it is decoded.
+    /// Caller receives Receiver and can collect or process incrementally.
+    pub async fn generate_streaming(
+        &self,
+        prompt: &str,
+        base_entropy: f32,
+        trauma_severity: f32,
+        is_action: bool,
+    ) -> Result<tokio::sync::mpsc::Receiver<StreamToken>, String> {
+        // Reuse setup logic from generate_with_thermodynamics
+        let tokenizer_guard = self.tokenizer.lock().await;
+        let tokenizer = tokenizer_guard.as_ref().ok_or("Tokenizer not booted")?;
+
+        let use_prefill_prefix = std::env::var("TENSOR_ORACLE_USE_PREFILL_PREFIX")
+            .ok()
+            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+        let kv_prefix = if use_prefill_prefix {
+            self.kv_cache_snapshot.lock().await.clone().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let final_entropy = if trauma_severity > 0.8 {
+            if is_action { 0.1 } else { 0.9 }
+        } else {
+            base_entropy
+        };
+
+        let think_tag = if final_entropy >= 0.5 { "/think" } else { "/no_think" };
+        let mode_injection = format!(
+            "<|im_start|>user\n{}\n{}<|im_end|>\n<|im_start|>assistant\n",
+            think_tag, prompt
+        );
+
+        let message_tokens = tokenizer
+            .encode(mode_injection.as_str(), true)
+            .map_err(|e| e.to_string())?;
+
+        let mut input_tokens = kv_prefix;
+        input_tokens.extend_from_slice(message_tokens.get_ids());
+
+        let max_input_tokens = std::env::var("TENSOR_ORACLE_MAX_INPUT_TOKENS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v >= 64)
+            .unwrap_or(4096);
+        if input_tokens.len() > max_input_tokens {
+            input_tokens = input_tokens[input_tokens.len().saturating_sub(max_input_tokens)..].to_vec();
+        }
+        if input_tokens.is_empty() {
+            return Err("Prompt encoding produced no tokens".to_string());
+        }
+
+        let max_new_tokens = std::env::var("TENSOR_ORACLE_MAX_NEW_TOKENS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(if final_entropy >= 0.5 { 32 } else { 16 });
+        let repeat_last_n = std::env::var("TENSOR_ORACLE_REPEAT_LAST_N")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(64);
+        let repeat_penalty = std::env::var("TENSOR_ORACLE_REPEAT_PENALTY")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| *v > 1.0)
+            .unwrap_or(1.08);
+        let top_p = std::env::var("TENSOR_ORACLE_TOP_P")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| *v > 0.0 && *v <= 1.0)
+            .unwrap_or(if final_entropy >= 0.5 { 0.92 } else { 0.85 });
+        let temperature = std::env::var("TENSOR_ORACLE_TEMPERATURE")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| *v > 0.0)
+            .unwrap_or(if final_entropy >= 0.5 { 0.72 } else { 0.25 });
+
+        let mut stop_tokens: Vec<u32> = Vec::new();
+        for stop in ["<|im_end|>", "

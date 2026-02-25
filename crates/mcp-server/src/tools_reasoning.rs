@@ -5,6 +5,7 @@ use std::collections::HashSet;
 
 impl EidolonMcpServer {
     pub(crate) async fn handle_reason_chain(&self, params: serde_json::Value) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let started = std::time::Instant::now();
         let draft = params["draft"].as_str().unwrap_or("");
         let context = params["context"].as_str().unwrap_or("");
@@ -19,7 +20,7 @@ impl EidolonMcpServer {
             .await;
 
         let trauma_severity = {
-            let trauma = self.trauma.lock().await;
+            let trauma = self.trauma.write().await;
             trauma.get_trauma_severity(
                 core_rust::sentinel::modes::SentinelMode::Zen,
                 "reason_chain",
@@ -41,18 +42,29 @@ impl EidolonMcpServer {
                 draft, context, trauma_context
             );
 
-        // Phase 6 Epistemic Core: Utilize the embedded local TensorOracle.
+        // Mode "deep" -> high entropy (thinking), otherwise reflex (low entropy)
+        let expected_entropy = if mode_selected == "deep" { 0.8_f32 } else { 0.2_f32 };
+
+        // Phase 3: Build routing context snapshot TRƯỚC KHI acquire bất kỳ lock nào.
+        // Trauma severity sẽ được snapshot trong build_routing_context (drop lock ngay).
+        let routing_ctx = self
+            .build_routing_context(
+                expected_entropy,
+                core_rust::sentinel::modes::SentinelMode::Zen,
+                "reason_chain",
+                latency_budget_ms,
+                false, // privacy_sensitive: reason_chain không nhạy cảm theo mặc định
+                false, // is_action: đây là analysis layer, không phải execution
+                &tenant_id,
+            )
+            .await;
+
         let mut factual_consistency = 0.5;
         let mut context_overlap = 0.5;
 
-        // Generate using Qwen3 Tensor Engine logic natively.
-        // Mode "deep" -> use high entropy (thinking), otherwise reflex (low entropy).
-        let expected_entropy = if mode_selected == "deep" { 0.8 } else { 0.2 };
-        // is_action = false (Reasoning is strictly an Analysis layer)
-        let llm_res = self
-            .tensor_oracle
-            .generate_with_thermodynamics(&prompt, expected_entropy, trauma_severity as f32, false)
-            .await;
+        // Phase 3: Dùng routed_generate thay vì gọi trực tiếp tensor_oracle.
+        // Router tự quyết Local TensorOracle / Ollama / External dựa trên policy.
+        let llm_res = self.routed_generate(&routing_ctx, &prompt).await;
 
         if let Ok(raw_response) = llm_res {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&raw_response) {
@@ -76,7 +88,7 @@ impl EidolonMcpServer {
 
         let iterations = if mode_selected == "deep" { 3 } else { 1 };
 
-        let mut thermo = self.thermo.lock().await;
+        let mut thermo = self.thermo.write().await;
         let ratio = (context_overlap as f32).max(0.1);
 
         let mut state = nalgebra::DVector::from_element(5, 0.5 * ratio);
@@ -130,7 +142,10 @@ impl EidolonMcpServer {
             })
             .collect();
 
-        let memories_snapshot = { self.memories.lock().await.clone() };
+        let memories_snapshot = {
+            let mems = self.memories.write().await;
+            mems.get(&tenant_id).cloned().unwrap_or_default()
+        };
         if !memories_snapshot.is_empty() {
             let retrieval_query = format!("{} {}", draft, context);
             let episodic_evidence =
@@ -320,10 +335,14 @@ impl EidolonMcpServer {
         &self,
         params: serde_json::Value,
     ) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         // P1: search memories by context similarity using ONNX embeddings when available.
         let context = params["context"].as_str().unwrap_or("");
         let k = params["k"].as_u64().unwrap_or(5) as usize;
-        let mems_snapshot = { self.memories.lock().await.clone() };
+        let mems_snapshot = {
+            let mems = self.memories.write().await;
+            mems.get(&tenant_id).cloned().unwrap_or_default()
+        };
 
         if context.is_empty() || mems_snapshot.is_empty() {
             return serde_json::json!({
@@ -378,6 +397,7 @@ impl EidolonMcpServer {
     }
 
     pub(crate) async fn handle_memory_query(&self, params: serde_json::Value) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         // P1: memory router with quality scorer across episodic/semantic/causal routes.
         let query = params["query"].as_str().unwrap_or("");
         let route_requested = params["route"]
@@ -386,7 +406,10 @@ impl EidolonMcpServer {
             .to_ascii_lowercase();
         let limit = params["k"].as_u64().unwrap_or(10).clamp(1, 50) as usize;
         let route_candidates = memory_route_candidates(query);
-        let memories_snapshot = { self.memories.lock().await.clone() };
+        let memories_snapshot = {
+            let mems = self.memories.write().await;
+            mems.get(&tenant_id).cloned().unwrap_or_default()
+        };
 
         if query.is_empty() {
             let results: Vec<serde_json::Value> = memories_snapshot
@@ -560,6 +583,7 @@ impl EidolonMcpServer {
         &self,
         params: serde_json::Value,
     ) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         // Phase D: context compressor with importance scoring + dedupe.
         let target_tokens = params["target_tokens"].as_u64().unwrap_or(1000).max(1) as usize;
         let context = params["context"].as_str().unwrap_or("").to_string();
@@ -581,8 +605,22 @@ impl EidolonMcpServer {
             .unwrap_or_default();
 
         let (source_text, source, fallback_used) = if context.trim().is_empty() {
-            let mems = self.memories.lock().await;
-            if mems.is_empty() {
+            let mut summary = String::new();
+            {
+                let mems = self.memories.write().await;
+                if let Some(tenant_mems) = mems.get(&tenant_id) {
+                    if !tenant_mems.is_empty() {
+                        summary = tenant_mems
+                            .iter()
+                            .rev()
+                            .take(25)
+                            .map(|m| m.content.as_str())
+                            .collect::<Vec<&str>>()
+                            .join(". ");
+                    }
+                }
+            }
+            if summary.is_empty() {
                 return serde_json::json!({
                     "compressed_context": "",
                     "original_tokens": 0,
@@ -595,13 +633,6 @@ impl EidolonMcpServer {
                     "note": "Memory store is empty. Record outcomes or commit patterns first."
                 });
             }
-            let summary = mems
-                .iter()
-                .rev()
-                .take(25)
-                .map(|m| m.content.as_str())
-                .collect::<Vec<&str>>()
-                .join(". ");
             (summary, "memory_store".to_string(), true)
         } else {
             (context, "input_context".to_string(), false)

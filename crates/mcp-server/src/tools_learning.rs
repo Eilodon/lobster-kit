@@ -6,7 +6,9 @@ impl EidolonMcpServer {
         &self,
         params: serde_json::Value,
     ) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let pattern = params["pattern"].as_str().unwrap_or("unknown_pattern");
+        let salted_pattern = format!("{}:{}", tenant_id, pattern);
         let mode_str = params["mode"].as_str().unwrap_or("Peer");
         // Clamp severity to [0.0, 5.0] — prevents garbage inputs
         let raw_severity = params["severity"].as_f64().unwrap_or(0.0) as f32;
@@ -22,11 +24,11 @@ impl EidolonMcpServer {
         let now = chrono::Utc::now().timestamp_millis();
 
         if severity > 0.0 {
-            let mut trauma = self.trauma.lock().await;
-            trauma.record_trauma(mode, pattern, severity, now);
+            let mut trauma = self.trauma.write().await;
+            trauma.record_trauma(mode, &salted_pattern, severity, now);
         } else {
-            let mut trauma = self.trauma.lock().await;
-            trauma.heal(mode, pattern);
+            let mut trauma = self.trauma.write().await;
+            trauma.heal(mode, &salted_pattern);
         }
 
         // Phase 6: LiquidBrain online learning from outcome
@@ -36,11 +38,11 @@ impl EidolonMcpServer {
             } else {
                 1.0 // Positive reward for healed/good outcomes
             };
-            let mut brain = self.liquid_brain.lock().await;
+            let mut brain = self.liquid_brain.write().await;
             brain.optimize(reward_signal);
         }
 
-        let mut brain = self.causal_brain.lock().await;
+        let mut brain = self.causal_brain.write().await;
         brain.learn(
             core_rust::sentinel::variables::SentinelVariable::Sentiment,
             core_rust::sentinel::variables::SentinelVariable::PriceDelta,
@@ -72,23 +74,26 @@ impl EidolonMcpServer {
         );
         let (route_feedback_embedding, route_feedback_backend) =
             self.embed_text_with_fallback(&route_feedback_content);
-        let mut mems = self.memories.lock().await;
-        mems.push(MemoryEntry {
+        let mut mems = self.memories.write().await;
+        let tenant_mems = mems.entry(tenant_id.clone()).or_insert_with(Vec::new);
+        tenant_mems.push(MemoryEntry {
+            tenant_id: tenant_id.clone(),
             timestamp: now,
             category: "outcome".to_string(),
             content,
             embedding,
         });
-        mems.push(MemoryEntry {
+        tenant_mems.push(MemoryEntry {
+            tenant_id: tenant_id.clone(),
             timestamp: now,
             category: "route_feedback".to_string(),
             content: route_feedback_content,
             embedding: route_feedback_embedding,
         });
 
-        if mems.len() > 10_000 {
-            let excess = mems.len() - 10_000;
-            mems.drain(0..excess);
+        if tenant_mems.len() > 10_000 {
+            let excess = tenant_mems.len() - 10_000;
+            tenant_mems.drain(0..excess);
         }
         drop(mems);
         // Phase 3: Persist memories to disk
@@ -107,10 +112,12 @@ impl EidolonMcpServer {
     }
 
     pub(crate) async fn handle_update_user(&self, params: serde_json::Value) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         // Upgrade 1: Real persistent user update
         let user_id = params["user_id"].as_str().unwrap_or("unknown");
         {
-            let mut users = self.users.lock().await;
+            let mut all_users = self.users.write().await;
+            let users = all_users.entry(tenant_id.clone()).or_insert_with(std::collections::HashMap::new);
             let existing = users
                 .entry(user_id.to_string())
                 .or_insert_with(|| serde_json::json!({}));
@@ -119,7 +126,7 @@ impl EidolonMcpServer {
             if let Some(obj) = params.as_object() {
                 if let Some(existing_obj) = existing.as_object_mut() {
                     for (k, v) in obj {
-                        if k != "user_id" {
+                        if k != "user_id" && k != "tenant_id" {
                             existing_obj.insert(k.clone(), v.clone());
                         }
                     }
@@ -138,10 +145,11 @@ impl EidolonMcpServer {
         &self,
         params: serde_json::Value,
     ) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         // Upgrade 6: Real Memory Consolidation / Thermodynamic Relaxation
         let episodes = params["episodes"].as_u64().unwrap_or(20) as usize;
 
-        let mut thermo = self.thermo.lock().await;
+        let mut thermo = self.thermo.write().await;
         let mut state = nalgebra::DVector::from_element(5, 0.8); // Start hot
         let target = nalgebra::DVector::from_element(5, 0.0); // Target zero (Zen)
 
@@ -152,11 +160,15 @@ impl EidolonMcpServer {
         let final_entropy = thermo.entropy(&state);
 
         // Prune old memories
-        let mut mems = self.memories.lock().await;
-        let pruned = if mems.len() > 100 {
-            let excess = mems.len() - 100;
-            mems.drain(0..excess);
-            true
+        let mut mems = self.memories.write().await;
+        let pruned = if let Some(tenant_mems) = mems.get_mut(&tenant_id) {
+            if tenant_mems.len() > 100 {
+                let excess = tenant_mems.len() - 100;
+                tenant_mems.drain(0..excess);
+                true
+            } else {
+                false
+            }
         } else {
             false
         };

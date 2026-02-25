@@ -6,9 +6,10 @@ use crate::EidolonMcpServer;
 
 impl EidolonMcpServer {
     pub(crate) async fn handle_recall_user(&self, params: serde_json::Value) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let user_id = params["user_id"].as_str().unwrap_or("unknown");
-        let users = self.users.lock().await;
-        let profile = users.get(user_id).cloned().unwrap_or_else(|| {
+        let all_users = self.users.write().await;
+        let profile = all_users.get(&tenant_id).and_then(|t| t.get(user_id)).cloned().unwrap_or_else(|| {
             serde_json::json!({
                 "preferred_mode": "Peer",
                 "sensory_context": { "technical_literacy": 0.5, "risk_tolerance": 0.5 }
@@ -22,22 +23,23 @@ impl EidolonMcpServer {
     }
 
     pub(crate) async fn handle_route_action(&self, params: serde_json::Value) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let suggested_tool = params["suggested_tool"].as_str().unwrap_or("unknown");
         let intent_confidence = clamp01(params["intent_confidence"].as_f64().unwrap_or(0.5)) as f32;
 
         let thermo_coherence = {
-            let mut thermo = self.thermo.lock().await;
+            let mut thermo = self.thermo.write().await;
             let state = nalgebra::DVector::from_vec(vec![0.15f32, 0.25, 0.35, 0.45, 0.55]);
             let entropy = thermo.entropy(&state).max(0.0);
             (1.0 / (1.0 + entropy)).clamp(0.35, 1.0)
         };
 
         let trauma_safety = {
-            let trauma = self.trauma.lock().await;
+            let trauma = self.trauma.write().await;
             let now = chrono::Utc::now().timestamp_millis();
             if trauma.is_inhibited(
                 core_rust::sentinel::modes::SentinelMode::Zen,
-                suggested_tool,
+                &format!("{}:{}", tenant_id, suggested_tool),
                 now,
             ) {
                 0.0
@@ -47,8 +49,8 @@ impl EidolonMcpServer {
         };
 
         let policy_score = {
-            let metrics = self.tool_metrics.lock().await;
-            metrics.get(suggested_tool).map_or(0.5f32, |m| {
+            let metrics = self.tool_metrics.write().await;
+            metrics.get(&format!("{}:{}", tenant_id, suggested_tool)).map_or(0.5f32, |m| {
                 if m.calls < 5 {
                     0.6f32
                 } else {
@@ -102,25 +104,27 @@ impl EidolonMcpServer {
     }
 
     pub(crate) async fn handle_sense_intent(&self, params: serde_json::Value) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let query = params["query"].as_str().unwrap_or("");
         let user_id = params["user_id"].as_str().unwrap_or("default");
         let user_risk_tolerance = {
-            let users = self.users.lock().await;
-            users
-                .get(user_id)
+            let all_users = self.users.write().await;
+            all_users
+                .get(&tenant_id)
+                .and_then(|t| t.get(user_id))
                 .map(extract_profile_risk_tolerance)
                 .unwrap_or(0.5)
         };
         let profile_sensitivity = clamp01(1.0 - user_risk_tolerance);
         let critical_action_score = critical_action_signal_score(query);
 
-        let mut actor = self.actor.lock().await;
+        let mut actor = self.actor.write().await;
         actor.process_event(core_rust::sentinel::systems::CognitiveEvent::Evaluate);
         let risk_score = actor.risk_score;
         drop(actor);
 
         let lexical_risk_score = lexical_intent_risk_score(query);
-        let historical_risk_prior = self.estimate_historical_risk_prior(query).await;
+        let historical_risk_prior = self.estimate_historical_risk_prior(&tenant_id, query).await;
         let actor_risk_score = clamp01(risk_score as f64);
 
         let mut inference_backend = "fallback".to_string();
@@ -227,7 +231,7 @@ Query: "{}" → "#,
         // Phase 6: Neural risk score via LiquidBrain (adapts with feedback)
         let neural_risk_score = {
             let embed = pseudo_embed(query);
-            let mut brain = self.liquid_brain.lock().await;
+            let mut brain = self.liquid_brain.write().await;
             let output = brain.forward(embed);
             // Average hidden state as risk signal, clamped to [0, 1]
             let raw = output.iter().sum::<f32>() / output.len().max(1) as f32;
@@ -271,7 +275,7 @@ Query: "{}" → "#,
         };
         // Phase 1B: Evolve thermodynamic state with live risk signals
         let thermo_entropy = {
-            let mut thermo = self.thermo.lock().await;
+            let mut thermo = self.thermo.write().await;
             let target = nalgebra::DVector::from_vec(vec![
                 composite_risk_score as f32,       // Volatility proxy
                 model_risk_score as f32,           // Trend proxy
@@ -320,6 +324,7 @@ Query: "{}" → "#,
         &self,
         params: serde_json::Value,
     ) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let pattern = params["pattern"].as_str().unwrap_or("unknown_pattern");
         let mode_str = params["mode"].as_str().unwrap_or("Peer");
 
@@ -330,10 +335,11 @@ Query: "{}" → "#,
             _ => core_rust::sentinel::modes::SentinelMode::Zen,
         };
 
-        let trauma = self.trauma.lock().await;
+        let trauma = self.trauma.write().await;
         let now = chrono::Utc::now().timestamp_millis();
-        let is_inhibited = trauma.is_inhibited(mode, pattern, now);
-        let remaining_ms = trauma.get_remaining_ms(mode, pattern, now);
+        let salted_pattern = format!("{}:{}", tenant_id, pattern);
+        let is_inhibited = trauma.is_inhibited(mode, &salted_pattern, now);
+        let remaining_ms = trauma.get_remaining_ms(mode, &salted_pattern, now);
 
         serde_json::json!({
             "pattern": pattern,
@@ -346,12 +352,14 @@ Query: "{}" → "#,
         &self,
         params: serde_json::Value,
     ) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let action = params["action"].as_str().unwrap_or("default");
         let user_id = params["user_id"].as_str().unwrap_or("default");
         let user_risk_tolerance = {
-            let users = self.users.lock().await;
-            users
-                .get(user_id)
+            let all_users = self.users.write().await;
+            all_users
+                .get(&tenant_id)
+                .and_then(|t| t.get(user_id))
                 .map(extract_profile_risk_tolerance)
                 .unwrap_or(0.5)
         };
@@ -360,7 +368,7 @@ Query: "{}" → "#,
         let disable_stop_loss_signal = disable_stop_loss_signal_score(action);
         let critical_action_signal = critical_action_signal_score(action);
 
-        let trauma = self.trauma.lock().await;
+        let trauma = self.trauma.write().await;
         let now = chrono::Utc::now().timestamp_millis();
 
         let modes = vec![
@@ -371,9 +379,10 @@ Query: "{}" → "#,
             core_rust::sentinel::modes::SentinelMode::Snipe,
         ];
 
+        let salted_action = format!("{}:{}", tenant_id, action);
         let mut inhibited_mode = None;
         for mode in modes {
-            if trauma.is_inhibited(mode, action, now) {
+            if trauma.is_inhibited(mode, &salted_action, now) {
                 inhibited_mode = Some(mode);
                 break;
             }
@@ -485,8 +494,9 @@ Query: "{}" → "#,
         &self,
         params: serde_json::Value,
     ) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let pattern = params["pattern"].as_str().unwrap_or("unknown_pattern");
-        let mut thermo = self.thermo.lock().await;
+        let mut thermo = self.thermo.write().await;
         let mut state = nalgebra::DVector::from_element(5, 0.5);
         let target = nalgebra::DVector::from_element(5, 0.6);
         thermo.step(&mut state, &target);
@@ -495,8 +505,10 @@ Query: "{}" → "#,
         // Upgrade 3: Push to Stateful Memory
         let content = format!("Pattern '{}' committed. Entropy: {:.4}", pattern, entropy);
         let (embedding, embedding_backend) = self.embed_text_with_fallback(&content);
-        let mut mems = self.memories.lock().await;
-        mems.push(MemoryEntry {
+        let mut mems = self.memories.write().await;
+        let tenant_mems = mems.entry(tenant_id.clone()).or_insert_with(Vec::new);
+        tenant_mems.push(MemoryEntry {
+            tenant_id: tenant_id.clone(),
             timestamp: chrono::Utc::now().timestamp_millis(),
             category: "commit".to_string(),
             content,
@@ -504,9 +516,9 @@ Query: "{}" → "#,
         });
 
         // VULNERABILITY 1 FIX: Cap memory length
-        if mems.len() > 10_000 {
-            let excess = mems.len() - 10_000;
-            mems.drain(0..excess);
+        if tenant_mems.len() > 10_000 {
+            let excess = tenant_mems.len() - 10_000;
+            tenant_mems.drain(0..excess);
         }
         drop(mems);
         // Phase 3: Persist memories to disk
@@ -524,7 +536,7 @@ Query: "{}" → "#,
         let duration_ms = params["duration_ms"].as_u64().unwrap_or(60000);
         let expiration = chrono::Utc::now().timestamp_millis() as u64 + duration_ms;
 
-        let mut thermo = self.thermo.lock().await;
+        let mut thermo = self.thermo.write().await;
         thermo.entropy_override = Some((target_entropy, expiration));
 
         serde_json::json!({
@@ -534,35 +546,53 @@ Query: "{}" → "#,
     }
 
     pub(crate) async fn trigger_dream_sequence(&self) {
-        let mut mems = self.memories.lock().await;
-        if mems.len() < 2 {
-            return;
+        let mems = self.memories.write().await;
+        let mut keys_to_process = Vec::new();
+        for (tenant_id, tenant_mems) in mems.iter() {
+            if tenant_mems.len() < 2 {
+                continue;
+            }
+            keys_to_process.push(tenant_id.clone());
         }
 
-        // Take the last two memories for associative binding
-        // (In a real implementation, this would use a fast K-means or semantic clustering)
-        let sample: Vec<String> = mems
-            .iter()
-            .rev()
-            .take(2)
-            .map(|m| m.content.clone())
-            .collect();
-        let content = format!(
-            "Dream Synthesis: Identified a deep causal link between '{}' and '{}'",
-            sample[0], sample[1]
-        );
+        let mut updates = Vec::new();
+        for tenant_id in keys_to_process {
+            let tenant_mems = mems.get(&tenant_id).unwrap();
+            let sample: Vec<String> = tenant_mems
+                .iter()
+                .rev()
+                .take(2)
+                .map(|m| m.content.clone())
+                .collect();
+            let content = format!(
+                "Dream Synthesis: Identified a deep causal link between '{}' and '{}'",
+                sample[0], sample[1]
+            );
+            updates.push((tenant_id, content));
+        }
+        drop(mems);
 
-        let (embedding, _) = self.embed_text_with_fallback(&content);
-        mems.push(MemoryEntry {
-            timestamp: chrono::Utc::now().timestamp_millis(),
-            category: "dream_insight".to_string(),
-            content,
-            embedding,
-        });
+        let mut to_insert = Vec::new();
+        for (tenant_id, content) in updates {
+            let (embedding, _) = self.embed_text_with_fallback(&content);
+            to_insert.push((tenant_id, content, embedding));
+        }
 
-        if mems.len() > 10_000 {
-            let excess = mems.len() - 10_000;
-            mems.drain(0..excess);
+        let mut mems = self.memories.write().await;
+        for (tenant_id, content, embedding) in to_insert {
+            let tenant_mems = mems.entry(tenant_id.clone()).or_insert_with(Vec::new);
+            tenant_mems.push(MemoryEntry {
+                tenant_id,
+                timestamp: chrono::Utc::now().timestamp_millis(),
+                category: "dream_insight".to_string(),
+                content,
+                embedding,
+            });
+
+            if tenant_mems.len() > 10_000 {
+                let excess = tenant_mems.len() - 10_000;
+                tenant_mems.drain(0..excess);
+            }
         }
         drop(mems);
         self.save_memories_to_disk().await;

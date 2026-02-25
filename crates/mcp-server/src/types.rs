@@ -8,9 +8,14 @@ use std::collections::VecDeque;
 pub const MAX_LATENCY_SAMPLES: usize = 256;
 pub const DEFAULT_USER_SATISFACTION: f64 = 0.5;
 
+
+pub type TenantId = String;
+
 // === Stateful Memory ===
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct MemoryEntry {
+    #[serde(default = "default_tenant_id")]
+    pub tenant_id: TenantId,
     pub timestamp: i64,
     pub category: String,
     pub content: String,
@@ -20,6 +25,10 @@ pub struct MemoryEntry {
 
 pub fn default_embedding() -> Vec<f32> {
     Vec::new()
+}
+
+pub fn default_tenant_id() -> TenantId {
+    "default".to_string()
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +73,7 @@ impl Default for ToolTelemetry {
 
 #[derive(Clone, Debug)]
 pub struct PersistedToolPerformanceRow {
+    pub tenant_id: TenantId,
     pub tool_name: String,
     pub call_count: u64,
     pub error_count: u64,
@@ -83,6 +93,7 @@ pub struct PersistedToolPerformanceRow {
 
 #[derive(Clone, Debug)]
 pub struct GeneratedToolAuditRow {
+    pub tenant_id: TenantId,
     pub tool_name: String,
     pub need: String,
     pub status: String,

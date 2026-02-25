@@ -21,6 +21,7 @@ impl EidolonMcpServer {
 
     pub(crate) async fn record_tool_metric(
         &self,
+        tenant_id: &str,
         tool_name: &str,
         failed: bool,
         latency_us: u64,
@@ -31,9 +32,11 @@ impl EidolonMcpServer {
         }
 
         let snapshot = {
-            let mut metrics = self.tool_metrics.lock().await;
+            let mut metrics = self.tool_metrics.write().await;
+            // For in-memory stats, combine tenant and tool name so they are distinct
+            let metric_key = format!("{}:{}", tenant_id, tool_name);
             let entry = metrics
-                .entry(tool_name.to_string())
+                .entry(metric_key)
                 .or_insert_with(ToolTelemetry::default);
             entry.calls = entry.calls.saturating_add(1);
             if failed {
@@ -67,6 +70,7 @@ impl EidolonMcpServer {
             let fallback_rate = entry.fallback_count as f64 / calls as f64;
 
             PersistedToolPerformanceRow {
+                tenant_id: tenant_id.to_string(),
                 tool_name: tool_name.to_string(),
                 call_count: entry.calls,
                 error_count: entry.errors,
@@ -94,6 +98,7 @@ impl EidolonMcpServer {
 
     pub(crate) async fn record_generated_tool_audit(
         &self,
+        tenant_id: &str,
         tool_name: &str,
         need: &str,
         status: &str,
@@ -136,6 +141,7 @@ impl EidolonMcpServer {
         let metadata_json = serde_json::to_string(&serde_json::Value::Object(metadata_obj))
             .unwrap_or_else(|_| "{}".to_string());
         let row = GeneratedToolAuditRow {
+            tenant_id: tenant_id.to_string(),
             tool_name: if tool_name.is_empty() {
                 "unknown_tool".to_string()
             } else {

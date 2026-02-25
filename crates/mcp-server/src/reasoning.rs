@@ -33,7 +33,7 @@ impl EidolonMcpServer {
         let critical_action_signals_present = has_critical_action_signals(context);
 
         let historical_pressure = {
-            let metrics = self.tool_metrics.lock().await;
+            let metrics = self.tool_metrics.write().await;
             metrics
                 .get("eidolon_reason_chain")
                 .map(|metric| metric.latency_p95_ms)
@@ -81,5 +81,131 @@ impl EidolonMcpServer {
             }
         }
         (pseudo_embed(text), "pseudo_embed")
+    }
+
+    /// Build RoutingContext từ snapshot không-blocking.
+    /// Phải gọi TRƯỚC khi thực hiện inference để tránh locking trong quá trình gọi model.
+    pub(crate) async fn build_routing_context(
+        &self,
+        entropy: f32,
+        trauma_mode: core_rust::sentinel::modes::SentinelMode,
+        trauma_context_key: &str,
+        latency_budget_ms: u64,
+        privacy_sensitive: bool,
+        is_action: bool,
+        tenant_id: &str,
+    ) -> crate::routing::RoutingContext {
+        // Snapshot trauma severity (non-blocking read, drop lock immediately)
+        let trauma_severity = {
+            let trauma = self.trauma.write().await;
+            trauma.get_trauma_severity(trauma_mode, trauma_context_key) as f32
+        };
+        crate::routing::RoutingContext {
+            entropy,
+            trauma_severity,
+            latency_budget_ms,
+            privacy_sensitive,
+            is_action,
+            tenant_id: tenant_id.to_string(),
+        }
+    }
+
+    /// Execute inference qua Routing Engine.
+    /// Tự động record success/failure vào Circuit Breaker.
+    /// Fallback: nếu decision là Unavailable, trả về Err.
+    pub(crate) async fn routed_generate(
+        &self,
+        ctx: &crate::routing::RoutingContext,
+        prompt: &str,
+    ) -> Result<String, String> {
+        let decision = self.routing_engine.decide(ctx);
+
+        eprintln!(
+            "[Eidolon Router] tenant={} decision={:?}",
+            ctx.tenant_id,
+            crate::providers::provider_name_from_decision(&decision)
+        );
+
+        match &decision {
+            crate::routing::RoutingDecision::LocalTensorOracle => {
+                let result = self
+                    .tensor_oracle
+                    .generate_with_thermodynamics(
+                        prompt,
+                        ctx.entropy,
+                        ctx.trauma_severity,
+                        ctx.is_action,
+                    )
+                    .await;
+                match result {
+                    Ok(text) => {
+                        self.routing_engine
+                            .record_success(crate::routing::Provider::TensorOracle);
+                        Ok(text)
+                    }
+                    Err(e) => {
+                        self.routing_engine
+                            .record_failure(crate::routing::Provider::TensorOracle);
+                        Err(format!("tensor_oracle_error: {}", e))
+                    }
+                }
+            }
+            crate::routing::RoutingDecision::LocalOllama => {
+                use crate::providers::LlmProvider;
+                let adapter = crate::providers::OllamaAdapter::from_env();
+                let result = adapter
+                    .generate(prompt, ctx.entropy, ctx.trauma_severity, ctx.is_action)
+                    .await;
+                match result {
+                    crate::providers::InferenceResult::Ok(text) => {
+                        self.routing_engine
+                            .record_success(crate::routing::Provider::Ollama);
+                        Ok(text)
+                    }
+                    crate::providers::InferenceResult::Timeout => {
+                        self.routing_engine
+                            .record_failure(crate::routing::Provider::Ollama);
+                        Err("ollama_timeout".to_string())
+                    }
+                    crate::providers::InferenceResult::Error(e) => {
+                        self.routing_engine
+                            .record_failure(crate::routing::Provider::Ollama);
+                        Err(e)
+                    }
+                }
+            }
+            crate::routing::RoutingDecision::External { url, model } => {
+                use crate::providers::LlmProvider;
+                let adapter = crate::providers::ExternalLlmAdapter::new(
+                    url.clone(),
+                    self.routing_engine.config.external_api_key.clone(),
+                    model.clone(),
+                    self.routing_engine.config.external_timeout_secs,
+                );
+                let result = adapter
+                    .generate(prompt, ctx.entropy, ctx.trauma_severity, ctx.is_action)
+                    .await;
+                match result {
+                    crate::providers::InferenceResult::Ok(text) => {
+                        self.routing_engine
+                            .record_success(crate::routing::Provider::External);
+                        Ok(text)
+                    }
+                    crate::providers::InferenceResult::Timeout => {
+                        self.routing_engine
+                            .record_failure(crate::routing::Provider::External);
+                        Err("external_timeout".to_string())
+                    }
+                    crate::providers::InferenceResult::Error(e) => {
+                        self.routing_engine
+                            .record_failure(crate::routing::Provider::External);
+                        Err(e)
+                    }
+                }
+            }
+            crate::routing::RoutingDecision::Unavailable { reason } => {
+                Err(format!("all_providers_unavailable: {}", reason))
+            }
+        }
     }
 }

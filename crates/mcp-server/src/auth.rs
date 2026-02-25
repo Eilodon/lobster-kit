@@ -62,9 +62,17 @@ impl EidolonMcpServer {
         result
     }
 
-    pub(crate) fn load_users_from_disk_sync(path: &Path) -> HashMap<String, serde_json::Value> {
+    pub(crate) fn load_users_from_disk_sync(path: &Path) -> HashMap<crate::types::TenantId, HashMap<String, serde_json::Value>> {
         if let Ok(data) = std::fs::read_to_string(&path) {
-            serde_json::from_str(&data).unwrap_or_default()
+            if let Ok(users) = serde_json::from_str::<HashMap<crate::types::TenantId, HashMap<String, serde_json::Value>>>(&data) {
+                users
+            } else if let Ok(legacy_users) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&data) {
+                let mut map = HashMap::new();
+                map.insert("default".to_string(), legacy_users);
+                map
+            } else {
+                HashMap::new()
+            }
         } else {
             HashMap::new()
         }
@@ -72,7 +80,7 @@ impl EidolonMcpServer {
 
     pub(crate) fn save_users_to_disk_sync(
         path: &Path,
-        users: &HashMap<String, serde_json::Value>,
+        users: &HashMap<crate::types::TenantId, HashMap<String, serde_json::Value>>,
     ) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|err| err.to_string())?;
@@ -114,7 +122,7 @@ impl EidolonMcpServer {
     }
 
     pub(crate) async fn save_users_to_disk(&self) {
-        let users_snapshot = { self.users.lock().await.clone() };
+        let users_snapshot = { self.users.write().await.clone() };
         let users_path = (*self.users_file_path).clone();
         if let Ok(Err(err)) = tokio::task::spawn_blocking(move || {
             Self::save_users_to_disk_sync(&users_path, &users_snapshot)

@@ -54,16 +54,16 @@ impl EidolonMcpServer {
         let payload = match uri {
             "eidolon://bioreactor" => {
                 let memory_count = {
-                    let memories = self.memories.lock().await;
-                    memories.len()
+                    let memories = self.memories.write().await;
+                    memories.values().map(|v| v.len()).sum::<usize>()
                 };
                 let user_count = {
-                    let users = self.users.lock().await;
-                    users.len()
+                    let users = self.users.write().await;
+                    users.values().map(|v| v.len()).sum::<usize>()
                 };
 
                 let entropy = {
-                    let mut thermo = self.thermo.lock().await;
+                    let mut thermo = self.thermo.write().await;
                     let baseline = nalgebra::DVector::from_element(5, 0.5);
                     thermo.entropy(&baseline)
                 };
@@ -77,13 +77,17 @@ impl EidolonMcpServer {
             }
             "eidolon://logs" => {
                 let entries: Vec<serde_json::Value> = {
-                    let memories = self.memories.lock().await;
-                    memories
-                        .iter()
+                    let memories = self.memories.write().await;
+                    let mut all_mems: Vec<&crate::types::MemoryEntry> =
+                        memories.values().flat_map(|m| m.iter()).collect();
+                    all_mems.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+                    all_mems
+                        .into_iter()
                         .rev()
                         .take(50)
                         .map(|entry| {
                             serde_json::json!({
+                                "tenant_id": entry.tenant_id,
                                 "timestamp": entry.timestamp,
                                 "category": entry.category,
                                 "content": entry.content
@@ -128,7 +132,7 @@ impl EidolonMcpServer {
                         })
                         .collect()
                 } else {
-                    let metrics = self.tool_metrics.lock().await;
+                    let metrics = self.tool_metrics.write().await;
                     let mut fallback_rows: Vec<serde_json::Value> = metrics
                         .iter()
                         .map(|(tool, metric)| {

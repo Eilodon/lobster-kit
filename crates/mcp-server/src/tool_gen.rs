@@ -420,7 +420,7 @@ impl EidolonMcpServer {
         available_tools: &[String],
     ) -> Vec<(String, f64)> {
         let shadow_penalties = self.recommender_shadow_penalties().await;
-        let metrics = self.tool_metrics.lock().await;
+        let metrics = self.tool_metrics.write().await;
         let mut ranked: Vec<(String, f64)> = available_tools
             .iter()
             .map(|tool_name| {

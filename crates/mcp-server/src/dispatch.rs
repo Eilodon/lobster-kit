@@ -102,7 +102,7 @@ impl EidolonMcpServer {
             _ => {
                 let is_dynamic = {
                     self.dynamic_tools
-                        .lock()
+                        .read()
                         .await
                         .contains_key(resolved_method.as_str())
                 };
@@ -182,6 +182,7 @@ impl EidolonMcpServer {
                                 }
                                 "tools/call" => match Self::parse_tools_call_payload(&params) {
                                     Ok((tool_name, tool_args)) => {
+                                        let tenant_id = crate::helpers::extract_tenant_id(&tool_args);
                                         let started = std::time::Instant::now();
                                         let result_content = server_clone
                                             .handle_tool_call(&tool_name, tool_args)
@@ -210,6 +211,7 @@ impl EidolonMcpServer {
 
                                         server_clone
                                             .record_tool_metric(
+                                                &tenant_id,
                                                 &tool_name,
                                                 failed,
                                                 latency_us,
@@ -226,6 +228,7 @@ impl EidolonMcpServer {
                                             .unwrap_or_else(|| "tool_execution_error".to_string());
                                             server_clone
                                                 .record_generated_tool_audit(
+                                                    &tenant_id,
                                                     &tool_name,
                                                     &tool_name,
                                                     "rejected",
@@ -243,6 +246,7 @@ impl EidolonMcpServer {
                                         } else {
                                             server_clone
                                                 .record_generated_tool_audit(
+                                                    &tenant_id,
                                                     &tool_name,
                                                     &tool_name,
                                                     "accepted",
@@ -302,8 +306,10 @@ impl EidolonMcpServer {
                                         }
                                     }
                                     Err(error_response) => {
+                                        let tenant_id = "default".to_string();
                                         server_clone
                                             .record_tool_metric(
+                                                &tenant_id,
                                                 "tools/call.invalid_params",
                                                 true,
                                                 0,
@@ -315,6 +321,7 @@ impl EidolonMcpServer {
                                                 .unwrap_or_else(|| "invalid_params".to_string());
                                         server_clone
                                             .record_generated_tool_audit(
+                                                &tenant_id,
                                                 "tools/call.invalid_params",
                                                 "tools/call",
                                                 "rejected",

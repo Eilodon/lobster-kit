@@ -7,6 +7,7 @@
 
 use crate::EidolonMcpServer;
 use serde_json::json;
+use std::collections::HashSet;
 
 /// Intent categories for auto-routing
 #[derive(Debug, Clone, PartialEq)]
@@ -127,6 +128,165 @@ pub enum AutoRoutingStrategy {
 }
 
 impl EidolonMcpServer {
+    async fn evaluate_subbrain_route_gate(
+        &self,
+        tenant_id: &str,
+        suggested_tool: &str,
+        intent_confidence: f64,
+        context_type: &str,
+        gate_scope: &str,
+        child_tool: Option<&str>,
+    ) -> serde_json::Value {
+        let started = std::time::Instant::now();
+        let decision = self
+            .handle_route_action(json!({
+                "suggested_tool": suggested_tool,
+                "intent_confidence": intent_confidence,
+                "context_type": context_type
+            }))
+            .await;
+        let latency_us = started.elapsed().as_micros() as u64;
+        let failed = decision.get("error").is_some();
+        self.record_tool_metric(tenant_id, "eidolon_route_action", failed, latency_us, false)
+            .await;
+        let latency_ms = latency_us as f64 / 1000.0;
+        let mut metadata = json!({
+            "latency_us": latency_us,
+            "latency_ms": latency_ms,
+            "fallback_used": false,
+            "parent": "eidolon_subbrain_auto",
+            "gate_scope": gate_scope,
+            "gate_decision": decision.clone()
+        });
+        if let Some(tool) = child_tool {
+            metadata["child_tool"] = json!(tool);
+        }
+        if failed {
+            let failure_reason = decision
+                .get("error")
+                .map(|value| {
+                    value
+                        .as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| value.to_string())
+                })
+                .unwrap_or_else(|| "route_gate_error".to_string());
+            self.record_generated_tool_audit(
+                tenant_id,
+                "eidolon_route_action",
+                "eidolon_subbrain_auto.route_gate",
+                "rejected",
+                &failure_reason,
+                metadata,
+            )
+            .await;
+        } else {
+            self.record_generated_tool_audit(
+                tenant_id,
+                "eidolon_route_action",
+                "eidolon_subbrain_auto.route_gate",
+                "accepted",
+                "tool_call_ok",
+                metadata,
+            )
+            .await;
+        }
+
+        decision
+    }
+
+    fn subbrain_strategy_from_route_gate(
+        route_strategy: &str,
+        auto_execute: bool,
+        force_execute: bool,
+    ) -> AutoRoutingStrategy {
+        match route_strategy {
+            "AUTO" if auto_execute || force_execute => AutoRoutingStrategy::AutoExecute,
+            "PROPOSE" if force_execute => AutoRoutingStrategy::AutoExecute,
+            "AUTO" | "PROPOSE" => AutoRoutingStrategy::ProposeTools,
+            _ => AutoRoutingStrategy::DeepAnalysis,
+        }
+    }
+
+    fn subbrain_child_tool_params(
+        &self,
+        tool_name: &str,
+        input: &str,
+        user_id: &str,
+        intent_analysis: &serde_json::Value,
+        confidence: f64,
+    ) -> Option<serde_json::Value> {
+        let preferred_mode = intent_analysis["recommended_mode"]
+            .as_str()
+            .unwrap_or("Peer");
+
+        match tool_name {
+            "eidolon_sense_intent" => Some(json!({
+                "query": input,
+                "user_id": user_id
+            })),
+            "eidolon_check_pattern" => Some(json!({
+                "pattern": input,
+                "mode": preferred_mode
+            })),
+            "eidolon_reason_chain" => Some(json!({
+                "draft": input,
+                "context": serde_json::to_string(intent_analysis).unwrap_or_else(|_| String::new()),
+                "mode": "auto",
+                "latency_budget_ms": Self::default_reasoning_latency_budget_ms()
+            })),
+            "eidolon_memory_query" => Some(json!({
+                "query": input,
+                "route": "auto",
+                "k": 8
+            })),
+            "eidolon_recall_similar" => Some(json!({
+                "context": input,
+                "k": 5
+            })),
+            "eidolon_orchestrate" => Some(json!({
+                "task": input,
+                "confidence": confidence,
+                "agent_count": 3
+            })),
+            "eidolon_recall_user" => Some(json!({
+                "user_id": user_id
+            })),
+            "eidolon_compress_context" => Some(json!({
+                "context": input,
+                "target_tokens": 600,
+                "preserve_recent": 2,
+                "dedupe_threshold": 0.85
+            })),
+            "eidolon_simulate_response" => Some(json!({
+                "action": input,
+                "user_id": user_id
+            })),
+            _ => None,
+        }
+    }
+
+    async fn execute_subbrain_supported_tool(
+        &self,
+        tool_name: &str,
+        params: serde_json::Value,
+    ) -> serde_json::Value {
+        match tool_name {
+            "eidolon_recall_user" => self.handle_recall_user(params).await,
+            "eidolon_sense_intent" => self.handle_sense_intent(params).await,
+            "eidolon_check_pattern" => self.handle_check_pattern(params).await,
+            "eidolon_simulate_response" => self.handle_simulate_response(params).await,
+            "eidolon_reason_chain" => self.handle_reason_chain(params).await,
+            "eidolon_recall_similar" => self.handle_recall_similar(params).await,
+            "eidolon_memory_query" => self.handle_memory_query(params).await,
+            "eidolon_compress_context" => self.handle_compress_context(params).await,
+            "eidolon_orchestrate" => self.handle_orchestrate(params).await,
+            _ => json!({
+                "error": "tool_not_in_auto_list"
+            }),
+        }
+    }
+
     /// Sub-Brain Auto-Orchestration Entry Point
     ///
     /// This is the OPTIMAL integration solution. Single tool call that:
@@ -150,6 +310,7 @@ impl EidolonMcpServer {
     ) -> serde_json::Value {
         let input = params["input"].as_str().unwrap_or("");
         let user_id = params["user_id"].as_str().unwrap_or("default");
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let auto_execute = params["auto_execute"].as_bool().unwrap_or(true);
         let max_tools = params["max_tools"].as_u64().unwrap_or(3).clamp(1, 5) as usize;
         let include_raw_results = params["include_raw_results"].as_bool().unwrap_or(true);
@@ -169,6 +330,7 @@ impl EidolonMcpServer {
 
         // Get embedding-based intent analysis
         let sense_params = json!({
+            "tenant_id": tenant_id,
             "query": input,
             "user_id": user_id,
             "extract_entities": true,
@@ -201,13 +363,26 @@ impl EidolonMcpServer {
 
         let force_execute = params["force_execute"].as_bool().unwrap_or(false);
 
-        let strategy = if force_execute || (confidence > 0.60 && auto_execute) {
-            AutoRoutingStrategy::AutoExecute
-        } else if confidence > 0.35 {
-            AutoRoutingStrategy::ProposeTools
-        } else {
-            AutoRoutingStrategy::DeepAnalysis
-        };
+        let top_recommended_tool = tool_recommendations["recommended_tools"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|item| item["tool"].as_str())
+            .or_else(|| suggested_tools.first().copied())
+            .unwrap_or("eidolon_reason_chain");
+        let context_type = format!("{:?}", intent);
+        let route_decision = self
+            .evaluate_subbrain_route_gate(
+                &tenant_id,
+                top_recommended_tool,
+                confidence,
+                &context_type,
+                "entry",
+                None,
+            )
+            .await;
+        let route_strategy = route_decision["strategy"].as_str().unwrap_or("ASK_USER");
+        let strategy =
+            Self::subbrain_strategy_from_route_gate(route_strategy, auto_execute, force_execute);
 
         // ─────────────────────────────────────────────────────────────────
         // LAYER 4: EXECUTION (if AUTO)
@@ -218,12 +393,14 @@ impl EidolonMcpServer {
 
         if matches!(strategy, AutoRoutingStrategy::AutoExecute) {
             // Get top tools from recommendations
+            let mut seen_tools = HashSet::new();
             let top_tools: Vec<String> = tool_recommendations["recommended_tools"]
                 .as_array()
                 .map(|arr| {
                     arr.iter()
                         .take(max_tools)
                         .filter_map(|t| t["tool"].as_str().map(|s| s.to_string()))
+                        .filter(|tool| seen_tools.insert(tool.clone()))
                         .collect()
                 })
                 .unwrap_or_else(|| {
@@ -231,20 +408,74 @@ impl EidolonMcpServer {
                         .iter()
                         .take(max_tools)
                         .map(|s| s.to_string())
+                        .filter(|tool| seen_tools.insert(tool.clone()))
                         .collect()
                 });
 
             // Execute each tool
             let now_ms = chrono::Utc::now().timestamp_millis();
             for tool_name in &top_tools {
+                let gate_result = self
+                    .evaluate_subbrain_route_gate(
+                        &tenant_id,
+                        tool_name,
+                        confidence,
+                        &context_type,
+                        "child",
+                        Some(tool_name),
+                    )
+                    .await;
+                let gate_strategy = gate_result["strategy"].as_str().unwrap_or("ASK_USER");
+                let gate_allows_execute =
+                    gate_strategy == "AUTO" || (gate_strategy == "PROPOSE" && force_execute);
+                if !gate_allows_execute {
+                    self.record_tool_metric(&tenant_id, tool_name, true, 0, false).await;
+                    self.record_generated_tool_audit(
+                        &tenant_id,
+                        tool_name,
+                        "eidolon_subbrain_auto.child_call",
+                        "rejected",
+                        "route_gate_blocked",
+                        json!({
+                            "latency_us": 0,
+                            "latency_ms": 0.0,
+                            "fallback_used": false,
+                            "parent": "eidolon_subbrain_auto",
+                            "gate": gate_result.clone()
+                        }),
+                    )
+                    .await;
+                    execution_errors.push(json!({
+                        "tool": tool_name,
+                        "error": "route_gate_blocked",
+                        "gate": gate_result
+                    }));
+                    continue;
+                }
+
                 // Phase 1C: Check trauma inhibition before executing
                 {
-                    let trauma = self.trauma.lock().await;
+                    let trauma = self.trauma.write().await;
                     if trauma.is_inhibited(
                         core_rust::sentinel::modes::SentinelMode::Berserk,
-                        tool_name,
+                        &format!("{}:{}", tenant_id, tool_name),
                         now_ms,
                     ) {
+                        self.record_tool_metric(&tenant_id, tool_name, true, 0, false).await;
+                        self.record_generated_tool_audit(
+                            &tenant_id,
+                            tool_name,
+                            "eidolon_subbrain_auto.child_call",
+                            "rejected",
+                            "trauma_inhibited",
+                            json!({
+                                "latency_us": 0,
+                                "latency_ms": 0.0,
+                                "fallback_used": false,
+                                "parent": "eidolon_subbrain_auto"
+                            }),
+                        )
+                        .await;
                         execution_errors.push(json!({
                             "tool": tool_name,
                             "error": "trauma_inhibited",
@@ -254,28 +485,92 @@ impl EidolonMcpServer {
                     }
                 }
 
-                let tool_params = json!({
-                    "query": input,
-                    "pattern": input,
-                    "context": intent_analysis.clone()
-                });
-
-                let result = match tool_name.as_str() {
-                    "eidolon_sense_intent" => self.handle_sense_intent(tool_params).await,
-                    "eidolon_check_pattern" => self.handle_check_pattern(tool_params).await,
-                    "eidolon_reason_chain" => self.handle_reason_chain(tool_params).await,
-                    "eidolon_memory_query" => self.handle_memory_query(tool_params).await,
-                    "eidolon_recall_similar" => self.handle_recall_similar(tool_params).await,
-                    "eidolon_orchestrate" => {
-                        let orch_params = json!({
-                            "task": input,
-                            "confidence": confidence,
-                            "agent_count": 3
-                        });
-                        self.handle_orchestrate(orch_params).await
-                    }
-                    _ => json!({"status": "skipped", "reason": "tool_not_in_auto_list"}),
+                let Some(mut tool_params) = self.subbrain_child_tool_params(
+                    tool_name,
+                    input,
+                    user_id,
+                    &intent_analysis,
+                    confidence,
+                ) else {
+                    self.record_tool_metric(&tenant_id, tool_name, true, 0, false).await;
+                    self.record_generated_tool_audit(
+                        &tenant_id,
+                        tool_name,
+                        "eidolon_subbrain_auto.child_call",
+                        "rejected",
+                        "tool_not_in_auto_list",
+                        json!({
+                            "latency_us": 0,
+                            "latency_ms": 0.0,
+                            "fallback_used": false,
+                            "parent": "eidolon_subbrain_auto"
+                        }),
+                    )
+                    .await;
+                    execution_errors.push(json!({
+                        "tool": tool_name,
+                        "error": "tool_not_in_auto_list"
+                    }));
+                    continue;
                 };
+
+                if let Some(obj) = tool_params.as_object_mut() {
+                    obj.insert("tenant_id".to_string(), json!(tenant_id));
+                }
+
+                let started = std::time::Instant::now();
+                let result = self
+                    .execute_subbrain_supported_tool(tool_name, tool_params)
+                    .await;
+                let latency_us = started.elapsed().as_micros() as u64;
+                let failed = result.get("error").is_some();
+                let fallback_used = result
+                    .get("fallback_used")
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false);
+                self.record_tool_metric(&tenant_id, tool_name, failed, latency_us, fallback_used)
+                    .await;
+                let latency_ms = latency_us as f64 / 1000.0;
+                if failed {
+                    let failure_reason = result
+                        .get("error")
+                        .map(|value| {
+                            value
+                                .as_str()
+                                .map(str::to_string)
+                                .unwrap_or_else(|| value.to_string())
+                        })
+                        .unwrap_or_else(|| "tool_execution_error".to_string());
+                    self.record_generated_tool_audit(
+                        &tenant_id,
+                        tool_name,
+                        "eidolon_subbrain_auto.child_call",
+                        "rejected",
+                        &failure_reason,
+                        json!({
+                            "latency_us": latency_us,
+                            "latency_ms": latency_ms,
+                            "fallback_used": fallback_used,
+                            "parent": "eidolon_subbrain_auto"
+                        }),
+                    )
+                    .await;
+                } else {
+                    self.record_generated_tool_audit(
+                        &tenant_id,
+                        tool_name,
+                        "eidolon_subbrain_auto.child_call",
+                        "accepted",
+                        "tool_call_ok",
+                        json!({
+                            "latency_us": latency_us,
+                            "latency_ms": latency_ms,
+                            "fallback_used": fallback_used,
+                            "parent": "eidolon_subbrain_auto"
+                        }),
+                    )
+                    .await;
+                }
 
                 executed_tools.push(tool_name.clone());
 
@@ -286,10 +581,10 @@ impl EidolonMcpServer {
                     }));
                     // Phase 1C: Record trauma on tool failure
                     {
-                        let mut trauma = self.trauma.lock().await;
+                        let mut trauma = self.trauma.write().await;
                         trauma.record_trauma(
                             core_rust::sentinel::modes::SentinelMode::Berserk,
-                            tool_name,
+                            &format!("{}:{}", tenant_id, tool_name),
                             3.0,
                             now_ms,
                         );
@@ -310,7 +605,7 @@ impl EidolonMcpServer {
             // Phase 4B: Record tool chain as memory for future learning
             if !executed_tools.is_empty() {
                 let chain_str = executed_tools.join("→");
-                let success_count = executed_tools.len() - execution_errors.len();
+                let success_count = executed_tools.len().saturating_sub(execution_errors.len());
                 let chain_content = format!(
                     "chain:{}|success:{}|errors:{}|intent:{:?}|confidence:{:.3}",
                     chain_str,
@@ -320,8 +615,10 @@ impl EidolonMcpServer {
                     confidence
                 );
                 let (chain_embed, _) = self.embed_text_with_fallback(&chain_content);
-                let mut mems = self.memories.lock().await;
-                mems.push(crate::types::MemoryEntry {
+                let mut mems = self.memories.write().await;
+                let tenant_mems = mems.entry(tenant_id.clone()).or_insert_with(Vec::new);
+                tenant_mems.push(crate::types::MemoryEntry {
+                    tenant_id: tenant_id.clone(),
                     timestamp: chrono::Utc::now().timestamp_millis(),
                     category: "tool_chain".to_string(),
                     content: chain_content,
@@ -332,7 +629,7 @@ impl EidolonMcpServer {
 
                 // Record causal edge: intent type → tool success
                 if success_count > 0 {
-                    let mut brain = self.causal_brain.lock().await;
+                    let mut brain = self.causal_brain.write().await;
                     brain.learn(
                         core_rust::sentinel::variables::SentinelVariable::Sentiment,
                         core_rust::sentinel::variables::SentinelVariable::PriceDelta,
@@ -369,6 +666,7 @@ impl EidolonMcpServer {
                     "entities": intent_analysis.get("entities"),
                     "sentiment": intent_analysis.get("sentiment_analysis")
                 },
+                "routing_gate": route_decision,
                 "routing_strategy": format!("{:?}", strategy),
                 "tool_recommendations": tool_recommendations["recommended_tools"],
                 "executed_tools": executed_tools,
@@ -415,10 +713,19 @@ impl EidolonMcpServer {
                     "eidolon_check_pattern" => {
                         if let Some(patterns) = result["result"]["patterns"].as_array() {
                             patterns_detected.extend(patterns.iter().cloned());
+                        } else if let Some(pattern) = result["result"]["pattern"].as_str() {
+                            patterns_detected.push(json!({
+                                "pattern": pattern,
+                                "inhibited": result["result"]["inhibited"].as_bool().unwrap_or(false)
+                            }));
                         }
                     }
                     "eidolon_memory_query" | "eidolon_recall_similar" => {
                         if let Some(memories) = result["result"]["memories"].as_array() {
+                            relevant_memories.extend(memories.iter().cloned());
+                        } else if let Some(memories) = result["result"]["results"].as_array() {
+                            relevant_memories.extend(memories.iter().cloned());
+                        } else if let Some(memories) = result["result"]["matches"].as_array() {
                             relevant_memories.extend(memories.iter().cloned());
                         }
                     }

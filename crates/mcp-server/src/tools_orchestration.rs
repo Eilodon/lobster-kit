@@ -360,7 +360,7 @@ impl EidolonMcpServer {
 
         let primary_tool_correction_rate = {
             let top_tool = ranked.first().map(|entry| entry.0.as_str()).unwrap_or("");
-            let metrics = self.tool_metrics.lock().await;
+            let metrics = self.tool_metrics.write().await;
             metrics.get(top_tool).map_or(0.0, |metric| {
                 let calls = metric.calls.max(1) as f64;
                 clamp01((metric.errors as f64 + metric.fallback_count as f64 * 0.5) / calls)
@@ -390,6 +390,7 @@ impl EidolonMcpServer {
         &self,
         params: serde_json::Value,
     ) -> serde_json::Value {
+        let tenant_id = crate::helpers::extract_tenant_id(&params);
         let tool_name = params["tool_name"]
             .as_str()
             .map(|value| value.trim().to_string())
@@ -421,6 +422,7 @@ impl EidolonMcpServer {
             Self::is_tool_gen_enabled_in_runtime();
         if !tool_gen_enabled {
             self.record_generated_tool_audit(
+                &tenant_id,
                 &tool_name,
                 &need,
                 "rejected",
@@ -458,6 +460,7 @@ impl EidolonMcpServer {
         if (action == "accept" || action == "promote") && active_tool_count >= max_dynamic_tools {
             let reason = "tool_gen_capacity_exceeded";
             self.record_generated_tool_audit(
+                &tenant_id,
                 &tool_name,
                 &need,
                 "rejected",
@@ -601,6 +604,7 @@ impl EidolonMcpServer {
         };
 
         self.record_generated_tool_audit(
+            &tenant_id,
             &tool_name,
             &need,
             &status,
@@ -719,17 +723,21 @@ impl EidolonMcpServer {
     }
 
     async fn tensor_oracle_insight(&self, query: &str, is_action: bool) -> String {
-        let trauma_severity = {
-            let trauma = self.trauma.lock().await;
-            trauma.get_trauma_severity(core_rust::sentinel::modes::SentinelMode::Zen, "oracle_query")
-                as f32
-        };
-        let base_entropy = if is_action { 0.2 } else { 0.8 };
-        match self
-            .tensor_oracle
-            .generate_with_thermodynamics(query, base_entropy, trauma_severity, is_action)
-            .await
-        {
+        // Phase 3: Build routing context snapshot — trauma read, then drop lock.
+        let base_entropy: f32 = if is_action { 0.2 } else { 0.8 };
+        let routing_ctx = self
+            .build_routing_context(
+                base_entropy,
+                core_rust::sentinel::modes::SentinelMode::Zen,
+                "oracle_query",
+                2000, // oracle queries get a generous latency budget
+                false,
+                is_action,
+                "default",
+            )
+            .await;
+
+        match self.routed_generate(&routing_ctx, query).await {
             Ok(text) => text,
             Err(err) => {
                 eprintln!(
