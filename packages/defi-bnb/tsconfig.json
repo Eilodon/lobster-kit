@@ -4,7 +4,7 @@
         "outDir": "./dist",
         "rootDir": "./src",
         "composite": true,
-        "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
         "typeRoots": [
             "../../node_modules/@types"
         ],
@@ -18,5 +18,13 @@
     "exclude": [
         "node_modules",
         "dist"
+    ],
+    "references": [
+        {
+            "path": "../core"
+        },
+        {
+            "path": "../toolkit"
+        }
     ]
 }

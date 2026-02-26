@@ -4,7 +4,7 @@
         "outDir": "./dist",
         "rootDir": ".",
         "composite": true,
-        "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
         "types": [
             "node",
             "vitest/globals"

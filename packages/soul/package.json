@@ -5,10 +5,10 @@
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
-        "build": "tsc",
+        "build": "tsc -b",
         "build:wasm": "bash ../../scripts/build_wasm.sh",
         "lint": "eslint src/**/*.ts",
-        "clean": "rm -rf dist",
+        "clean": "rm -rf dist tsconfig.tsbuildinfo",
         "test": "vitest"
     },
     "license": "SEE LICENSE IN LICENSE.md",
