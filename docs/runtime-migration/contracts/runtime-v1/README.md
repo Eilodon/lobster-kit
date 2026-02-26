@@ -14,6 +14,7 @@ Files:
 - `context.proto`
 - `toolgen.proto`
 - `mcp-compatibility.contract.json`
+- `mcp-tooling.manifest.json` (single source for MCP tooling constants + static `tools/list` payload definitions used by codegen)
 
 Compatibility rules:
 - `eidolon_*` tools remain stable during dual-stack window.
@@ -23,3 +24,7 @@ Compatibility rules:
 
 Promotion rule:
 - A phase is promoted only after previous phase SLOs are green for 7 consecutive days.
+
+Codegen:
+- Run `pnpm codegen:mcp-contract` to regenerate MCP contract artifacts.
+- Run `pnpm codegen:check` in CI/pre-commit to detect drift.

@@ -28,7 +28,7 @@ pub struct Sentinel {
 impl Sentinel {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        let mut brain = CausalGraph::new();
+        let mut brain = CausalGraph::new(SentinelVariable::COUNT);
 
         // Load Priors (The "Nature" part of Nature vs Nurture)
         Self::load_priors(&mut brain);
@@ -51,8 +51,8 @@ impl Sentinel {
     fn load_priors(graph: &mut CausalGraph) {
         // Tắc nghẽn Mempool (5) -> Tăng Gas (4)
         graph.set_edge(
-            SentinelVariable::MempoolPendingCnt,
-            SentinelVariable::GasPriceGwei,
+            SentinelVariable::MempoolPendingCnt.index(),
+            SentinelVariable::GasPriceGwei.index(),
             CausalEdge {
                 successes: 95,
                 failures: 5,
@@ -62,8 +62,8 @@ impl Sentinel {
 
         // Gas tăng cao (4) -> Biến động giá (2)
         graph.set_edge(
-            SentinelVariable::GasPriceGwei,
-            SentinelVariable::Volatility,
+            SentinelVariable::GasPriceGwei.index(),
+            SentinelVariable::Volatility.index(),
             CausalEdge {
                 successes: 60,
                 failures: 40,
@@ -73,8 +73,8 @@ impl Sentinel {
 
         // Whale Flow (6) -> Price Delta (0)
         graph.set_edge(
-            SentinelVariable::WhaleNetFlow,
-            SentinelVariable::PriceDelta,
+            SentinelVariable::WhaleNetFlow.index(),
+            SentinelVariable::PriceDelta.index(),
             CausalEdge {
                 successes: 85,
                 failures: 15,
@@ -84,8 +84,8 @@ impl Sentinel {
 
         // Sentiment (11) -> Price Delta (0)
         graph.set_edge(
-            SentinelVariable::Sentiment,
-            SentinelVariable::PriceDelta,
+            SentinelVariable::Sentiment.index(),
+            SentinelVariable::PriceDelta.index(),
             CausalEdge {
                 successes: 70,
                 failures: 30,
@@ -95,8 +95,8 @@ impl Sentinel {
 
         // Macro Factor (12) -> Volatility (2)
         graph.set_edge(
-            SentinelVariable::MacroFactor,
-            SentinelVariable::Volatility,
+            SentinelVariable::MacroFactor.index(),
+            SentinelVariable::Volatility.index(),
             CausalEdge {
                 successes: 80,
                 failures: 20,
@@ -106,8 +106,8 @@ impl Sentinel {
 
         // Liquidity Imbalance (7) -> Price Delta (0)
         graph.set_edge(
-            SentinelVariable::LiquidityImbalance,
-            SentinelVariable::PriceDelta,
+            SentinelVariable::LiquidityImbalance.index(),
+            SentinelVariable::PriceDelta.index(),
             CausalEdge {
                 successes: 75,
                 failures: 25,
@@ -117,8 +117,8 @@ impl Sentinel {
 
         // Smart Money (8) -> Whale Flow (6) (Smart money precedes whales)
         graph.set_edge(
-            SentinelVariable::SmartMoneyActivity,
-            SentinelVariable::WhaleNetFlow,
+            SentinelVariable::SmartMoneyActivity.index(),
+            SentinelVariable::WhaleNetFlow.index(),
             CausalEdge {
                 successes: 65,
                 failures: 35,
@@ -174,9 +174,10 @@ impl Sentinel {
 
         // If gas price is high
         if gas_price > 0.8 {
-            let volatility_risk = self
-                .brain
-                .get_causal_effect(SentinelVariable::GasPriceGwei, SentinelVariable::Volatility);
+            let volatility_risk = self.brain.get_causal_effect(
+                SentinelVariable::GasPriceGwei.index(),
+                SentinelVariable::Volatility.index(),
+            );
 
             if volatility_risk > 0.5 {
                 if !self

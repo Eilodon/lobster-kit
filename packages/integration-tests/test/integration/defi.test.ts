@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DeFiModule } from '../src/defi';
-import { EidolonConfig } from '../src/types';
+import { DeFiModule } from '../../src/defi';
+import { EidolonConfig } from '../../src/types';
 
 // Mock viem clients
 const mockWalletClient = {

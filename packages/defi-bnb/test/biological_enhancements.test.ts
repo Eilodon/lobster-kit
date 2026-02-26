@@ -88,12 +88,14 @@ describe('Biological Enhancements (Therapies)', () => {
             const mockSecurity = { scanContract: vi.fn().mockResolvedValue({ riskScore: 0 }) } as any;
             defi = new DeFiModule(mockWalletClient, mockPublicClient, mockConfig, mockSecurity);
 
-            // Inject some tokens
-            (defi as any).tokens = {
+            // Inject some tokens via config
+            const originalTokens = { ...mockConfig.chainConfig!.tokens };
+            mockConfig.chainConfig!.tokens = {
+                ...originalTokens,
                 TOKEN_A: { symbol: 'TOKEN_A', address: '0xA', decimals: 18 },
                 TOKEN_B: { symbol: 'TOKEN_B', address: '0xB', decimals: 18 },
                 TOKEN_C: { symbol: 'TOKEN_C', address: '0xC', decimals: 18 }, // Fail case
-            };
+            } as any;
 
             vi.clearAllMocks();
         });

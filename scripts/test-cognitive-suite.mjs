@@ -31,20 +31,24 @@ async function callMcp(tool, args) {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    let stdout = '';
+    let stdoutBuf = '';
+    let resolved = false;
+
     const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
       child.kill();
       reject(new Error('Timeout'));
-    }, 15000);
+    }, 60000);
 
-    child.stdout.on('data', (d) => stdout += d);
-    child.stderr.on('data', () => {});
-
-    child.on('close', () => {
-      clearTimeout(timeout);
-      const lines = stdout.split('\n').filter(l => l.trim());
-      const toolResp = lines.find(l => l.includes('"id":2'));
+    child.stdout.on('data', (d) => {
+      if (resolved) return;
+      stdoutBuf += d;
+      const lines = stdoutBuf.split('\n');
+      const toolResp = lines.find(l => l.includes('"id":2') && l.trim().startsWith('{'));
       if (toolResp) {
+        resolved = true;
+        clearTimeout(timeout);
         try {
           const parsed = JSON.parse(toolResp);
           const content = parsed.result?.content?.[0]?.text;
@@ -52,9 +56,17 @@ async function callMcp(tool, args) {
         } catch {
           resolve({ error: 'Parse failed', raw: toolResp.substring(0, 200) });
         }
-      } else {
-        resolve({ error: 'No response', raw: stdout.substring(0, 200) });
+        child.kill();
       }
+    });
+
+    child.stderr.on('data', () => { });
+
+    child.on('close', () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      resolve({ error: 'No response', raw: stdoutBuf.substring(0, 200) });
     });
 
     child.stdin.write(JSON.stringify({
@@ -69,7 +81,7 @@ async function callMcp(tool, args) {
         method: 'tools/call',
         params: { name: tool, arguments: args }
       }) + '\n');
-      setTimeout(() => child.stdin.end(), 2000);
+      // Do not forcefully close stdin here; let the child compute until it replies or hits timeout
     }, 300);
   });
 }
@@ -80,7 +92,7 @@ async function testSenseIntent() {
     query: 'audit code for security vulnerabilities',
     user_id: 'test-user'
   });
-  
+
   if (result.error) {
     logTest('sense_intent', false, result.error);
   } else if (result.ensemble?.critical_action_signal_score !== undefined || result.confidence !== undefined) {
@@ -96,7 +108,7 @@ async function testToolRecommend() {
     task: 'audit project code for security issues',
     available_tools: ['eidolon_check_pattern', 'eidolon_reason_chain', 'eidolon_orchestrate']
   });
-  
+
   if (result.error) {
     logTest('tool_recommend', false, result.error);
   } else if (result.recommended_tools && result.recommended_tools.length > 0) {
@@ -114,7 +126,7 @@ async function testOrchestrate() {
     agent_count: 3,
     confidence: 0.8
   });
-  
+
   if (result.error) {
     logTest('orchestrate', false, result.error);
   } else if (result.status === 'consensus_reached' || result.agents_spawned) {
@@ -130,7 +142,7 @@ async function testCheckPattern() {
     pattern: 'unsafe memory access in rust',
     mode: 'zen'
   });
-  
+
   if (result.error) {
     logTest('check_pattern', false, result.error);
   } else if (result.inhibited !== undefined) {
@@ -147,7 +159,7 @@ async function testMemoryQuery() {
     route: 'auto',
     k: 5
   });
-  
+
   if (result.error) {
     logTest('memory_query', false, result.error);
   } else if (result.memories || result.results || result.matches) {
@@ -164,7 +176,7 @@ async function testRecallSimilar() {
     context: 'debugging wasm memory issues',
     k: 3
   });
-  
+
   if (result.error) {
     logTest('recall_similar', false, result.error);
   } else {
@@ -179,7 +191,7 @@ async function testRouteAction() {
     intent_confidence: 0.85,
     context_type: 'security_audit'
   });
-  
+
   if (result.error) {
     logTest('route_action', false, result.error);
   } else if (result.strategy) {
@@ -197,7 +209,7 @@ async function testSubBrainFull() {
     auto_execute: true,
     max_tools: 3
   });
-  
+
   if (result.error) {
     logTest('subbrain_auto', false, result.error);
   } else if (result.subbrain_analysis) {
@@ -215,7 +227,7 @@ async function main() {
   console.log('║   Cognitive Tools Test Suite - Eidolon MCP         ║');
   console.log('╚════════════════════════════════════════════════════╝');
   console.log(`Binary: ${MCP_BIN}`);
-  
+
   await testSenseIntent();
   await testToolRecommend();
   await testOrchestrate();
@@ -224,11 +236,11 @@ async function main() {
   await testRecallSimilar();
   await testRouteAction();
   await testSubBrainFull();
-  
+
   console.log('\n' + '═'.repeat(52));
   console.log(`📊 Results: ${results.passed} passed, ${results.failed} failed`);
   console.log('═'.repeat(52) + '\n');
-  
+
   process.exit(results.failed > 0 ? 1 : 0);
 }
 

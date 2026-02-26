@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EidolonGuard } from '../src/eidolon/EidolonGuard';
 import { PublicClient, WalletClient } from 'viem';
 import { EidolonBus, EidolonEventType } from '@eidolon/core';
-import { WasmAdapter as CoreWasmAdapter } from '@eidolon/core';
 import { WasmAdapter as SoulWasmAdapter } from '../src/WasmAdapter';
 
 // Mock WasmAdapter
@@ -216,7 +215,6 @@ describe('EidolonGuard', () => {
 
     beforeEach(() => {
         vi.resetAllMocks();
-        CoreWasmAdapter.setInstance(SoulWasmAdapter.getInstance());
         learnFromOutcomeMock.mockReset();
         stimulateMock.mockReset();
     });

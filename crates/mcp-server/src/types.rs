@@ -134,3 +134,57 @@ pub struct ToolAutopilotGuardrails {
     pub max_p99_p50_ratio: f64,
     pub min_sample_count: u64,
 }
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EffectivePolicyThresholds {
+    pub auto_execute_min_confidence: f64,
+    pub propose_min_confidence: f64,
+    pub ingress_block_risk: f64,
+    pub ingress_block_critical: f64,
+    pub ingress_ask_risk: f64,
+    pub ingress_ask_critical: f64,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PolicyDecision {
+    Allow,
+    AskUser,
+    Block,
+}
+
+impl PolicyDecision {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PolicyDecision::Allow => "allow",
+            PolicyDecision::AskUser => "ask_user",
+            PolicyDecision::Block => "block",
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct PolicySignalSnapshot {
+    pub lexical_risk_score: f64,
+    pub critical_action_signal: f64,
+    pub privacy_sensitive_payload: bool,
+    pub actionable_tool: bool,
+    pub trauma_inhibited: bool,
+    pub historical_success_rate: f64,
+    pub historical_fallback_rate: f64,
+    pub historical_calls: u64,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct UnifiedPolicyContext {
+    pub policy_version: String,
+    pub request_id: String,
+    pub tenant_id: TenantId,
+    pub tool_name: String,
+    pub timestamp_ms: i64,
+    pub signals: PolicySignalSnapshot,
+    pub thresholds: EffectivePolicyThresholds,
+    pub route_gate: serde_json::Value,
+    pub decision: PolicyDecision,
+    pub decision_reason: String,
+}

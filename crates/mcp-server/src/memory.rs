@@ -196,7 +196,7 @@ impl EidolonMcpServer {
                 if cause == target {
                     continue;
                 }
-                let effect_weight = brain.get_causal_effect(cause, target) as f64;
+                let effect_weight = brain.get_causal_effect(cause.index(), target.index()) as f64;
                 let observation = observation_scores.get(&cause).copied().unwrap_or(0.0);
                 let causal_score = clamp01(effect_weight) * clamp01(observation);
                 if effect_weight > 0.0 || observation > 0.0 {

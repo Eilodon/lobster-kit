@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AnalyticsModule } from '../src/analytics';
-import { EidolonConfig } from '../src/types';
+import { AnalyticsModule } from '../../src/analytics';
+import { EidolonConfig } from '../../src/types';
 import axios from 'axios';
 
 // Mock axios

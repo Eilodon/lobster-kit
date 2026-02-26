@@ -19,7 +19,7 @@ pub struct SentinelActor {
 impl SentinelActor {
     pub fn new() -> Self {
         Self {
-            graph: CausalGraph::new(),
+            graph: CausalGraph::new(SentinelVariable::COUNT),
             mode: SentinelMode::Zen,
             risk_score: 0.1,
         }
@@ -43,8 +43,8 @@ impl SentinelActor {
         for (var, val) in data {
             if var == SentinelVariable::GasPriceGwei && val > 0.8 {
                 let risk = self.graph.get_causal_effect(
-                    SentinelVariable::GasPriceGwei,
-                    SentinelVariable::Volatility,
+                    SentinelVariable::GasPriceGwei.index(),
+                    SentinelVariable::Volatility.index(),
                 );
                 if risk > max_risk {
                     max_risk = risk;

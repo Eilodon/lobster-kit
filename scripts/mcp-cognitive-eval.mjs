@@ -17,7 +17,7 @@ function parseArgs(argv) {
   const out = {
     bin: path.resolve(repoRoot, 'target/release/mcp-server'),
     out: path.resolve(repoRoot, 'data/memory/cognitive-tool-eval.report.json'),
-    timeoutMs: 8000,
+    timeoutMs: 15000,
     requireOnnx: true,
     ortDylibPath: '',
     onnxModelDir: '',

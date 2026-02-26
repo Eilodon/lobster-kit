@@ -10,7 +10,6 @@ import { WasmAdapter, ValueInvariant as WasmValueInvariant, AntiRug as WasmAntiR
 import { ClawOracle } from '../sensors/ClawOracle';
 import { GoPlusSecurity } from '../oracles/GoPlusSecurity';
 import { EidolonSimulator, ShadowTransaction, SimulationResult } from '../simulation/EidolonSimulator';
-import { DeepSeekOracle } from '../ai/DeepSeekOracle';
 import { EidolonBus, EidolonEvent, EidolonEventType, TradeExecutedEvent } from '@eidolon/core';
 import { TraumaRegistry } from './TraumaRegistry';
 import { KpiTracker, KpiSnapshot } from '../metrics/KpiTracker';
@@ -109,16 +108,8 @@ export class EidolonGuard {
         this.wallet = (kit as any).walletClient ?? kit.writeClient;
         this.config = config;
 
-        // FIX U1: Wire DeepSeek Oracle
-        let neuralOracle;
-        if (kit.config.deepSeekConfig && kit.config.deepSeekConfig.apiKey) {
-            neuralOracle = new DeepSeekOracle({
-                apiKey: kit.config.deepSeekConfig.apiKey,
-                model: kit.config.deepSeekConfig.model,
-                timeout: kit.config.deepSeekConfig.timeout,
-                baseUrl: kit.config.deepSeekConfig.baseUrl
-            });
-        }
+        // FIX U1: Legacy Oracle Removed (Sub-brain delegation only)
+        let neuralOracle; // To be provided via external interface if needed
 
         this.mind = new DivineTransparency(neuralOracle);
         this.brain = new ActiveLearning();

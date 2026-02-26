@@ -1,7 +1,7 @@
 # 🦞 Eidolon V4: The Apex Cognitive Infrastructure
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://github.com/Eilodon/lobster-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/Eilodon/lobster-kit/actions)
+[![Build Status](https://github.com/eidolon/bnb/actions/workflows/ci.yml/badge.svg)](https://github.com/eidolon/bnb/actions)
 [![MCP Ready](https://img.shields.io/badge/MCP-Ready-green.svg)](https://modelcontextprotocol.io/)
 [![Rust Native](https://img.shields.io/badge/Rust-Native%20Core-orange.svg)](https://www.rust-lang.org/)
 
@@ -86,21 +86,21 @@ Legacy DeFi bridge tools are compatibility-only and disabled by default (`LEGACY
 
 ```bash
 # 1. Clone & Build the Release binary
-git clone https://github.com/Eilodon/lobster-kit.git
-cd lobster-kit/crates/mcp-server
+git clone https://github.com/eidolon/bnb.git
+cd bnb/crates/mcp-server
 cargo build --release
 
 # 2. Add to your MCP Client Configuration
 {
   "mcpServers": {
     "eidolon-v4": {
-      "command": "/path/to/lobster-kit/scripts/mcp-cursor-launch.sh",
+      "command": "/path/to/bnb/scripts/mcp-cursor-launch.sh",
       "args": [],
       "env": {
-        "TENSOR_ORACLE_GGUF_PATH": "/path/to/lobster-kit/.models/qwen3-1.7b-instruct-q4_k_m.gguf",
-        "TENSOR_ORACLE_TOKENIZER_PATH": "/path/to/lobster-kit/.models/qwen3-tokenizer.json",
-        "ONNX_MODEL_DIR": "/path/to/lobster-kit/.models",
-        "ORT_DYLIB_PATH": "/path/to/lobster-kit/.models/libonnxruntime.so"
+        "TENSOR_ORACLE_GGUF_PATH": "/path/to/bnb/.models/qwen3-1.7b-instruct-q4_k_m.gguf",
+        "TENSOR_ORACLE_TOKENIZER_PATH": "/path/to/bnb/.models/qwen3-tokenizer.json",
+        "ONNX_MODEL_DIR": "/path/to/bnb/.models",
+        "ORT_DYLIB_PATH": "/path/to/bnb/.models/libonnxruntime.so"
       }
     }
   }
@@ -111,7 +111,7 @@ cargo build --release
 
 ```bash
 # 1. Build the HTTP Gateway
-cd lobster-kit/crates/eidolon-gateway
+cd bnb/crates/eidolon-gateway
 cargo build --release
 
 # 2. Run the server with Gateway configurations

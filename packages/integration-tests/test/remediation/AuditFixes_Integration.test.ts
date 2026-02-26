@@ -101,8 +101,13 @@ describe('Audit Remediation Integration', () => {
         });
 
         it('should return empty array for historical value instead of throwing', async () => {
+            const originalPath = (kit.analytics.constructor as any).HISTORY_FILE;
+            (kit.analytics.constructor as any).HISTORY_FILE = path.resolve(process.cwd(), '.eidolon', `temp_history_${Date.now()}.json`);
+
             const history = await kit.analytics.getHistoricalValue(30);
             expect(history).toEqual([]);
+
+            (kit.analytics.constructor as any).HISTORY_FILE = originalPath;
         });
     });
 

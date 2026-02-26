@@ -7,7 +7,6 @@ const mockGraph = {
     import_edges: vi.fn()
 };
 
-import { WasmAdapter as CoreWasmAdapter } from '@eidolon/core';
 import { CausalBrain } from '@eidolon/core';
 
 describe('CausalBrain WASM schema regression', () => {
@@ -16,9 +15,9 @@ describe('CausalBrain WASM schema regression', () => {
         mockGraph.get_edge.mockClear();
         mockGraph.export_edges.mockClear();
         mockGraph.import_edges.mockClear();
-        CoreWasmAdapter.setInstance({
+        (globalThis as any).EIDOLON_WASM_ADAPTER = {
             createCausalGraph: () => mockGraph
-        } as any);
+        };
     });
 
     it('should send named edge keys with successes/failures when importing synaptic map', () => {

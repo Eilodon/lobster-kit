@@ -4,9 +4,31 @@
 // payload parsing, and legacy tool normalization.
 // Implements as associated functions on EidolonMcpServer (impl-block extension).
 
+use crate::generated::mcp_contract::{
+    list_tools_static_catalog, ACCEPTED_ARGS_FIELDS, ACCEPTED_NAME_FIELDS,
+    LEGACY_DEFI_COMPAT_TOOL_CATALOG,
+};
 use crate::EidolonMcpServer;
 
 impl EidolonMcpServer {
+    fn accepted_name_fields_json() -> serde_json::Value {
+        serde_json::Value::Array(
+            ACCEPTED_NAME_FIELDS
+                .iter()
+                .map(|field| serde_json::Value::String((*field).to_string()))
+                .collect(),
+        )
+    }
+
+    fn accepted_args_fields_json() -> serde_json::Value {
+        serde_json::Value::Array(
+            ACCEPTED_ARGS_FIELDS
+                .iter()
+                .map(|field| serde_json::Value::String((*field).to_string()))
+                .collect(),
+        )
+    }
+
     fn tenant_id_schema_property() -> serde_json::Value {
         serde_json::json!({
             "type": "string",
@@ -102,8 +124,8 @@ impl EidolonMcpServer {
                 -32602,
                 "tools/call requires one of [name, tool] fields.",
                 serde_json::json!({
-                    "accepted_name_fields": ["name", "tool"],
-                    "accepted_args_fields": ["arguments", "input"]
+                    "accepted_name_fields": Self::accepted_name_fields_json(),
+                    "accepted_args_fields": Self::accepted_args_fields_json()
                 }),
             ));
         };
@@ -137,8 +159,8 @@ impl EidolonMcpServer {
                 "Requested tool is not registered by this MCP runtime.",
                 serde_json::json!({
                     "tool_name": tool_name,
-                    "accepted_name_fields": ["name", "tool"],
-                    "accepted_args_fields": ["arguments", "input"]
+                    "accepted_name_fields": Self::accepted_name_fields_json(),
+                    "accepted_args_fields": Self::accepted_args_fields_json()
                 }),
             )
         } else {
@@ -172,38 +194,7 @@ impl EidolonMcpServer {
     }
 
     pub(crate) async fn list_tools_payload(&self) -> serde_json::Value {
-        let mut tools = vec![
-            serde_json::json!({ "name": "eidolon_recall_user", "description": "Recall User Profile", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_sense_intent", "description": "Sense intent", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "user_id": { "type": "string" } }, "required": ["query"] } }),
-            serde_json::json!({ "name": "eidolon_check_pattern", "description": "Check safety guardrail", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" }, "mode": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_simulate_response", "description": "Simulate causal response", "inputSchema": { "type": "object", "properties": { "action": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_commit_pattern", "description": "Commit to memory", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_reason_chain", "description": "Deep reasoning chain", "inputSchema": { "type": "object", "properties": { "draft": { "type": "string" }, "context": { "type": "string" }, "mode": { "type": "string", "enum": ["auto", "fast", "deep"] }, "latency_budget_ms": { "type": "number" } } } }),
-            serde_json::json!({ "name": "eidolon_recall_similar", "description": "Recall similar memories", "inputSchema": { "type": "object", "properties": { "context": { "type": "string" }, "k": { "type": "number" } } } }),
-            serde_json::json!({ "name": "eidolon_memory_query", "description": "Query Vector Memory", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "route": { "type": "string", "enum": ["auto", "episodic", "semantic", "causal"] }, "k": { "type": "number" } } } }),
-            serde_json::json!({ "name": "eidolon_compress_context", "description": "Compress Context", "inputSchema": { "type": "object", "properties": { "target_tokens": { "type": "number" }, "context": { "type": "string", "description": "Raw text to compress. If empty, compresses from memory store." }, "preserve_recent": { "type": "number" }, "dedupe_threshold": { "type": "number" }, "focus_terms": { "type": "array", "items": { "type": "string" } } } } }),
-            serde_json::json!({ "name": "eidolon_record_outcome", "description": "Record outcome and learn", "inputSchema": { "type": "object", "properties": { "pattern": { "type": "string" }, "mode": { "type": "string" }, "severity": { "type": "number" } } } }),
-            serde_json::json!({ "name": "eidolon_update_user", "description": "Update User", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_dream_conversation", "description": "Dream conversation replay", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" } } } }),
-            serde_json::json!({ "name": "eidolon_orchestrate", "description": "Orchestrate mult-agents", "inputSchema": { "type": "object", "properties": { "agent_count": { "type": "number" }, "task": { "type": "string" }, "confidence": { "type": "number" }, "latency_budget_ms": { "type": "number" } } } }),
-            serde_json::json!({ "name": "eidolon_tool_recommend", "description": "Recommend tool", "inputSchema": { "type": "object", "properties": { "task": { "type": "string" }, "available_tools": { "type": "array", "items": { "type": "string" } }, "recommender_model": { "type": "string", "enum": ["v1", "v2"] }, "shadow_mode": { "type": "boolean" } } } }),
-            serde_json::json!({ "name": "eidolon_subbrain_auto", "description": "Sub-Brain Auto-Orchestration: Automatically classifies intent, recommends tools, and executes based on confidence", "inputSchema": { "type": "object", "properties": { "input": { "type": "string", "description": "User input to analyze" }, "user_id": { "type": "string" }, "auto_execute": { "type": "boolean", "default": true }, "force_execute": { "type": "boolean", "default": false }, "max_tools": { "type": "number", "default": 3 }, "include_raw_results": { "type": "boolean", "default": true } }, "required": ["input"] } }),
-            serde_json::json!({ "name": "eidolon_route_action", "description": "Meta-cognitive routing policy returning AUTO, PROPOSE, or ASK_USER", "inputSchema": { "type": "object", "properties": { "suggested_tool": { "type": "string" }, "intent_confidence": { "type": "number" }, "context_type": { "type": "string" } }, "required": ["suggested_tool", "intent_confidence"] } }),
-            serde_json::json!({ "name": "eidolon_generated_tool_decision", "description": "Generated tool governance decision", "inputSchema": { "type": "object", "properties": { "tool_name": { "type": "string" }, "action": { "type": "string", "enum": ["accept", "reject", "promote"] }, "need": { "type": "string" }, "reason": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_forge_tool", "description": "Forge a WASM tool", "inputSchema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "code": { "type": "string" } }, "required": ["name", "code"] } }),
-            serde_json::json!({ "name": "eidolon_set_entropy", "description": "Force entropy state", "inputSchema": { "type": "object", "properties": { "target_entropy": { "type": "number" }, "duration_ms": { "type": "number" } }, "required": ["target_entropy", "duration_ms"] } }),
-            serde_json::json!({ "name": "eidolon_oracle_query", "description": "TensorOracle local inference query", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } }, "required": ["query"] } }),
-            // Legacy aliases
-            serde_json::json!({ "name": "eidolon_oracle_sense", "description": "Legacy Oracle market sensing (compat mode only)", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_defi_quote", "description": "Legacy DeFi quote bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
-            serde_json::json!({ "name": "eidolon_security_scan", "description": "Legacy contract security scan bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "contract": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_get_portfolio", "description": "Legacy portfolio snapshot bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "owner": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_execute_swap", "description": "Legacy execute swap bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "token_in": { "type": "string" }, "token_out": { "type": "string" }, "amount": {} } } }),
-            serde_json::json!({ "name": "eidolon_panic_button", "description": "Legacy emergency mode bridge (compat mode only)", "inputSchema": { "type": "object", "properties": { "wallet": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_recall", "description": "Legacy user recall alias", "inputSchema": { "type": "object", "properties": { "user_id": { "type": "string" }, "wallet": { "type": "string" }, "address": { "type": "string" } } } }),
-            serde_json::json!({ "name": "eidolon_intuition", "description": "Legacy intent sensing alias", "inputSchema": { "type": "object", "properties": {} } }),
-            serde_json::json!({ "name": "eidolon_dream", "description": "Legacy dream replay alias", "inputSchema": { "type": "object", "properties": { "episodes": { "type": "number" }, "cycles": { "type": "number" } } } }),
-        ];
+        let mut tools = list_tools_static_catalog();
 
         let dynamic_tools = self.dynamic_tools.write().await;
         for (name, tool) in dynamic_tools.iter() {
@@ -222,20 +213,12 @@ impl EidolonMcpServer {
         }
 
         if !Self::legacy_defi_compat_enabled() {
-            let legacy_defi_tools = [
-                "eidolon_oracle_sense",
-                "eidolon_defi_quote",
-                "eidolon_security_scan",
-                "eidolon_get_portfolio",
-                "eidolon_execute_swap",
-                "eidolon_panic_button",
-            ];
             tools.retain(|tool| {
                 let name = tool
                     .get("name")
                     .and_then(|value| value.as_str())
                     .unwrap_or("");
-                !legacy_defi_tools.contains(&name)
+                !LEGACY_DEFI_COMPAT_TOOL_CATALOG.contains(&name)
             });
         }
 

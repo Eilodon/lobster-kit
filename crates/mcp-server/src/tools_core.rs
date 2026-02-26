@@ -72,6 +72,9 @@ impl EidolonMcpServer {
                     }
                 })
         };
+        let thresholds = self
+            .effective_policy_thresholds(&tenant_id, suggested_tool)
+            .await;
 
         let composite_confidence = (intent_confidence * 0.50f32
             + thermo_coherence * 0.15f32
@@ -84,12 +87,14 @@ impl EidolonMcpServer {
                 "ASK_USER",
                 "Tool execution blocked by TraumaRegistry. Mandatory user intervention required.",
             )
-        } else if composite_confidence >= 0.88 && policy_score >= 0.75 {
+        } else if composite_confidence >= thresholds.auto_execute_min_confidence as f32
+            && policy_score >= 0.75
+        {
             (
                 "AUTO",
                 "High confidence plus stable policy history. Executing automatically.",
             )
-        } else if composite_confidence >= 0.62 {
+        } else if composite_confidence >= thresholds.propose_min_confidence as f32 {
             ("PROPOSE", "Moderate confidence. Suggesting 1-Click execution for Human-on-the-Loop verification.")
         } else {
             ("ASK_USER", "Low confidence signals resulting from entropy or lacking historical policy. Falling back to explicit prompt.")
@@ -103,7 +108,11 @@ impl EidolonMcpServer {
                 "intent_confidence": intent_confidence,
                 "thermo_coherence": thermo_coherence,
                 "trauma_safety": trauma_safety,
-                "learned_policy_score": policy_score
+                "learned_policy_score": policy_score,
+                "thresholds": {
+                    "auto_execute_min_confidence": thresholds.auto_execute_min_confidence,
+                    "propose_min_confidence": thresholds.propose_min_confidence
+                }
             },
             "reason": reason
         })

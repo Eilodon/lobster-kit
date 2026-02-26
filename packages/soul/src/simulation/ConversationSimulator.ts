@@ -90,7 +90,7 @@ export class ConversationSimulator {
     }
 
     private cloneGraph(original: CausalGraph): CausalGraph {
-        const clone = this.adapter.createCausalGraph();
+        const clone = this.adapter.createCausalGraph(original.node_count ?? 13);
         // Use WASM-bindgen serialization to clone state
         // This is expensive but accurate.
         // In V3 Rust, we could add a native clone() if perf is an issue.

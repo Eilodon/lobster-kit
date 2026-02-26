@@ -9,7 +9,6 @@
 export { BreathEngine, BreathPhase, type PhaseDurations } from './ai/BreathEngine';
 export { ThermodynamicEngine, type ThermoConfig, DEFAULT_THERMO_CONFIG } from './ai/ThermodynamicEngine';
 export { Vector, Matrix } from './ai/LinearAlgebra';
-export { DeepSeekOracle, type DeepSeekConfig } from './ai/DeepSeekOracle';
 export { CausalBrain, CausalEdge, type SentinelVariable } from '@eidolon/core';
 export { type IOracle, type MarketContext, type OracleGenerationOptions, type OracleInsight } from './ai/IOracle';
 export { ClawOracle } from './sensors/ClawOracle';
@@ -44,12 +43,6 @@ export {
     type TradeExecutedEvent
 } from '@eidolon/core';
 export { KpiTracker, type KpiSnapshot } from './metrics/KpiTracker';
-// Cognitive Core (Phase 1 & 2)
-export { CognitiveArbiter } from './eidolon/CognitiveArbiter';
-export * from './eidolon/CognitiveTypes';
+// Cognitive Core (Phase 1 & 2) removed as they are now handled by Rust MCP
 export { ConversationSimulator } from './simulation/ConversationSimulator';
-export { ReasoningChain, CriticModule, TreeOfThoughts, VerifierLoop } from './eidolon/ReasoningChain';
-export { ContextCompressor, ContextRouter } from './eidolon/ContextCompressor';
 export { SwarmOrchestrator } from './swarm/SwarmOrchestrator';
-export { CausalDiscoveryPipeline, type CausalHypothesis, type VerificationResult, type DiscoveryReport } from './eidolon/CausalDiscoveryPipeline';
-export { MetaCognitiveOrchestrator, RoutingStrategy, type OrchestrationContext, type RoutingDecision } from './eidolon/MetaCognitiveOrchestrator';

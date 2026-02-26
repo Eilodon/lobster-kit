@@ -74,7 +74,6 @@ const mockGraph = {
     })
 };
 
-import { WasmAdapter as CoreWasmAdapter } from '@eidolon/core';
 import { CausalBrain } from '@eidolon/core';
 
 describe('CausalBrain Rust Bridge', () => {
@@ -86,9 +85,9 @@ describe('CausalBrain Rust Bridge', () => {
         mockGraph.learn.mockClear();
         mockGraph.get_edge.mockClear();
         mockGraph.export_edges.mockClear();
-        CoreWasmAdapter.setInstance({
+        (globalThis as any).EIDOLON_WASM_ADAPTER = {
             createCausalGraph: () => mockGraph
-        } as any);
+        };
     });
 
     it('should route learn/predict through wasm graph when available', () => {

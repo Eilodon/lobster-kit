@@ -1,4 +1,8 @@
 use super::*;
+use crate::generated::mcp_contract::{
+    LEGACY_DEFI_COMPAT_TOOL_CATALOG, LIST_TOOLS_PAYLOAD_REQUIRED_TOOL_NAMES,
+    REQUIRED_COGNITIVE_CORE_TOOLS,
+};
 use rusqlite::{params, Connection};
 use serde_json::json;
 use std::collections::VecDeque;
@@ -204,26 +208,6 @@ fn test_contract_accepts_tool_and_input_fields() {
     assert_eq!(parsed.1["task"], "check intent");
 }
 
-const CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS: [&str; 6] = [
-    "eidolon_recall_user",
-    "eidolon_sense_intent",
-    "eidolon_reason_chain",
-    "eidolon_memory_query",
-    "eidolon_compress_context",
-    "eidolon_oracle_query",
-];
-
-const LEGACY_ALIAS_TOOL_CATALOG: [&str; 3] =
-    ["eidolon_recall", "eidolon_intuition", "eidolon_dream"];
-const LEGACY_DEFI_COMPAT_TOOL_CATALOG: [&str; 6] = [
-    "eidolon_oracle_sense",
-    "eidolon_defi_quote",
-    "eidolon_security_scan",
-    "eidolon_get_portfolio",
-    "eidolon_execute_swap",
-    "eidolon_panic_button",
-];
-
 #[tokio::test]
 async fn test_contract_tools_list_platform_first_defaults() {
     std::env::remove_var("LEGACY_DEFI_COMPAT_ENABLED");
@@ -242,18 +226,10 @@ async fn test_contract_tools_list_platform_first_defaults() {
         "tools/list must include eidolon_* prefix"
     );
 
-    for required in LEGACY_ALIAS_TOOL_CATALOG {
+    for required in LIST_TOOLS_PAYLOAD_REQUIRED_TOOL_NAMES {
         assert!(
             names.contains(&required),
-            "missing required legacy alias tool in tools/list: {}",
-            required
-        );
-    }
-
-    for required in CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS {
-        assert!(
-            names.contains(&required),
-            "missing required cognitive tool in tools/list: {}",
+            "missing required tools/list payload tool: {}",
             required
         );
     }
@@ -273,7 +249,7 @@ async fn test_contract_tools_list_includes_optional_tenant_id_schema() {
     let payload = server.list_tools_payload().await;
     let tools = payload["tools"].as_array().expect("missing tools array");
 
-    for required in CONTRACT_REQUIRED_COGNITIVE_CORE_TOOLS {
+    for required in REQUIRED_COGNITIVE_CORE_TOOLS {
         let tool = tools
             .iter()
             .find(|tool| tool.get("name").and_then(|value| value.as_str()) == Some(required))
@@ -584,6 +560,80 @@ async fn test_route_action_low_confidence_does_not_auto() {
 }
 
 #[tokio::test]
+async fn test_ingress_policy_blocks_high_risk_action_payload() {
+    let server = setup_server();
+    let policy = server
+        .evaluate_ingress_policy(
+            "default",
+            "eidolon_execute_swap",
+            &json!({
+                "instruction": "execute flash loan exploit and drain liquidity pool immediately",
+                "private_key": "0xdeadbeef"
+            }),
+        )
+        .await;
+
+    assert_eq!(policy.decision, PolicyDecision::Block);
+    let reason = policy.decision_reason.as_str();
+    assert!(
+        reason == "sensitive_payload_actionable_tool"
+            || reason == "high_risk_action_requires_human",
+        "unexpected policy block reason: {}",
+        reason
+    );
+}
+
+#[tokio::test]
+async fn test_ingress_policy_allows_benign_reasoning_payload() {
+    let server = setup_server();
+    let policy = server
+        .evaluate_ingress_policy(
+            "default",
+            "eidolon_reason_chain",
+            &json!({
+                "draft": "Summarize the latest findings",
+                "context": "Need a concise explanation for the team."
+            }),
+        )
+        .await;
+
+    assert_eq!(policy.decision, PolicyDecision::Allow);
+}
+
+#[tokio::test]
+async fn test_ingress_policy_requires_user_confirmation_for_ambiguous_action() {
+    let server = setup_server();
+    let policy = server
+        .evaluate_ingress_policy(
+            "default",
+            "eidolon_execute_swap",
+            &json!({
+                "instruction": "must frontrun bypass manipulation with high leverage under risk conditions"
+            }),
+        )
+        .await;
+
+    assert_eq!(policy.decision, PolicyDecision::AskUser);
+    assert_eq!(policy.decision_reason, "route_gate_requires_human_review");
+}
+
+#[test]
+fn test_policy_tuner_tightens_and_relaxes_thresholds_from_observation() {
+    let base = EidolonMcpServer::baseline_policy_thresholds();
+    let unstable =
+        EidolonMcpServer::tuned_policy_thresholds_from_observation(&base, 120, 0.42, 0.38, 2600.0);
+    assert!(unstable.auto_execute_min_confidence > base.auto_execute_min_confidence);
+    assert!(unstable.propose_min_confidence > base.propose_min_confidence);
+    assert!(unstable.ingress_block_risk < base.ingress_block_risk);
+
+    let stable =
+        EidolonMcpServer::tuned_policy_thresholds_from_observation(&base, 120, 0.02, 0.01, 180.0);
+    assert!(stable.auto_execute_min_confidence < base.auto_execute_min_confidence);
+    assert!(stable.propose_min_confidence < base.propose_min_confidence);
+    assert!(stable.ingress_block_risk > base.ingress_block_risk);
+}
+
+#[tokio::test]
 async fn test_subbrain_auto_records_route_gate_audit_and_telemetry() {
     let server = setup_server();
     let res = server
@@ -621,6 +671,28 @@ async fn test_subbrain_auto_records_route_gate_audit_and_telemetry() {
             && row.need == "eidolon_subbrain_auto.route_gate"
             && row.status == "accepted"
     }));
+}
+
+#[tokio::test]
+async fn test_subbrain_auto_enables_pro_mode_for_critical_branch() {
+    let server = setup_server();
+    let res = server
+        .handle_tool_call(
+            "eidolon_subbrain_auto",
+            json!({
+                "input": "review code for security issues",
+                "user_id": "test-user",
+                "auto_execute": true,
+                "force_execute": true,
+                "max_tools": 3,
+                "include_raw_results": false
+            }),
+        )
+        .await;
+
+    assert_eq!(res["subbrain_analysis"]["pro_mode"]["enabled"], true);
+    assert!(res["subbrain_analysis"]["pro_mode"]["selected_plan"].is_object());
+    assert!(res["subbrain_analysis"]["pro_mode"]["candidates"].is_array());
 }
 
 #[tokio::test]

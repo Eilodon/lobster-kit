@@ -44,8 +44,8 @@ impl EidolonMcpServer {
 
         let mut brain = self.causal_brain.write().await;
         brain.learn(
-            core_rust::sentinel::variables::SentinelVariable::Sentiment,
-            core_rust::sentinel::variables::SentinelVariable::PriceDelta,
+            core_rust::sentinel::variables::SentinelVariable::Sentiment.index(),
+            core_rust::sentinel::variables::SentinelVariable::PriceDelta.index(),
             severity == 0.0,
         );
 

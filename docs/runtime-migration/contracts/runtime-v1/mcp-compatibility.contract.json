@@ -24,7 +24,8 @@
       "eidolon_sense_intent",
       "eidolon_reason_chain",
       "eidolon_memory_query",
-      "eidolon_compress_context"
+      "eidolon_compress_context",
+      "eidolon_oracle_query"
     ]
   },
   "call_tool": {

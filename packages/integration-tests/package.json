@@ -4,7 +4,6 @@
     "description": "Integration and System Tests for Eidolon Monorepo",
     "private": true,
     "scripts": {
-        "pretest": "node ../../scripts/sync-integration-mirrors.mjs",
         "test": "vitest run",
         "lint": "eslint src/**/*.ts \"test/**/*.test.ts\"",
         "clean": "rm -rf dist tsconfig.tsbuildinfo"

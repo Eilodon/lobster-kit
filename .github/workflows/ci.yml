@@ -34,6 +34,9 @@ jobs:
       - name: Check workspace dependency drift
         run: pnpm check:deps
 
+      - name: Check MCP contract codegen drift
+        run: pnpm codegen:check
+
       - name: Check ghost file drift
         run: pnpm ci:drift
 

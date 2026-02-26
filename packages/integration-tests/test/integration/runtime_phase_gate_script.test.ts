@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 function runGate(args: string[]) {
+    const MONOREPO_ROOT = path.resolve(__dirname, '../../../..');
     return spawnSync(process.execPath, ['scripts/runtime-phase-gate.mjs', ...args], {
-        cwd: process.cwd(),
+        cwd: MONOREPO_ROOT,
         encoding: 'utf8',
     });
 }

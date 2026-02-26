@@ -2,6 +2,7 @@
 //
 // Contains the `handle_tool_call` dispatcher and
 // the `run_stdio` JSON-RPC transport loop.
+use crate::types::PolicyDecision;
 use crate::EidolonMcpServer;
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
 
@@ -185,16 +186,6 @@ impl EidolonMcpServer {
                                         let tenant_id =
                                             crate::helpers::extract_tenant_id(&tool_args);
                                         let started = std::time::Instant::now();
-                                        let result_content = server_clone
-                                            .handle_tool_call(&tool_name, tool_args)
-                                            .await;
-                                        let latency_us = started.elapsed().as_micros() as u64;
-                                        let latency_ms = latency_us as f64 / 1000.0;
-                                        let failed = result_content.get("error").is_some();
-                                        let fallback_used = result_content
-                                            .get("fallback_used")
-                                            .and_then(|value| value.as_bool())
-                                            .unwrap_or(false);
                                         let name_field = if params.get("name").is_some() {
                                             "name"
                                         } else if params.get("tool").is_some() {
@@ -209,66 +200,171 @@ impl EidolonMcpServer {
                                         } else {
                                             "none"
                                         };
-
-                                        server_clone
-                                            .record_tool_metric(
-                                                &tenant_id,
-                                                &tool_name,
-                                                failed,
-                                                latency_us,
-                                                fallback_used,
+                                        let ingress_policy = server_clone
+                                            .evaluate_ingress_policy(
+                                                &tenant_id, &tool_name, &tool_args,
                                             )
                                             .await;
+                                        let ingress_policy_json = serde_json::to_value(
+                                            &ingress_policy,
+                                        )
+                                        .unwrap_or_else(|_| {
+                                            serde_json::json!({
+                                                "error": "ingress_policy_serialization_failed"
+                                            })
+                                        });
 
-                                        if let Some(error_response) =
-                                            Self::map_tool_call_failure(&tool_name, &result_content)
-                                        {
-                                            let reason = Self::extract_structured_error_code(
-                                                &error_response,
-                                            )
-                                            .unwrap_or_else(|| "tool_execution_error".to_string());
+                                        if ingress_policy.decision == PolicyDecision::Block {
+                                            let latency_us = started.elapsed().as_micros() as u64;
+                                            let latency_ms = latency_us as f64 / 1000.0;
+                                            let error_response = Self::structured_mcp_error_response(
+                                                "policy_blocked",
+                                                -32003,
+                                                "Ingress policy blocked this tools/call request.",
+                                                serde_json::json!({
+                                                    "tool_name": tool_name,
+                                                    "policy": ingress_policy_json.clone()
+                                                }),
+                                            );
+
+                                            server_clone
+                                                .record_tool_metric(
+                                                    &tenant_id, &tool_name, true, latency_us, false,
+                                                )
+                                                .await;
                                             server_clone
                                                 .record_generated_tool_audit(
                                                     &tenant_id,
                                                     &tool_name,
-                                                    &tool_name,
+                                                    "tools/call",
                                                     "rejected",
-                                                    &reason,
+                                                    "policy_blocked",
                                                     serde_json::json!({
                                                         "latency_us": latency_us,
                                                         "latency_ms": latency_ms,
-                                                        "fallback_used": fallback_used,
+                                                        "fallback_used": false,
                                                         "name_field": name_field,
-                                                        "args_field": args_field
+                                                        "args_field": args_field,
+                                                        "ingress_policy": ingress_policy_json.clone()
+                                                    }),
+                                                )
+                                                .await;
+                                            error_response
+                                        } else if ingress_policy.decision == PolicyDecision::AskUser
+                                        {
+                                            let latency_us = started.elapsed().as_micros() as u64;
+                                            let latency_ms = latency_us as f64 / 1000.0;
+                                            let error_response = Self::structured_mcp_error_response(
+                                                "policy_requires_user_confirmation",
+                                                -32004,
+                                                "Ingress policy requires explicit user confirmation before tool execution.",
+                                                serde_json::json!({
+                                                    "tool_name": tool_name,
+                                                    "policy": ingress_policy_json.clone()
+                                                }),
+                                            );
+
+                                            server_clone
+                                                .record_tool_metric(
+                                                    &tenant_id, &tool_name, true, latency_us, false,
+                                                )
+                                                .await;
+                                            server_clone
+                                                .record_generated_tool_audit(
+                                                    &tenant_id,
+                                                    &tool_name,
+                                                    "tools/call",
+                                                    "rejected",
+                                                    "policy_requires_user_confirmation",
+                                                    serde_json::json!({
+                                                        "latency_us": latency_us,
+                                                        "latency_ms": latency_ms,
+                                                        "fallback_used": false,
+                                                        "name_field": name_field,
+                                                        "args_field": args_field,
+                                                        "ingress_policy": ingress_policy_json.clone()
                                                     }),
                                                 )
                                                 .await;
                                             error_response
                                         } else {
+                                            let result_content = server_clone
+                                                .handle_tool_call(&tool_name, tool_args)
+                                                .await;
+                                            let latency_us = started.elapsed().as_micros() as u64;
+                                            let latency_ms = latency_us as f64 / 1000.0;
+                                            let failed = result_content.get("error").is_some();
+                                            let fallback_used = result_content
+                                                .get("fallback_used")
+                                                .and_then(|value| value.as_bool())
+                                                .unwrap_or(false);
+
                                             server_clone
-                                                .record_generated_tool_audit(
+                                                .record_tool_metric(
                                                     &tenant_id,
                                                     &tool_name,
-                                                    &tool_name,
-                                                    "accepted",
-                                                    "tool_call_ok",
-                                                    serde_json::json!({
-                                                        "latency_us": latency_us,
-                                                        "latency_ms": latency_ms,
-                                                        "fallback_used": fallback_used,
-                                                        "name_field": name_field,
-                                                        "args_field": args_field
-                                                    }),
+                                                    failed,
+                                                    latency_us,
+                                                    fallback_used,
                                                 )
                                                 .await;
 
-                                            // Phase 4: Auto-promotion governance check
+                                            if let Some(error_response) =
+                                                Self::map_tool_call_failure(
+                                                    &tool_name,
+                                                    &result_content,
+                                                )
                                             {
-                                                let db_path =
-                                                    (*server_clone.telemetry_db_path).clone();
-                                                let tool_for_promo = tool_name.clone();
-                                                let tenant_for_promo = tenant_id.clone();
-                                                let perf_row = tokio::task::spawn_blocking(move || {
+                                                let reason = Self::extract_structured_error_code(
+                                                    &error_response,
+                                                )
+                                                .unwrap_or_else(|| {
+                                                    "tool_execution_error".to_string()
+                                                });
+                                                server_clone
+                                                    .record_generated_tool_audit(
+                                                        &tenant_id,
+                                                        &tool_name,
+                                                        &tool_name,
+                                                        "rejected",
+                                                        &reason,
+                                                        serde_json::json!({
+                                                            "latency_us": latency_us,
+                                                            "latency_ms": latency_ms,
+                                                            "fallback_used": fallback_used,
+                                                            "name_field": name_field,
+                                                            "args_field": args_field,
+                                                            "ingress_policy": ingress_policy_json.clone()
+                                                        }),
+                                                    )
+                                                    .await;
+                                                error_response
+                                            } else {
+                                                server_clone
+                                                    .record_generated_tool_audit(
+                                                        &tenant_id,
+                                                        &tool_name,
+                                                        &tool_name,
+                                                        "accepted",
+                                                        "tool_call_ok",
+                                                        serde_json::json!({
+                                                            "latency_us": latency_us,
+                                                            "latency_ms": latency_ms,
+                                                            "fallback_used": fallback_used,
+                                                            "name_field": name_field,
+                                                            "args_field": args_field,
+                                                            "ingress_policy": ingress_policy_json.clone()
+                                                        }),
+                                                    )
+                                                    .await;
+
+                                                // Phase 4: Auto-promotion governance check
+                                                {
+                                                    let db_path =
+                                                        (*server_clone.telemetry_db_path).clone();
+                                                    let tool_for_promo = tool_name.clone();
+                                                    let tenant_for_promo = tenant_id.clone();
+                                                    let perf_row = tokio::task::spawn_blocking(move || {
                                                     EidolonMcpServer::load_tool_performance_row_sync(
                                                         &db_path,
                                                         &tenant_for_promo,
@@ -280,32 +376,38 @@ impl EidolonMcpServer {
                                                 .and_then(Result::ok)
                                                 .flatten();
 
-                                                if let Some(row) = perf_row {
-                                                    let thresholds = Self::promotion_thresholds();
-                                                    let (eligible, failures) =
-                                                        Self::evaluate_tool_promotion(
-                                                            &row,
-                                                            &thresholds,
-                                                        );
-                                                    if eligible {
-                                                        eprintln!(
+                                                    if let Some(row) = perf_row {
+                                                        let thresholds =
+                                                            Self::promotion_thresholds();
+                                                        let (eligible, failures) =
+                                                            Self::evaluate_tool_promotion(
+                                                                &row,
+                                                                &thresholds,
+                                                            );
+                                                        if eligible {
+                                                            eprintln!(
                                                             "[Eidolon] 🏆 Tool '{}' promotion-eligible (calls:{}, err:{:.3}%, p95:{:.1}ms)",
                                                             tool_name, row.call_count,
                                                             (1.0 - row.success_rate) * 100.0,
                                                             row.latency_p95_ms
                                                         );
-                                                    } else if row.call_count >= thresholds.min_calls
-                                                    {
-                                                        // Only log failures after min_calls met (avoid noise)
-                                                        eprintln!(
+                                                        } else if row.call_count
+                                                            >= thresholds.min_calls
+                                                        {
+                                                            // Only log failures after min_calls met (avoid noise)
+                                                            eprintln!(
                                                             "[Eidolon] ⚠️  Tool '{}' promotion blocked: {:?}",
                                                             tool_name, failures
                                                         );
+                                                        }
                                                     }
                                                 }
-                                            }
 
-                                            Self::as_mcp_tool_text_response(result_content, false)
+                                                Self::as_mcp_tool_text_response(
+                                                    result_content,
+                                                    false,
+                                                )
+                                            }
                                         }
                                     }
                                     Err(error_response) => {

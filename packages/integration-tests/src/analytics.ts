@@ -69,3 +69,27 @@ import axios from 'axios';
     };
   }
 };
+
+(AnalyticsModule.prototype as any).calculateAPY = async function (protocol: string, asset: string): Promise<number> {
+  try {
+    if (protocol === 'PancakeSwap') {
+      const response = await axios.get('https://farms-api.pancakeswap.com/farms');
+      const farm = response.data?.find?.((f: any) => {
+        const symbol = f.lpSymbol?.toUpperCase();
+        const pairClean = asset.toUpperCase().replace(' LP', '');
+        return symbol?.includes(pairClean);
+      });
+      return farm?.apr || 0;
+    }
+    if (protocol === 'Venus') {
+      const response = await axios.get('https://api.venus.io/api/governance/venus');
+      const market = response.data?.markets?.find((m: any) =>
+        m.underlyingSymbol?.toUpperCase() === asset.toUpperCase()
+      );
+      return market?.supplyApy ? parseFloat(market.supplyApy) : 0;
+    }
+  } catch {
+    return 0;
+  }
+  return 0;
+};

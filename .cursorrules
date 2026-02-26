@@ -1,0 +1,16 @@
+# EIDOLON-V AI GROUNDING RULES
+
+CRITICAL INSTRUCTION FOR ALL AI AGENTS DOING CODEBASE ANALYSIS OR GENERATION:
+
+1. **READ THE ARCHITECTURE MAP FIRST:**
+   Before you attempt to understand how Eidolon-V works, you MUST read the `EIDOLON_ARCHITECTURE_MAP.md` file located at the root of the project.
+
+2. **RUST IS THE CORE:**
+   The source of truth for all routing, reasoning, cognitive policies, and the MCP orchestrator lifecycle is in **Rust** (`crates/mcp-server/src/`).
+   DO NOT base your architectural understanding on TypeScript files (`packages/soul/src/*`), as many of the heavy cognitive abstractions there have been replaced by the Rust engine.
+
+3. **IDENTITY:**
+   Eidolon-V is an MCP Runtime & Tool Orchestrator. It is NOT a local LLM or a text generator.
+
+4. **THERMODYNAMICS:**
+   Always prioritize minimal resource usage (Low Entropy). Avoid proposing expensive LLM operations (like generic Best-of-N) if local rule-based or Verifier patterns can achieve the same goal.

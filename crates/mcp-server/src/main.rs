@@ -3,11 +3,14 @@ mod critic;
 mod db;
 mod dispatch;
 mod embedding;
+mod generated;
 mod helpers;
+mod ingress_policy;
 mod mcp_protocol;
 mod memory;
 mod memory_persist;
 mod oracle;
+mod policy_tuner;
 mod providers;
 mod reasoning;
 mod resources;
@@ -52,24 +55,7 @@ const DEFAULT_TOOL_GEN_AUTOPILOT_MIN_SAMPLE_COUNT: u64 = 30;
 const DEFAULT_LEGACY_DEFI_COMPAT_ENABLED: bool = false;
 const DEFAULT_LEGACY_DEFI_COMPAT_ALLOWED_ENVS: &str = "development";
 
-pub(crate) const DEFAULT_COGNITIVE_TOOL_CATALOG: [&str; 16] = [
-    "eidolon_recall_user",
-    "eidolon_sense_intent",
-    "eidolon_check_pattern",
-    "eidolon_simulate_response",
-    "eidolon_commit_pattern",
-    "eidolon_reason_chain",
-    "eidolon_recall_similar",
-    "eidolon_memory_query",
-    "eidolon_compress_context",
-    "eidolon_record_outcome",
-    "eidolon_update_user",
-    "eidolon_dream_conversation",
-    "eidolon_orchestrate",
-    "eidolon_tool_recommend",
-    "eidolon_subbrain_auto",
-    "eidolon_generated_tool_decision",
-];
+pub(crate) use crate::generated::mcp_contract::DEFAULT_COGNITIVE_TOOL_CATALOG;
 
 #[derive(Clone)]
 pub struct EidolonMcpServer {
@@ -158,7 +144,9 @@ impl EidolonMcpServer {
         let memories = Self::load_memories_from_disk_sync(&memories_file_path);
 
         Self {
-            causal_brain: Arc::new(RwLock::new(CausalGraph::new())),
+            causal_brain: Arc::new(RwLock::new(CausalGraph::new(
+                core_rust::sentinel::variables::SentinelVariable::COUNT,
+            ))),
             thermo: Arc::new(RwLock::new(ThermodynamicEngine::new(
                 core_rust::sentinel::thermo::ThermoConfig::default(),
             ))),

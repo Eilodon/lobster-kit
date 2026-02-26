@@ -25,7 +25,15 @@ pub enum IntentCategory {
 impl IntentCategory {
     fn from_text(text: &str) -> Self {
         let lower = text.to_lowercase();
-        if lower.contains("audit") || lower.contains("kiểm tra") || lower.contains("review") {
+        if lower.contains("security")
+            || lower.contains("bảo mật")
+            || lower.contains("exploit")
+            || lower.contains("vulnerability")
+            || lower.contains("lỗ hổng")
+        {
+            IntentCategory::SecurityScan
+        } else if lower.contains("audit") || lower.contains("kiểm tra") || lower.contains("review")
+        {
             IntentCategory::CodeAudit
         } else if lower.contains("bug")
             || lower.contains("lỗi")
@@ -45,11 +53,6 @@ impl IntentCategory {
             || lower.contains("create")
         {
             IntentCategory::CreateFeature
-        } else if lower.contains("security")
-            || lower.contains("bảo mật")
-            || lower.contains("exploit")
-        {
-            IntentCategory::SecurityScan
         } else if lower.contains("nhớ")
             || lower.contains("recall")
             || lower.contains("memory")
@@ -387,31 +390,152 @@ impl EidolonMcpServer {
         // ─────────────────────────────────────────────────────────────────
         // LAYER 4: EXECUTION (if AUTO)
         // ─────────────────────────────────────────────────────────────────
+        let critical_action_signal = crate::helpers::critical_action_signal_score(input);
+        let lexical_risk_signal = crate::helpers::lexical_intent_risk_score(input);
+        let critical_request = critical_action_signal >= 0.58
+            || lexical_risk_signal >= 0.62
+            || matches!(intent, IntentCategory::SecurityScan);
         let mut executed_tools = vec![];
         let mut tool_results = vec![];
         let mut execution_errors = vec![];
+        let mut seen_tools = HashSet::new();
+        let mut top_tools: Vec<String> = tool_recommendations["recommended_tools"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .take(max_tools)
+                    .filter_map(|t| t["tool"].as_str().map(|s| s.to_string()))
+                    .filter(|tool| seen_tools.insert(tool.clone()))
+                    .collect()
+            })
+            .unwrap_or_else(|| {
+                suggested_tools
+                    .iter()
+                    .take(max_tools)
+                    .map(|s| s.to_string())
+                    .filter(|tool| seen_tools.insert(tool.clone()))
+                    .collect()
+            });
+        let mut pro_mode_summary = json!({
+            "enabled": false,
+            "trigger": {
+                "critical_action_signal": critical_action_signal,
+                "lexical_risk_signal": lexical_risk_signal
+            }
+        });
+
+        if critical_request {
+            let is_actionable_tool = |tool_name: &str| {
+                let lowered = tool_name.to_ascii_lowercase();
+                ["execute", "swap", "panic", "forge", "set_entropy"]
+                    .iter()
+                    .any(|cue| lowered.contains(cue))
+            };
+
+            let mut candidates: Vec<Vec<String>> = Vec::new();
+            candidates.push(top_tools.clone());
+
+            let mut conservative = top_tools.clone();
+            conservative.sort_by(|a, b| {
+                let a_actionable = is_actionable_tool(a);
+                let b_actionable = is_actionable_tool(b);
+                a_actionable.cmp(&b_actionable)
+            });
+            candidates.push(conservative);
+
+            let mut verifier_first = vec!["eidolon_reason_chain".to_string()];
+            if max_tools > 1 {
+                verifier_first.push("eidolon_memory_query".to_string());
+            }
+            for tool in &top_tools {
+                if verifier_first.len() >= max_tools {
+                    break;
+                }
+                if !verifier_first.contains(tool) {
+                    verifier_first.push(tool.clone());
+                }
+            }
+            candidates.push(verifier_first);
+
+            let metrics = self.tool_metrics.read().await;
+            let mut scored_candidates: Vec<(usize, f64, usize, f64, Vec<String>)> = Vec::new();
+            for (index, candidate) in candidates.into_iter().enumerate() {
+                let actionable_count = candidate
+                    .iter()
+                    .filter(|tool| is_actionable_tool(tool))
+                    .count();
+                let action_penalty = (actionable_count as f64) * 0.18;
+                let mut historical_quality = 0.0;
+                for tool in &candidate {
+                    if let Some(metric) = metrics.get(&format!("{}:{}", tenant_id, tool)) {
+                        let calls = metric.calls.max(1) as f64;
+                        let success_rate = 1.0 - (metric.errors as f64 / calls);
+                        let fallback_rate = metric.fallback_count as f64 / calls;
+                        historical_quality += crate::helpers::clamp01(
+                            success_rate * 0.75 + (1.0 - fallback_rate) * 0.25,
+                        );
+                    } else {
+                        historical_quality += 0.5;
+                    }
+                }
+                if !candidate.is_empty() {
+                    historical_quality /= candidate.len() as f64;
+                }
+                let verifier_bonus = if candidate.iter().any(|tool| tool == "eidolon_reason_chain")
+                {
+                    0.08
+                } else {
+                    0.0
+                };
+                let score = crate::helpers::clamp01(
+                    confidence * 0.45
+                        + historical_quality * 0.35
+                        + (1.0 - action_penalty).max(0.0) * 0.20
+                        + verifier_bonus,
+                );
+                scored_candidates.push((
+                    index,
+                    score,
+                    actionable_count,
+                    historical_quality,
+                    candidate,
+                ));
+            }
+            drop(metrics);
+
+            scored_candidates
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            if let Some(best) = scored_candidates.first() {
+                top_tools = best.4.clone();
+            }
+            pro_mode_summary = json!({
+                "enabled": true,
+                "trigger": {
+                    "critical_action_signal": critical_action_signal,
+                    "lexical_risk_signal": lexical_risk_signal
+                },
+                "selected_plan": scored_candidates.first().map(|item| {
+                    json!({
+                        "index": item.0,
+                        "score": item.1,
+                        "actionable_count": item.2,
+                        "historical_quality": item.3,
+                        "tools": item.4.clone()
+                    })
+                }),
+                "candidates": scored_candidates.iter().map(|item| {
+                    json!({
+                        "index": item.0,
+                        "score": item.1,
+                        "actionable_count": item.2,
+                        "historical_quality": item.3,
+                        "tools": item.4.clone()
+                    })
+                }).collect::<Vec<serde_json::Value>>()
+            });
+        }
 
         if matches!(strategy, AutoRoutingStrategy::AutoExecute) {
-            // Get top tools from recommendations
-            let mut seen_tools = HashSet::new();
-            let top_tools: Vec<String> = tool_recommendations["recommended_tools"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .take(max_tools)
-                        .filter_map(|t| t["tool"].as_str().map(|s| s.to_string()))
-                        .filter(|tool| seen_tools.insert(tool.clone()))
-                        .collect()
-                })
-                .unwrap_or_else(|| {
-                    suggested_tools
-                        .iter()
-                        .take(max_tools)
-                        .map(|s| s.to_string())
-                        .filter(|tool| seen_tools.insert(tool.clone()))
-                        .collect()
-                });
-
             // Execute each tool
             let now_ms = chrono::Utc::now().timestamp_millis();
             for tool_name in &top_tools {
@@ -634,8 +758,8 @@ impl EidolonMcpServer {
                 if success_count > 0 {
                     let mut brain = self.causal_brain.write().await;
                     brain.learn(
-                        core_rust::sentinel::variables::SentinelVariable::Sentiment,
-                        core_rust::sentinel::variables::SentinelVariable::PriceDelta,
+                        core_rust::sentinel::variables::SentinelVariable::Sentiment.index(),
+                        core_rust::sentinel::variables::SentinelVariable::PriceDelta.index(),
                         true, // positive outcome
                     );
                 }
@@ -678,6 +802,7 @@ impl EidolonMcpServer {
                     "successful": executed_tools.len() - execution_errors.len(),
                     "errors": execution_errors.len()
                 },
+                "pro_mode": pro_mode_summary,
                 "tool_results": if include_raw_results { Some(tool_results) } else { None },
                 "execution_errors": if execution_errors.is_empty() { None } else { Some(execution_errors) },
                 "enriched_context": enriched_context,

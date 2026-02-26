@@ -113,6 +113,7 @@ export interface CausalEdgeSnapshot {
 
 /** Full TypeScript interface for the WASM CausalGraph */
 export interface CausalGraph {
+    node_count?: number; // Added to support dynamic sizes
     /** Update a cause→effect edge based on observed outcome */
     learn(cause: number, effect: number, outcome_positive: boolean): void;
     /** Bayesian-weighted prediction for a given effect given observations [{cause, weight}] */
@@ -369,7 +370,12 @@ class MockHyperMemory implements HyperMemory {
 }
 
 class MockCausalGraph implements CausalGraph {
+    public node_count: number;
     private edges: Map<string, { successes: number; failures: number }> = new Map();
+
+    constructor(nodeCount: number = 13) {
+        this.node_count = nodeCount;
+    }
 
     private key(cause: number, effect: number): string { return `${cause}->${effect}`; }
 
@@ -563,6 +569,7 @@ class MockLiquidBrain implements LiquidBrain {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type RawCausalGraph = {
+    node_count?: number;
     learn(cause: number, effect: number, outcome: boolean): void;
     predict(effect: number, obs: Array<[number, number]>): number;
     get_edge(cause: number, effect: number): CausalEdgeSnapshot;
@@ -589,6 +596,8 @@ class WasmCausalGraphProxy implements CausalGraph {
     private readonly shadow = new Map<string, { s: number; f: number }>();
 
     constructor(private readonly raw: RawCausalGraph) { }
+
+    get node_count(): number { return this.raw.node_count ?? 13; }
 
     private edgeKey(cause: number, effect: number) { return `${cause}->${effect}`; }
 
@@ -1011,10 +1020,10 @@ export class WasmAdapter {
         return new MockAntiRug();
     }
 
-    public createCausalGraph(): CausalGraph {
+    public createCausalGraph(nodeCount: number = 13): CausalGraph {
         const Ctor = this.coreModule?.CausalGraph;
-        if (Ctor) return new WasmCausalGraphProxy(new Ctor() as unknown as RawCausalGraph);
-        return new MockCausalGraph();
+        if (Ctor) return new WasmCausalGraphProxy(new Ctor(nodeCount) as unknown as RawCausalGraph);
+        return new MockCausalGraph(nodeCount);
     }
 
     public createTraumaRegistry(): TraumaRegistry {
