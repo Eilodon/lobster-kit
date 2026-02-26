@@ -12,9 +12,16 @@ const repoRoot = path.resolve(__dirname, '..');
 const rootDir = path.join(repoRoot, 'packages');
 const includeExt = new Set(['.ts', '.tsx', '.json']);
 const skipDirs = new Set(['dist', 'node_modules', 'target', 'pkg', '.turbo']);
-const intentionalPathPrefixes = [
-  'packages/integration-tests/src/'
-];
+const intentionalExactPaths = new Set([
+  // Intentional mirrors maintained by scripts/sync-integration-mirrors.mjs
+  'packages/integration-tests/src/nft.ts',
+  'packages/integration-tests/src/eidolon/oracles/PythAdapter.ts',
+  'packages/integration-tests/src/eidolon/memory/GreenfieldAdapter.ts',
+  'packages/integration-tests/src/eidolon/memory/SQLiteLearningStore.ts',
+  'packages/integration-tests/src/eidolon/memory/AppendOnlyAdapter.ts',
+  'packages/integration-tests/src/utils/ApiGateway.ts',
+  'packages/integration-tests/src/services/PriceService.ts'
+]);
 
 async function walk(dir, out = []) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -50,7 +57,7 @@ function rel(p) {
 
 function isIntentionalDuplicate(filePath, contentUtf8) {
   const relative = rel(filePath);
-  if (intentionalPathPrefixes.some((prefix) => relative.startsWith(prefix))) {
+  if (intentionalExactPaths.has(relative)) {
     return true;
   }
 
